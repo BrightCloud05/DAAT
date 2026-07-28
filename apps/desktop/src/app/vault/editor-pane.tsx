@@ -43,7 +43,7 @@ const editorTheme = EditorView.theme({
   '.cm-scroller': {
     fontFamily: 'inherit',
     lineHeight: '1.65',
-    padding: '0.75rem 1.25rem 40vh'
+    padding: '0.25rem 1.5rem 40vh'
   },
   '.cm-content': {
     maxWidth: '46rem',
@@ -144,18 +144,21 @@ export function VaultEditorPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b border-(--stroke-nous) px-4 py-1.5">
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
-        {active.dataless ? (
-          <span className="flex items-center gap-1 text-[10px] opacity-60">
-            <Codicon name="cloud-download" /> downloading from iCloud…
-          </span>
-        ) : null}
-        <span
-          className="size-1.5 rounded-full transition-opacity"
-          style={{ backgroundColor: 'var(--ui-accent)', opacity: dirty ? 1 : 0 }}
-          title={dirty ? 'Unsaved changes' : 'Saved'}
-        />
+      {/* Notion-style document header: big title on the canvas, no chrome. */}
+      <div className="shrink-0 px-6 pt-9 pb-1">
+        <div className="mx-auto flex max-w-[46rem] items-baseline gap-3">
+          <h1 className="min-w-0 flex-1 truncate text-[1.7rem] font-bold tracking-tight">{title}</h1>
+          {active.dataless ? (
+            <span className="flex items-center gap-1 text-[10px] opacity-60">
+              <Codicon name="cloud-download" /> downloading from iCloud…
+            </span>
+          ) : null}
+          <span
+            className="size-1.5 shrink-0 self-center rounded-full transition-opacity"
+            style={{ backgroundColor: 'var(--ui-accent)', opacity: dirty ? 1 : 0 }}
+            title={dirty ? 'Unsaved changes' : 'Saved'}
+          />
+        </div>
       </div>
       {conflicts.map(conflict => (
         <div

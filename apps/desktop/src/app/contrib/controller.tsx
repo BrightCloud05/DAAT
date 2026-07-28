@@ -61,6 +61,8 @@ import { $statusbarVisible, toggleStatusbarVisible } from '@/store/statusbar-pre
 
 import { isSimpleMode } from '@/store/ui-mode'
 
+import { NotesShell } from '../notes/notes-shell'
+
 import { registerVaultContributions, SIMPLE_DEFAULT_TREE } from './vault'
 
 import type { SessionDragPayload } from '../chat/composer/inline-refs'
@@ -732,7 +734,9 @@ export function ContribController() {
             />
           </div>
 
-          <LayoutTreeRoot />
+          {/* Simple mode replaces the developer pane grid with the
+              Notion-style document shell; advanced mode keeps the grid. */}
+          {isSimpleMode() ? <NotesShell /> : <LayoutTreeRoot />}
 
           {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
           <SessionTileCloseConfirm />
