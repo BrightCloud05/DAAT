@@ -16,7 +16,7 @@ const configuredHermes = process.env.HERMES_WIN_SSH_HERMES || ''
 const ownershipId = '89abcdef0123456789abcdef01234567'
 
 function fetchJson(url, token, path) {
-  return fetch(`${url}${path}`, { headers: { 'X-Hermes-Session-Token': token } }).then(async response => {
+  return fetch(`${url}${path}`, { headers: { 'X-BISEO-Session-Token': token } }).then(async response => {
     if (!response.ok) {
       throw new Error(`${response.status}: ${await response.text()}`)
     }

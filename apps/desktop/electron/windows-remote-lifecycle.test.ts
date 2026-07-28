@@ -72,7 +72,7 @@ test('platform detection surfaces transport failures as themselves, not unsuppor
           throw new Error('not recognized')
         }
 
-        throw new Error('Hermes is not installed on the remote Windows host.')
+        throw new Error('BISEO is not installed on the remote Windows host.')
       })
     ),
     (err: any) => err.kind === 'unsupported-platform' && /Hermes is not installed/.test(err.message)
@@ -80,7 +80,7 @@ test('platform detection surfaces transport failures as themselves, not unsuppor
 })
 
 test('helper command uses the fixed remote Python entry point and quotes path data', () => {
-  const command = helperCommand({ python: "C:\\Program Files\\Hermes's\\python.exe" }, 'inspect', [
+  const command = helperCommand({ python: "C:\\Program Files\\BISEO's\\python.exe" }, 'inspect', [
     'C:\\x y\\hermes.exe'
   ])
 

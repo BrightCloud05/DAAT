@@ -56,11 +56,11 @@ test('hermes runtime import probe checks config dependencies', () => {
   assert.match(probe, /\bimport hermes_cli\.config\b/)
 })
 
-test('explicit Hermes override is authoritative', () => {
+test('explicit BISEO override is authoritative', () => {
   assert.equal(shouldTrustHermesOverride('/nix/store/abc/bin/hermes'), true)
 })
 
-test('empty Hermes override is not authoritative', () => {
+test('empty BISEO override is not authoritative', () => {
   assert.equal(shouldTrustHermesOverride(''), false)
   assert.equal(shouldTrustHermesOverride(undefined), false)
 })

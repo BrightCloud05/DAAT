@@ -296,7 +296,7 @@ async function gatewayRequest<T>(method: string, params: Record<string, unknown>
   }
 
   if (!gateway) {
-    throw new Error('Hermes gateway is not connected')
+    throw new Error('BISEO gateway is not connected')
   }
 
   return gateway.request<T>(method, params)
@@ -324,7 +324,7 @@ async function activeProjectsContext(): Promise<ActiveProjectsContext> {
   }
 
   if (!gateway || gateway !== activeGateway() || profile !== ($activeGatewayProfile.get() || 'default')) {
-    throw new Error('Active Hermes profile changed while connecting')
+    throw new Error('Active BISEO profile changed while connecting')
   }
 
   return { gateway, profile }
