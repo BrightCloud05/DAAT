@@ -484,6 +484,10 @@ export class VaultService {
     return this.requireOpen().index.noteNames()
   }
 
+  propertiesTable(): Array<{ path: string; title: string; mtimeMs: number; props: Record<string, unknown> }> {
+    return this.requireOpen().index.propertiesTable()
+  }
+
   indexDbPath(): string | null {
     return this.root
       ? path.join(app.getPath('userData'), 'vault-index', `${vaultId(this.root)}.db`)

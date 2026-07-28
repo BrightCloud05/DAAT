@@ -167,6 +167,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     linksFrom: relPath => ipcRenderer.invoke('hermes:vault:linksFrom', relPath),
     resolveWikilink: targetRaw => ipcRenderer.invoke('hermes:vault:resolveWikilink', targetRaw),
     noteNames: () => ipcRenderer.invoke('hermes:vault:noteNames'),
+    propertiesTable: () => ipcRenderer.invoke('hermes:vault:propertiesTable'),
     onIndexEvent: callback => {
       const listener = (_event, payload) => callback(payload)
       ipcRenderer.on('hermes:vault:index-event', listener)

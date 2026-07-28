@@ -312,6 +312,44 @@ export class VaultIndex {
     }
   }
 
+  /**
+   * Every note with its frontmatter as a property map — the data behind the
+   * Notion-style table view. Values were stored as strings (JSON-encoded for
+   * non-strings); decode best-effort.
+   */
+  propertiesTable(): Array<{ path: string; title: string; mtimeMs: number; props: Record<string, unknown> }> {
+    const notes = this.db
+      .prepare('SELECT path, title, mtime_ms as mtimeMs FROM notes ORDER BY mtime_ms DESC')
+      .all() as Array<{ path: string; title: string; mtimeMs: number }>
+
+    const fmRows = this.db.prepare('SELECT path, key, value FROM frontmatter').all() as Array<{
+      path: string
+      key: string
+      value: string | null
+    }>
+
+    const byPath = new Map<string, Record<string, unknown>>()
+
+    for (const row of fmRows) {
+      let value: unknown = row.value
+
+      if (typeof row.value === 'string') {
+        try {
+          value = JSON.parse(row.value)
+        } catch {
+          value = row.value
+        }
+      }
+
+      const props = byPath.get(row.path) ?? {}
+
+      props[row.key] = value
+      byPath.set(row.path, props)
+    }
+
+    return notes.map(note => ({ ...note, props: byPath.get(note.path) ?? {} }))
+  }
+
   /** Full wipe — used when (re)indexing a vault from scratch. */
   clear(): void {
     this.db.exec('DELETE FROM notes; DELETE FROM links; DELETE FROM tags; DELETE FROM frontmatter; DELETE FROM notes_fts;')

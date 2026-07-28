@@ -72,6 +72,7 @@ export function initVaultIpc(): VaultService {
   ipcMain.handle('hermes:vault:linksFrom', (_event, relPath: string) => service.linksFrom(relPath))
   ipcMain.handle('hermes:vault:resolveWikilink', (_event, targetRaw: string) => service.resolveWikilink(targetRaw))
   ipcMain.handle('hermes:vault:noteNames', () => service.noteNames())
+  ipcMain.handle('hermes:vault:propertiesTable', () => service.propertiesTable())
 
   return service
 }

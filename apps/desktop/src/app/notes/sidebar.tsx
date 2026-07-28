@@ -22,9 +22,16 @@ import {
   chooseVault,
   createNote,
   createVault,
-  openNote,
+  openNote as openNoteInStore,
   runVaultSearch
 } from '../vault/store'
+import { closeTableView, openTableView } from './view-store'
+
+// Opening a page always returns the canvas to the note view.
+async function openNote(relPath: string): Promise<void> {
+  closeTableView()
+  await openNoteInStore(relPath)
+}
 
 interface TreeEntry {
   path: string
@@ -167,6 +174,12 @@ export function NotesSidebar() {
           Indexing {indexing.indexed}/{indexing.total}…
         </div>
       ) : null}
+
+      {/* Views. */}
+      <button className={ROW} onClick={openTableView}>
+        <Codicon name="table" className="shrink-0 text-[13px] opacity-55" />
+        <span>All pages</span>
+      </button>
 
       {/* Pages. */}
       <div className="px-2 pb-1 pt-1 text-[11px] font-medium tracking-wide opacity-45">

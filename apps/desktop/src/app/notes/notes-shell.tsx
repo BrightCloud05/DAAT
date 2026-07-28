@@ -16,12 +16,15 @@ import { cn } from '@/lib/utils'
 import { VaultEditorPane } from '../vault/editor-pane'
 import { $activeNote, $vaultNotes, createNote } from '../vault/store'
 import { NotesSidebar } from './sidebar'
+import { TableView } from './table-view'
 import { DocTopbar } from './topbar'
+import { $canvasView } from './view-store'
 
 const AGENT_PANEL_KEY = 'biseo.notes.agentOpen.v1'
 
 export function NotesShell() {
   const active = useStore($activeNote)
+  const canvasView = useStore($canvasView)
   const [agentOpen, setAgentOpen] = useState(() => {
     try {
       return window.localStorage.getItem(AGENT_PANEL_KEY) === '1'
@@ -75,9 +78,7 @@ export function NotesShell() {
       {/* Document canvas — the product. */}
       <main className="relative flex min-w-0 flex-1 flex-col bg-(--ui-bg-editor)">
         <DocTopbar agentOpen={agentOpen} onToggleAgent={() => setAgentOpen(open => !open)} />
-        <div className="min-h-0 flex-1">
-          <VaultEditorPane />
-        </div>
+        <div className="min-h-0 flex-1">{canvasView === 'table' ? <TableView /> : <VaultEditorPane />}</div>
       </main>
 
       {/* Agent slide-over: the full chat surface, summoned — not resident. */}

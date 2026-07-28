@@ -87,6 +87,7 @@ declare global {
         linksFrom: (relPath: string) => Promise<VaultLink[]>
         resolveWikilink: (targetRaw: string) => Promise<string | null>
         noteNames: () => Promise<Array<{ path: string; title: string; name: string }>>
+        propertiesTable: () => Promise<Array<{ path: string; title: string; mtimeMs: number; props: Record<string, unknown> }>>
         onIndexEvent: (callback: (event: VaultIndexEvent) => void) => () => void
         onConflict: (callback: (event: VaultConflictEvent) => void) => () => void
       }
