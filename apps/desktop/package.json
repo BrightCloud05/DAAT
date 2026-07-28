@@ -68,6 +68,7 @@
     "@assistant-ui/react-streamdown": "^0.3.4",
     "@audiowave/react": "^0.6.2",
     "@chenglou/pretext": "^0.0.6",
+    "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.1",
     "@codemirror/language": "^6.12.4",

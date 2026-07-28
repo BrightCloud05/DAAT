@@ -16,7 +16,23 @@ import { useEffect, useRef } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 
-import { $activeDirty, $activeNote, $vaultConflicts, dismissConflict, flushActiveNote, noteEdited, openNote } from './store'
+import { livePreview } from './cm/live-preview'
+import { markdownStyling } from './cm/markdown-style'
+import { wikilinkCompletion } from './cm/wikilink-complete'
+import { wikiLinkExtension } from './cm/wikilink-language'
+import { $activeDirty, $activeNote, $vaultConflicts, createNote, dismissConflict, flushActiveNote, noteEdited, openNote } from './store'
+
+async function openWikilink(target: string): Promise<void> {
+  const resolved = await window.hermesDesktop.vault.resolveWikilink(target)
+
+  if (resolved) {
+    await openNote(resolved)
+  } else {
+    // Unresolved link: create the note — the Obsidian "links make pages"
+    // behavior that also matches Notion's instant page creation.
+    await createNote(target)
+  }
+}
 
 const editorTheme = EditorView.theme({
   '&': {
@@ -94,7 +110,10 @@ export function VaultEditorPane() {
         extensions: [
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
-          markdown({ base: markdownLanguage, codeLanguages: languages }),
+          markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [wikiLinkExtension] }),
+          markdownStyling,
+          livePreview({ openWikilink: target => void openWikilink(target) }),
+          wikilinkCompletion(),
           EditorView.lineWrapping,
           placeholder('Start writing…'),
           editorTheme,
