@@ -75,7 +75,7 @@ test('platform detection surfaces transport failures as themselves, not unsuppor
         throw new Error('BISEO is not installed on the remote Windows host.')
       })
     ),
-    (err: any) => err.kind === 'unsupported-platform' && /Hermes is not installed/.test(err.message)
+    (err: any) => err.kind === 'unsupported-platform' && /BISEO is not installed/.test(err.message)
   )
 })
 
@@ -87,7 +87,7 @@ test('helper command uses the fixed remote Python entry point and quotes path da
   const encoded = command.split(' ').pop()!
   const script = Buffer.from(encoded, 'base64').toString('utf16le')
   assert.match(script, /-m' 'hermes_cli\.windows_ssh_runtime' 'inspect'/)
-  assert.match(script, /Hermes''s/)
+  assert.match(script, /BISEO''s/)
   assert.match(script, /C:\\x y\\hermes\.exe/)
 })
 

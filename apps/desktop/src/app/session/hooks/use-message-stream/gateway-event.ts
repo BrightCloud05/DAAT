@@ -277,7 +277,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
 
         return
       } else if (event.type === 'skin.changed') {
-        // A runtime skin switch (Hermes activating an authored skin, or `/skin`
+        // A runtime skin switch (BISEO activating an authored skin, or `/skin`
         // on another surface). Only the active profile's change repaints.
         const fromActiveProfile =
           !event.profile || normalizeProfileKey(event.profile) === normalizeProfileKey($activeGatewayProfile.get())
@@ -997,7 +997,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         showAgentNotice(notice)
 
         // The urgent pair (access paused / restored) also breaks through as a
-        // native OS notification when Hermes is backgrounded; dispatch is gated
+        // native OS notification when BISEO is backgrounded; dispatch is gated
         // by the user's notification prefs + backgrounded check.
         const native = nativeNoticeInput(notice, translateNow('notifications.native.creditsTitle'))
 
