@@ -27,13 +27,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/biseo-app/biseo-agent.git"
+    "url": "git+https://github.com/BrightCloud05/BISEO.git"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/biseo-app/biseo-agent/issues"
+    "url": "https://github.com/BrightCloud05/BISEO/issues"
   },
-  "homepage": "https://github.com/biseo-app/biseo-agent#readme",
+  "homepage": "https://github.com/BrightCloud05/BISEO#readme",
   "dependencies": {
     "@streamdown/math": "^1.0.2",
     "agent-browser": "^0.26.0"

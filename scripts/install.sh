@@ -43,8 +43,8 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Configuration
-REPO_URL_SSH="git@github.com:biseo-app/biseo-agent.git"
-REPO_URL_HTTPS="https://github.com/biseo-app/biseo-agent.git"
+REPO_URL_SSH="git@github.com:BrightCloud05/BISEO.git"
+REPO_URL_HTTPS="https://github.com/BrightCloud05/BISEO.git"
 HERMES_HOME="${HERMES_HOME:-$HOME/.biseo}"
 # INSTALL_DIR is resolved AFTER arg parsing and OS detection so we can pick an
 # FHS-style layout for root installs.  Track whether the user gave us an
