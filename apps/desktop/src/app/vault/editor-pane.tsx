@@ -19,9 +19,11 @@ import { Codicon } from '@/components/ui/codicon'
 import { foldGutter, foldKeymap } from '@codemirror/language'
 
 import { BacklinksSection } from '../notes/backlinks-section'
+import { BlockHandlesOverlay } from '../notes/block-handles-overlay'
 import { PropertiesPanel } from '../notes/properties-panel'
 import { TemplateSuggestions } from '../notes/template-suggestions'
 
+import { blockHandles } from './cm/block-handles'
 import { callouts } from './cm/callouts'
 import { bumpDocEpoch, setEditorView } from './editor-bridge'
 import { livePreview } from './cm/live-preview'
@@ -162,6 +164,7 @@ export function VaultEditorPane() {
           markdownStyling,
           livePreview({ openWikilink: target => void openWikilink(target) }),
           callouts(),
+          blockHandles(),
           vaultCompletions([slashSource]),
           keymap.of(foldKeymap),
           foldGutter({
@@ -242,7 +245,10 @@ export function VaultEditorPane() {
           </button>
         </div>
       ))}
-      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden" />
+      <div className="relative min-h-0 flex-1">
+        <div ref={hostRef} className="h-full overflow-hidden" />
+        <BlockHandlesOverlay />
+      </div>
     </div>
   )
 }
