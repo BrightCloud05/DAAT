@@ -18,7 +18,10 @@ import { Codicon } from '@/components/ui/codicon'
 
 import { foldGutter, foldKeymap } from '@codemirror/language'
 
+import { PropertiesPanel } from '../notes/properties-panel'
+
 import { callouts } from './cm/callouts'
+import { bumpDocEpoch, setEditorView } from './editor-bridge'
 import { livePreview } from './cm/live-preview'
 import { markdownStyling } from './cm/markdown-style'
 import { slashSource } from './cm/slash-menu'
@@ -118,9 +121,11 @@ export function VaultEditorPane() {
     })
 
     viewRef.current = view
+    setEditorView(view)
 
     return () => {
       void flushActiveNote()
+      setEditorView(null)
       view.destroy()
       viewRef.current = null
       pathRef.current = null
@@ -168,6 +173,7 @@ export function VaultEditorPane() {
           EditorView.updateListener.of(update => {
             if (update.docChanged) {
               noteEdited(update.state.doc.toString())
+              bumpDocEpoch()
             }
           })
         ]
@@ -208,6 +214,7 @@ export function VaultEditorPane() {
           />
         </div>
       </div>
+      <PropertiesPanel />
       {conflicts.map(conflict => (
         <div
           key={conflict.conflictPath}
