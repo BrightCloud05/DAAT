@@ -233,8 +233,8 @@ export const en: Translations = {
       'nav.artifacts': 'Open artifacts',
       'nav.cron': 'Open scheduled jobs',
       'nav.agents': 'Open agents',
-      'session.new': 'New session',
-      'session.newTab': 'New session tab',
+      'session.new': 'New chat',
+      'session.newTab': 'New chat tab',
       'session.newWindow': 'New window',
       'session.next': 'Next session',
       'session.prev': 'Previous session',
@@ -1204,7 +1204,7 @@ export const en: Translations = {
       usage: 'Token, cost, and skill activity over time'
     },
     nav: {
-      newChat: { title: 'New session', detail: 'Start a fresh session' },
+      newChat: { title: 'New chat', detail: 'Start a fresh conversation' },
       settings: { title: 'Settings', detail: 'Configure BISEO desktop' },
       skills: { title: 'Capabilities', detail: 'Skills, tools, and MCP servers' },
       messaging: { title: 'Messaging', detail: 'Set up Telegram, Slack, Discord, and more' },
@@ -1774,7 +1774,7 @@ export const en: Translations = {
 
   sidebar: {
     nav: {
-      'new-session': 'New session',
+      'new-session': 'New chat',
       skills: 'Capabilities',
       messaging: 'Messaging',
       artifacts: 'Artifacts'

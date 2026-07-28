@@ -111,6 +111,8 @@ import { SidebarCronJobsSection } from './cron-jobs-section'
 import { SidebarLoadMoreRow } from './load-more-row'
 import { orderByIds, reconcileOrderIds, resolveManualSessionOrderIds, sameIds } from './order'
 import { ProfileRail } from './profile-switcher'
+import { isSimpleMode } from '@/store/ui-mode'
+
 import { ProjectDialog } from './project-dialog'
 import {
   orderProjectsByIds,
@@ -138,7 +140,7 @@ import { CONTEXT_SPLIT_KIT, SplitSubmenu } from './split-submenu'
 const NON_SESSION_INITIAL_ROWS = 3
 const NON_SESSION_LOAD_STEP = 10
 
-const SIDEBAR_NAV: SidebarNavItem[] = [
+const SIDEBAR_NAV_ALL: SidebarNavItem[] = [
   {
     id: 'new-session',
     label: '',
@@ -168,6 +170,14 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     keybindActionId: 'nav.artifacts'
   }
 ]
+
+// Simple mode keeps only "new chat" — Capabilities/Messaging/Artifacts are
+// developer/power surfaces, restorable via Settings → Advanced.
+const SIMPLE_NAV_IDS = new Set(['new-session'])
+
+const SIDEBAR_NAV: SidebarNavItem[] = isSimpleMode()
+  ? SIDEBAR_NAV_ALL.filter(item => SIMPLE_NAV_IDS.has(item.id))
+  : SIDEBAR_NAV_ALL
 
 // Two modes via the `compact` height variant (styles.css):
 //   tall    → each section is shrink-0, capped, its own scroller; Sessions is flex-1.

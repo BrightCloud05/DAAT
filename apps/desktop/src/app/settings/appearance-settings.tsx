@@ -25,7 +25,9 @@ import { $marketplaceInstalls, isUserTheme, removeUserTheme } from '@/themes/use
 
 import { MODE_OPTIONS } from './constants'
 import { PetSettings } from './pet-settings'
-import { ListRow, SectionHeading, SettingsContent } from './primitives'
+import { $uiMode, setUiMode } from '@/store/ui-mode'
+
+import { ListRow, SectionHeading, SettingsContent, ToggleRow } from './primitives'
 
 function ThemePreview({ name, mode }: { name: string; mode: 'light' | 'dark' }) {
   // Preview in the *current* mode: the dark palette in Dark, and the light
@@ -249,6 +251,7 @@ export function AppearanceSettings() {
   const embedMode = useStore($embedMode)
   const embedAllowed = useStore($embedAllowed)
   const translucency = useStore($translucency)
+  const uiMode = useStore($uiMode)
   const backdrop = useStore($backdrop)
   const installs = useStore($marketplaceInstalls)
   const profiles = useStore($profiles)
@@ -310,6 +313,13 @@ export function AppearanceSettings() {
             action={<LanguageSwitcher />}
             description={isSavingLocale ? t.language.saving : t.language.description}
             title={t.language.label}
+          />
+
+          <ToggleRow
+            checked={uiMode === 'advanced'}
+            description="Show developer surfaces: Capabilities, Messaging, Artifacts, and the full chat-first layout. The app reloads when changed."
+            label="Advanced mode"
+            onChange={checked => setUiMode(checked ? 'advanced' : 'simple')}
           />
 
           <ListRow

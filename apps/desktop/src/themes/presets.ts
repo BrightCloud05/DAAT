@@ -24,6 +24,78 @@ const NOUS_BLUE = '#0053FD'
 const PSYCHE_BLUE = '#1540B1'
 const PSYCHE_WARM = '#FFE6CB'
 
+// Apple system palette (HIG): systemBlue light/dark + label/fill grays.
+const APPLE_BLUE = '#007AFF'
+const APPLE_BLUE_DARK = '#0A84FF'
+
+/**
+ * BISEO Glass — the product's default skin. macOS Liquid Glass treatment:
+ * window chrome and sidebar carry alpha so the native NSVisualEffectView
+ * vibrancy blurs the desktop through them; content surfaces (cards, editor,
+ * popovers) stay near-opaque for legibility. Typography rides the system
+ * stack, which resolves to SF Pro on macOS.
+ */
+export const biseoGlassTheme: DesktopTheme = {
+  name: 'biseo-glass',
+  label: 'BISEO Glass',
+  description: 'Liquid-glass chrome with Apple system blue',
+  colors: {
+    background: 'rgba(245, 245, 247, 0.82)',
+    foreground: '#1D1D1F',
+    card: 'rgba(255, 255, 255, 0.92)',
+    cardForeground: '#1D1D1F',
+    muted: 'rgba(120, 120, 128, 0.08)',
+    mutedForeground: '#6E6E73',
+    popover: 'rgba(255, 255, 255, 0.96)',
+    popoverForeground: '#1D1D1F',
+    primary: APPLE_BLUE,
+    primaryForeground: '#FFFFFF',
+    secondary: 'rgba(120, 120, 128, 0.10)',
+    secondaryForeground: '#3A3A3C',
+    accent: 'rgba(0, 122, 255, 0.10)',
+    accentForeground: '#1D1D1F',
+    border: 'rgba(60, 60, 67, 0.14)',
+    input: 'rgba(60, 60, 67, 0.18)',
+    ring: APPLE_BLUE,
+    midground: APPLE_BLUE,
+    composerRing: APPLE_BLUE,
+    destructive: '#FF3B30',
+    destructiveForeground: '#FFFFFF',
+    sidebarBackground: 'rgba(243, 243, 247, 0.55)',
+    sidebarBorder: 'rgba(60, 60, 67, 0.10)',
+    userBubble: 'rgba(0, 122, 255, 0.08)',
+    userBubbleBorder: 'rgba(0, 122, 255, 0.18)'
+  },
+  darkColors: {
+    background: 'rgba(28, 28, 30, 0.80)',
+    foreground: '#F5F5F7',
+    card: 'rgba(44, 44, 46, 0.92)',
+    cardForeground: '#F5F5F7',
+    muted: 'rgba(120, 120, 128, 0.16)',
+    mutedForeground: '#98989F',
+    popover: 'rgba(44, 44, 46, 0.96)',
+    popoverForeground: '#F5F5F7',
+    primary: APPLE_BLUE_DARK,
+    primaryForeground: '#FFFFFF',
+    secondary: 'rgba(120, 120, 128, 0.20)',
+    secondaryForeground: '#E5E5EA',
+    accent: 'rgba(10, 132, 255, 0.16)',
+    accentForeground: '#F5F5F7',
+    border: 'rgba(84, 84, 88, 0.48)',
+    input: 'rgba(84, 84, 88, 0.42)',
+    ring: APPLE_BLUE_DARK,
+    midground: APPLE_BLUE_DARK,
+    composerRing: APPLE_BLUE_DARK,
+    destructive: '#FF453A',
+    destructiveForeground: '#FFFFFF',
+    sidebarBackground: 'rgba(22, 22, 24, 0.55)',
+    sidebarBorder: 'rgba(84, 84, 88, 0.36)',
+    userBubble: 'rgba(10, 132, 255, 0.14)',
+    userBubbleBorder: 'rgba(10, 132, 255, 0.28)'
+  },
+  typography: DEFAULT_TYPOGRAPHY
+}
+
 const nousTint = (pct: number) => `color-mix(in srgb, ${NOUS_BLUE} ${pct}%, #FFFFFF)`
 const nousTintTransparent = (pct: number) => `color-mix(in srgb, ${NOUS_BLUE} ${pct}%, transparent)`
 
@@ -278,6 +350,7 @@ export const slateTheme: DesktopTheme = {
 }
 
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
+  'biseo-glass': biseoGlassTheme,
   nous: nousTheme,
   midnight: midnightTheme,
   ember: emberTheme,
@@ -289,4 +362,4 @@ export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
 export const BUILTIN_THEME_LIST = Object.values(BUILTIN_THEMES)
 
 /** Skin used when nothing is persisted or the persisted name is retired. */
-export const DEFAULT_SKIN_NAME = 'nous'
+export const DEFAULT_SKIN_NAME = 'biseo-glass'

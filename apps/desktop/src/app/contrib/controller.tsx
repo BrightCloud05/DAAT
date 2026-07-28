@@ -59,7 +59,9 @@ import { $currentCwd, $selectedStoredSessionId, $sessions, sessionMatchesStoredI
 import { watchSessionPins } from '@/store/session-pin-sync'
 import { $statusbarVisible, toggleStatusbarVisible } from '@/store/statusbar-prefs'
 
-import { registerVaultContributions } from './vault'
+import { isSimpleMode } from '@/store/ui-mode'
+
+import { registerVaultContributions, SIMPLE_DEFAULT_TREE } from './vault'
 
 import type { SessionDragPayload } from '../chat/composer/inline-refs'
 import { watchRouteTiles } from '../chat/route-tile'
@@ -403,7 +405,9 @@ registry.registerMany([
   { id: 'quad', area: 'layouts', title: 'Quad', order: 30, data: QUAD_TREE }
 ])
 
-declareDefaultTree(DEFAULT_TREE)
+// Simple mode boots into the notes-first arrangement; advanced keeps the
+// full chat-centric default with the developer rails.
+declareDefaultTree(isSimpleMode() ? SIMPLE_DEFAULT_TREE : DEFAULT_TREE)
 
 // Bundled plugins load AFTER core, so a same-id contribution from a plugin
 // deliberately overrides the core default (last writer wins). Third-party

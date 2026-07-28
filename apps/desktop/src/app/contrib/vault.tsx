@@ -25,6 +25,20 @@ const NOTES_TREE = split(
   'spl-notes-root'
 )
 
+// Simple-mode default: notes and chats share a tabbed left rail, then
+// editor │ chat. Three columns, no developer chrome — the whole app at a
+// glance for a non-technical user.
+export const SIMPLE_DEFAULT_TREE = split(
+  'row',
+  [
+    group(['vault-tree', 'sessions'], { id: 'grp-simple-rail' }),
+    group(['vault-editor'], { id: 'grp-vault-editor' }),
+    group(['workspace'], { id: 'grp-main' })
+  ],
+  [1, 2.4, 2.1],
+  'spl-simple-root'
+)
+
 const openNotesLayout = () => {
   applyLayoutPreset('notes', NOTES_TREE)
   revealTreePane('vault-editor')
