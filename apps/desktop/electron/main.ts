@@ -751,6 +751,15 @@ function getWindowBackgroundColor() {
   return nativeTheme.shouldUseDarkColors ? '#111111' : '#f7f7f7'
 }
 
+// On macOS the chat windows carry `vibrancy`, and an EXPLICIT opaque
+// backgroundColor makes the WebContents surface opaque, fully occluding the
+// NSVisualEffectView (the Liquid Glass material). A fully transparent base
+// lets CSS alpha composite over the vibrancy; the effect view itself is the
+// anti-flash backdrop. Non-mac keeps the themed opaque anti-flash color.
+function chatWindowBackgroundColor() {
+  return IS_MAC ? '#00000000' : getWindowBackgroundColor()
+}
+
 // Transparent WCO — renderer chrome shows through. rgba(0,0,0,0) can fall back
 // to GetFrameColor() on some Electron builds; rgba(1,0,0,0) is the escape hatch.
 const TITLEBAR_OVERLAY_COLOR = 'rgba(1, 0, 0, 0)'
@@ -8469,7 +8478,7 @@ function spawnSecondaryWindow({ sessionId, watch }: { sessionId?: string; watch?
     // covers it. ready-to-show fires after the boot-time paint in
     // themes/context.tsx, so the window appears already themed.
     show: false,
-    backgroundColor: getWindowBackgroundColor(),
+    backgroundColor: chatWindowBackgroundColor(),
     webPreferences: chatWindowWebPreferences(PRELOAD_PATH)
   })
 
@@ -8548,7 +8557,7 @@ function createInstanceWindow() {
     opacity: windowOpacity(),
     icon,
     show: false,
-    backgroundColor: getWindowBackgroundColor(),
+    backgroundColor: chatWindowBackgroundColor(),
     webPreferences: chatWindowWebPreferences(PRELOAD_PATH)
   })
 
@@ -8950,7 +8959,7 @@ function createWindow() {
     // `backgroundColor` and follows the OS appearance) can't flash a light
     // material before the renderer paints the app theme. See createSessionWindow.
     show: false,
-    backgroundColor: getWindowBackgroundColor(),
+    backgroundColor: chatWindowBackgroundColor(),
     // Shared with the secondary session windows (chatWindowWebPreferences) so
     // both keep `backgroundThrottling: false` — the chat transcript uses a
     // bounded timer flush that Chromium clamps for blurred windows, stalling

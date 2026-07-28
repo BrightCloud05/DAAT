@@ -467,7 +467,7 @@ export function ChatView({
   return (
     <div
       className={cn(
-        'relative isolate flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
+        'relative isolate flex h-full min-w-0 flex-col overflow-hidden',
         className
       )}
       data-chat-surface=""
@@ -501,7 +501,7 @@ export function ChatView({
         suppressMessages={routeSessionMismatch}
       >
         <div
-          className="relative min-h-0 max-w-full flex-1 overflow-hidden bg-(--ui-chat-surface-background) contain-[layout_paint]"
+          className="relative min-h-0 max-w-full flex-1 overflow-hidden contain-[layout_paint]"
           data-slot="composer-bounds"
           {...dropHandlers}
         >

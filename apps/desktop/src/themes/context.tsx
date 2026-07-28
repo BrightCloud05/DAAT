@@ -18,7 +18,7 @@ import { persistString, persistStringRecord, storedString, storedStringRecord } 
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 
 import { $backendThemes, $pendingSkinApply } from './backend-sync'
-import { hexToRgb, mix, readableOn } from './color'
+import { hexToRgb, mix, normalizeHex, readableOn } from './color'
 import { BUILTIN_THEME_LIST, DEFAULT_SKIN_NAME, DEFAULT_TYPOGRAPHY, nousTheme } from './presets'
 import type { DesktopTheme, DesktopThemeColors } from './types'
 import { $userThemes, listAllThemes, resolveTheme } from './user-themes'
@@ -232,10 +232,22 @@ function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark') {
 
   const chromeBg = chromeBackground(c.background, isDark)
 
+  // Glass themes carry rgba() backgrounds; main.ts only accepts 6-digit hex
+  // for the titlebar/anti-flash handshake, so flatten alpha over the neutral
+  // chrome for that payload (CSS keeps the real alpha).
+  const handshakeBg =
+    normalizeHex(chromeBg, NEUTRAL_CHROME[isDark ? 'dark' : 'light']) ??
+    NEUTRAL_CHROME[isDark ? 'dark' : 'light']
+
   window.hermesDesktop?.setTitleBarTheme?.({
-    background: chromeBg,
-    foreground: c.foreground
+    background: handshakeBg,
+    foreground: normalizeHex(c.foreground, isDark ? '#ffffff' : '#000000') ?? c.foreground
   })
+
+  // The boot script paints <html> with the stored background before React
+  // loads; once the app theme is live that inline paint is a redundant
+  // full-viewport layer that multiplies glass alpha into opacity — clear it.
+  document.documentElement.style.backgroundColor = 'transparent'
 
   // Raw (non-JSON) keys read by the inline pre-paint script in index.html —
   // they let a brand-new window paint the themed background on its very first

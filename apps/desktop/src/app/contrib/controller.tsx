@@ -675,7 +675,7 @@ export function ContribController() {
 
   return (
     <SidebarProvider
-      className="h-screen min-h-0 flex-col bg-background"
+      className="h-screen min-h-0 flex-col bg-transparent"
       onOpenChange={setSidebarOpen}
       open={sidebarOpen}
       style={{ '--sidebar-width': '100%' } as CSSProperties}

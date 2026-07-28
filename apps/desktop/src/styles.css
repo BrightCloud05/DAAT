@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 @import 'tw-shimmer';
+@import 'tw-animate-css';
 @import 'katex/dist/katex.min.css';
 @import '@vscode/codicons/dist/codicon.css';
 @custom-variant dark (&:is(.dark *));
@@ -58,6 +59,10 @@
 }
 
 @theme inline {
+  /* Motion defaults: every bare `transition-*` utility rides the house
+     signature curve — short, decisive ease-out (Apple-soft pass). */
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   --color-background: var(--dt-background);
   --color-foreground: var(--dt-foreground);
   --color-card: var(--dt-card);
@@ -387,11 +392,11 @@
     --dt-spacing-mul: 1;
 
     --radius: 0.75rem;
-    /* Effective value everywhere: the chat backdrop used to force 0.2 onto the
-       root element at runtime (an ungated leva slider default), so this 0.6
-       only ever applied to the windows that don't mount the backdrop. Pinned
-       to the value the app actually renders at. */
-    --radius-scalar: 0.2;
+    /* Apple-soft pass: 0.85 puts the token scale at md≈8.5px, lg≈10px,
+       xl≈13.6px, 2xl≈20px — HIG-feel continuous curvature on cards, overlays,
+       and the composer. (History: an ungated leva slider used to pin 0.2,
+       rendering the whole app near-square.) */
+    --radius-scalar: 0.85;
 
     /* Space under last message vs overlay composer — driven by the measured composer height (see composer/index.tsx)
        plus the out-of-flow status stack's measured height (see status-stack/index.tsx) when one is showing.
@@ -528,7 +533,10 @@
 
   body {
     margin: 0;
-    background: var(--ui-chat-surface-background);
+    /* Transparent: the shell div owns the single chrome wash so macOS
+       vibrancy shows through glass themes (stacked repaints multiply alpha
+       into opacity — see the Liquid Glass pass). */
+    background: transparent;
     color: var(--dt-foreground);
     font-family: var(--dt-font-sans);
     font-size: 0.8125rem;
@@ -670,6 +678,7 @@
    highlight lands instantly on hover-in and fades out over 100ms on leave. */
 @utility row-hover {
   cursor: pointer;
+  border-radius: var(--radius-md);
   transition:
     color 100ms ease-out,
     background-color 100ms ease-out;
@@ -842,9 +851,14 @@
   outline: none;
 }
 
-*:focus-visible {
+/* Keyboard focus gets a soft Apple-style halo instead of nothing — mouse
+   focus stays ringless (:focus alone is untouched). Surfaces that draw their
+   own focus chrome (composer, inputs) opt out via .desktop-input-chrome. */
+*:focus-visible:not(.desktop-input-chrome):not([data-no-focus-halo]) {
   --tw-ring-shadow: 0 0 #0000 !important;
   --tw-ring-offset-shadow: 0 0 #0000 !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dt-primary) 28%, transparent);
+  border-radius: max(var(--radius-sm), 4px);
 }
 
 button {
@@ -860,9 +874,12 @@ button {
 [data-slot='select-content'],
 [data-slot='dialog-content'],
 [data-slot='thread-timeline-popover'] {
-  border-color: var(--ui-stroke-secondary);
+  /* Apple-soft: menus/selects/dialogs float on the same borderless nous
+     elevation as toasts and the composer — hairline + pooled shadow, not a
+     ring + hard drop. */
+  border-color: var(--stroke-nous);
   background: color-mix(in srgb, var(--ui-bg-elevated) 96%, transparent);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-nous);
   backdrop-filter: blur(0.75rem) saturate(1.08);
   -webkit-backdrop-filter: blur(0.75rem) saturate(1.08);
 }

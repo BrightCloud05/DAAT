@@ -72,7 +72,7 @@ export function PageSearchShell({
   return (
     <section
       {...props}
-      className={cn('flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)', className)}
+      className={cn('flex h-full min-w-0 flex-col overflow-hidden', className)}
     >
       {/*
         Header lives in the page body, below the window chrome (the shell floats
@@ -109,7 +109,7 @@ export function PageSearchShell({
         )}
         {filters ? <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 pb-2">{filters}</div> : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden bg-(--ui-chat-surface-background)">{children}</div>
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </section>
   )
 }
