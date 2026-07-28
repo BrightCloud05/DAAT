@@ -60,7 +60,7 @@
 import { existsSync, rmSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { Arch } from 'electron-builder'
-import { stageNodePty } from './stage-native-deps.mjs'
+import { stageAllNativeDeps } from './stage-native-deps.mjs'
 
 export function cleanStaleAppOutDir(appOutDir) {
   if (!appOutDir || typeof appOutDir !== 'string') {
@@ -141,7 +141,7 @@ export default async function beforePack(context) {
             'lipo-merge x64/arm64 .node files manually if you need a true universal build.'
         )
       } else {
-        await stageNodePty({ platform, arch: archName })
+        await stageAllNativeDeps({ platform, arch: archName })
         console.log(`[before-pack] re-staged node-pty for target ${platform}-${archName}`)
       }
     }

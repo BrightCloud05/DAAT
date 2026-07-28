@@ -144,6 +144,42 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   },
   revealLogs: () => ipcRenderer.invoke('hermes:logs:reveal'),
   getRecentLogs: () => ipcRenderer.invoke('hermes:logs:recent'),
+  // Markdown vault (BISEO second brain). Paths are vault-relative POSIX
+  // strings; main enforces vault-root containment.
+  vault: {
+    info: () => ipcRenderer.invoke('hermes:vault:info'),
+    defaults: () => ipcRenderer.invoke('hermes:vault:defaults'),
+    create: baseDir => ipcRenderer.invoke('hermes:vault:create', baseDir),
+    choose: () => ipcRenderer.invoke('hermes:vault:choose'),
+    open: root => ipcRenderer.invoke('hermes:vault:open', root),
+    reindex: () => ipcRenderer.invoke('hermes:vault:reindex'),
+    list: () => ipcRenderer.invoke('hermes:vault:list'),
+    listDir: subdir => ipcRenderer.invoke('hermes:vault:listDir', subdir),
+    read: relPath => ipcRenderer.invoke('hermes:vault:read', relPath),
+    write: (relPath, content, expectedMtimeMs) =>
+      ipcRenderer.invoke('hermes:vault:write', relPath, content, expectedMtimeMs),
+    createNote: relPath => ipcRenderer.invoke('hermes:vault:createNote', relPath),
+    createDir: relPath => ipcRenderer.invoke('hermes:vault:createDir', relPath),
+    rename: (fromRel, toRel) => ipcRenderer.invoke('hermes:vault:rename', fromRel, toRel),
+    trash: relPath => ipcRenderer.invoke('hermes:vault:trash', relPath),
+    search: query => ipcRenderer.invoke('hermes:vault:search', query),
+    backlinks: relPath => ipcRenderer.invoke('hermes:vault:backlinks', relPath),
+    linksFrom: relPath => ipcRenderer.invoke('hermes:vault:linksFrom', relPath),
+    resolveWikilink: targetRaw => ipcRenderer.invoke('hermes:vault:resolveWikilink', targetRaw),
+    noteNames: () => ipcRenderer.invoke('hermes:vault:noteNames'),
+    onIndexEvent: callback => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('hermes:vault:index-event', listener)
+
+      return () => ipcRenderer.removeListener('hermes:vault:index-event', listener)
+    },
+    onConflict: callback => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('hermes:vault:conflict', listener)
+
+      return () => ipcRenderer.removeListener('hermes:vault:conflict', listener)
+    }
+  },
   readDir: dirPath => ipcRenderer.invoke('hermes:fs:readDir', dirPath),
   gitRoot: startPath => ipcRenderer.invoke('hermes:fs:gitRoot', startPath),
   revealPath: targetPath => ipcRenderer.invoke('hermes:fs:reveal', targetPath),

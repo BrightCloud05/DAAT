@@ -59,6 +59,8 @@ import { $currentCwd, $selectedStoredSessionId, $sessions, sessionMatchesStoredI
 import { watchSessionPins } from '@/store/session-pin-sync'
 import { $statusbarVisible, toggleStatusbarVisible } from '@/store/statusbar-prefs'
 
+import { registerVaultContributions } from './vault'
+
 import type { SessionDragPayload } from '../chat/composer/inline-refs'
 import { watchRouteTiles } from '../chat/route-tile'
 import { startSessionDrag } from '../chat/session-drag'
@@ -391,6 +393,8 @@ const QUAD_TREE = split(
   ],
   [3, 1]
 )
+
+registerVaultContributions()
 
 registry.registerMany([
   { id: 'default', area: 'layouts', title: 'Default', order: 0, data: DEFAULT_TREE },

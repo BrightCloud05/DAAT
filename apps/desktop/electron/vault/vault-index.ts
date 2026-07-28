@@ -202,11 +202,11 @@ export class VaultIndex {
   }
 
   listNotes(): VaultNote[] {
-    return (
-      this.db
-        .prepare('SELECT path, title, mtime_ms as mtimeMs, size, dataless FROM notes ORDER BY path')
-        .all() as Array<VaultNote & { dataless: number }>
-    ).map(row => ({ ...row, dataless: Boolean(row.dataless) }))
+    const rows = this.db
+      .prepare('SELECT path, title, mtime_ms as mtimeMs, size, dataless FROM notes ORDER BY path')
+      .all() as Array<{ path: string; title: string; mtimeMs: number; size: number; dataless: number }>
+
+    return rows.map(row => ({ ...row, dataless: Boolean(row.dataless) }))
   }
 
   /** All note base-names + titles, for wikilink autocomplete in the editor. */

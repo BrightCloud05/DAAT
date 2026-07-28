@@ -32,6 +32,7 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime } from './active-runtime-state'
+import { initVaultIpc } from './vault/vault-ipc'
 import { stopBackendChild as stopBackendChildImpl } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -11373,6 +11374,7 @@ app.whenReady().then(() => {
   registerMediaProtocol()
   installEmbedReferer()
   registerDeepLinkProtocol()
+  initVaultIpc()
   ensureWslWindowsFonts()
   configureSpellChecker()
   registerPowerResumeListeners()

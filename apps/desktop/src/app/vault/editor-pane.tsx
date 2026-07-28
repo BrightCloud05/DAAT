@@ -1,0 +1,167 @@
+/**
+ * Vault editor pane: CodeMirror 6 hosting the active note's markdown source.
+ * M1 scope — plain markdown editing with syntax highlighting, 1s-debounced
+ * autosave through the store, dirty dot, and a conflict banner. Live preview
+ * decorations (hide-syntax-near-cursor, wikilink widgets) land in M2 as CM
+ * extensions layered onto this same host.
+ */
+
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { languages } from '@codemirror/language-data'
+import { Compartment, EditorState } from '@codemirror/state'
+import { EditorView, keymap, placeholder } from '@codemirror/view'
+import { useStore } from '@nanostores/react'
+import { useEffect, useRef } from 'react'
+
+import { Codicon } from '@/components/ui/codicon'
+
+import { $activeDirty, $activeNote, $vaultConflicts, dismissConflict, flushActiveNote, noteEdited, openNote } from './store'
+
+const editorTheme = EditorView.theme({
+  '&': {
+    height: '100%',
+    fontSize: '13.5px',
+    backgroundColor: 'transparent'
+  },
+  '.cm-scroller': {
+    fontFamily: 'inherit',
+    lineHeight: '1.65',
+    padding: '0.75rem 1.25rem 40vh'
+  },
+  '.cm-content': {
+    maxWidth: '46rem',
+    margin: '0 auto',
+    caretColor: 'var(--ui-accent)'
+  },
+  '&.cm-focused': { outline: 'none' },
+  '.cm-line': { padding: '0 2px' },
+  '.cm-cursor': { borderLeftColor: 'var(--ui-accent)' },
+  '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': {
+    backgroundColor: 'color-mix(in srgb, var(--ui-accent) 22%, transparent)'
+  }
+})
+
+export function VaultEditorPane() {
+  const active = useStore($activeNote)
+  const dirty = useStore($activeDirty)
+  const conflicts = useStore($vaultConflicts)
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  const viewRef = useRef<EditorView | null>(null)
+  const pathRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!hostRef.current) {
+      return
+    }
+
+    const view = new EditorView({
+      parent: hostRef.current,
+      state: EditorState.create({ doc: '' })
+    })
+
+    viewRef.current = view
+
+    return () => {
+      void flushActiveNote()
+      view.destroy()
+      viewRef.current = null
+      pathRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const view = viewRef.current
+
+    if (!view || !active) {
+      return
+    }
+
+    const isNewNote = pathRef.current !== active.path
+    const currentDoc = view.state.doc.toString()
+
+    // External refresh of the same note only applies when it truly differs
+    // (the store already guards on dirty state).
+    if (!isNewNote && currentDoc === active.content) {
+      return
+    }
+
+    pathRef.current = active.path
+
+    view.setState(
+      EditorState.create({
+        doc: active.content,
+        extensions: [
+          history(),
+          keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+          markdown({ base: markdownLanguage, codeLanguages: languages }),
+          EditorView.lineWrapping,
+          placeholder('Start writing…'),
+          editorTheme,
+          EditorView.updateListener.of(update => {
+            if (update.docChanged) {
+              noteEdited(update.state.doc.toString())
+            }
+          })
+        ]
+      })
+    )
+
+    if (isNewNote) {
+      view.focus()
+    }
+  }, [active])
+
+  if (!active) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center opacity-60">
+        <Codicon name="notebook" className="text-3xl" />
+        <div className="text-sm">Select a note, or create one with the + button.</div>
+      </div>
+    )
+  }
+
+  const title = active.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '') ?? active.path
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b border-(--stroke-nous) px-4 py-1.5">
+        <span className="min-w-0 flex-1 truncate text-xs font-medium">{title}</span>
+        {active.dataless ? (
+          <span className="flex items-center gap-1 text-[10px] opacity-60">
+            <Codicon name="cloud-download" /> downloading from iCloud…
+          </span>
+        ) : null}
+        <span
+          className="size-1.5 rounded-full transition-opacity"
+          style={{ backgroundColor: 'var(--ui-accent)', opacity: dirty ? 1 : 0 }}
+          title={dirty ? 'Unsaved changes' : 'Saved'}
+        />
+      </div>
+      {conflicts.map(conflict => (
+        <div
+          key={conflict.conflictPath}
+          className="flex items-center gap-2 border-b border-(--stroke-nous) bg-(--ui-control-hover-background) px-4 py-1.5 text-xs"
+        >
+          <Codicon name="warning" />
+          <span className="min-w-0 flex-1 truncate">
+            This note changed elsewhere — your edits were saved as a conflict copy.
+          </span>
+          <button
+            className="underline opacity-80 hover:opacity-100"
+            onClick={() => {
+              void openNote(conflict.conflictPath)
+              dismissConflict(conflict.conflictPath)
+            }}
+          >
+            Open copy
+          </button>
+          <button className="opacity-60 hover:opacity-100" onClick={() => dismissConflict(conflict.conflictPath)}>
+            <Codicon name="close" />
+          </button>
+        </div>
+      ))}
+      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden" />
+    </div>
+  )
+}

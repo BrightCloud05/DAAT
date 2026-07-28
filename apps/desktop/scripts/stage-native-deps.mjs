@@ -349,8 +349,99 @@ export function stageNodePty({ platform = process.platform, arch = process.arch 
   return stageNodePtyInto(srcRoot, destRoot, { platform, arch })
 }
 
+function resolvePackageRoot(name) {
+  const pkgJsonPath = require.resolve(`${name}/package.json`, { paths: [projectRoot] })
+  return dirname(pkgJsonPath)
+}
+
+/**
+ * Stage better-sqlite3 (vault index). Its Electron-ABI binary lives in
+ * build/Release after `electron-rebuild -w better-sqlite3` — same
+ * host-vs-target rules as node-pty: never ship a host binary for a foreign
+ * platform, rebuild for a same-platform/other-arch target.
+ */
+export function stageBetterSqlite3({ platform = process.platform, arch = process.arch } = {}) {
+  const srcRoot = resolvePackageRoot('better-sqlite3')
+  const destRoot = resolve(projectRoot, 'dist/node_modules/better-sqlite3')
+  const hostMatch = platform === process.platform && arch === process.arch
+
+  rmSync(destRoot, { recursive: true, force: true })
+  mkdirSync(destRoot, { recursive: true })
+  cpSync(join(srcRoot, 'package.json'), join(destRoot, 'package.json'))
+  copyGlobByExt(join(srcRoot, 'lib'), join(destRoot, 'lib'), ['.js'])
+
+  const buildBinary = join(srcRoot, 'build/Release/better_sqlite3.node')
+
+  if (!existsSync(buildBinary) || !hostMatch) {
+    if (platform !== process.platform) {
+      throw new Error(
+        `[stage-native-deps] better-sqlite3 has no binary for ${platform}-${arch} and cannot cross-compile.`
+      )
+    }
+    console.log(`[stage-native-deps] rebuilding better-sqlite3 for electron (${arch})...`)
+    const result = spawnSync(
+      process.execPath,
+      ['../../node_modules/.bin/electron-rebuild', '-f', '-w', 'better-sqlite3', '--arch', arch],
+      { cwd: projectRoot, stdio: 'inherit' }
+    )
+    if (result.status !== 0) {
+      throw new Error(`electron-rebuild failed for better-sqlite3 (exit ${result.status}).`)
+    }
+  }
+
+  mkdirSync(join(destRoot, 'build/Release'), { recursive: true })
+  cpSync(buildBinary, join(destRoot, 'build/Release/better_sqlite3.node'))
+  validateStagedBinaries(destRoot, platform)
+  console.log(`[stage-native-deps] staged better-sqlite3 (${platform}-${arch}) -> ${destRoot}`)
+  return destRoot
+}
+
+/**
+ * Stage @parcel/watcher (vault file watching). N-API with per-platform
+ * payload packages (@parcel/watcher-<platform>-<arch>) required at runtime
+ * by its index.js — stage the wrapper plus the one payload for the target.
+ */
+export function stageParcelWatcher({ platform = process.platform, arch = process.arch } = {}) {
+  const srcRoot = resolvePackageRoot('@parcel/watcher')
+  const destRoot = resolve(projectRoot, 'dist/node_modules/@parcel/watcher')
+
+  rmSync(destRoot, { recursive: true, force: true })
+  mkdirSync(destRoot, { recursive: true })
+  cpSync(join(srcRoot, 'package.json'), join(destRoot, 'package.json'))
+  copyGlobByExt(srcRoot, destRoot, ['.js'])
+
+  // glibc vs musl only matters on linux; electron implies glibc.
+  const payloadName = `@parcel/watcher-${platform}-${arch}${platform === 'linux' ? '-glibc' : ''}`
+  let payloadRoot
+
+  try {
+    payloadRoot = resolvePackageRoot(payloadName)
+  } catch {
+    throw new Error(
+      `[stage-native-deps] ${payloadName} is not installed — cannot stage @parcel/watcher for ${platform}-${arch}. ` +
+        `Install the platform payload (npm i -w apps/desktop ${payloadName}) or build on the target.`
+    )
+  }
+
+  const payloadDest = resolve(projectRoot, 'dist/node_modules', payloadName)
+
+  rmSync(payloadDest, { recursive: true, force: true })
+  mkdirSync(payloadDest, { recursive: true })
+  cpSync(payloadRoot, payloadDest, { recursive: true })
+  validateStagedBinaries(payloadDest, platform)
+  console.log(`[stage-native-deps] staged @parcel/watcher + ${payloadName} -> ${destRoot}`)
+  return destRoot
+}
+
+/** Everything the packaged app needs staged, in one call (used by CLI + before-pack). */
+export function stageAllNativeDeps({ platform = process.platform, arch = process.arch } = {}) {
+  stageNodePty({ platform, arch })
+  stageBetterSqlite3({ platform, arch })
+  stageParcelWatcher({ platform, arch })
+}
+
 // Allow direct CLI invocation: node scripts/stage-native-deps.mjs [platform] [arch]
 if (isMain(import.meta.url)) {
   const [platform, arch] = process.argv.slice(2)
-  stageNodePty({ platform, arch })
+  stageAllNativeDeps({ platform, arch })
 }

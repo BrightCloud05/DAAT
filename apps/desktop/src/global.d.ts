@@ -11,8 +11,85 @@ import type { QuickEntryStatePush, QuickEntryStatus, QuickEntrySubmitPayload } f
 export {}
 
 declare global {
+  // Vault shapes — structural mirrors of electron/vault/vault-types.ts (the
+  // renderer can't import from electron/, so keep the two in sync by hand).
+  interface VaultInfo {
+    root: string | null
+    name: string | null
+    noteCount: number
+    location: 'icloud' | 'local' | null
+    indexing: boolean
+  }
+  interface VaultNote {
+    path: string
+    title: string
+    mtimeMs: number
+    size: number
+    dataless: boolean
+  }
+  interface VaultEntry {
+    path: string
+    name: string
+    kind: 'dir' | 'note' | 'file'
+    dataless: boolean
+  }
+  interface VaultReadResult {
+    path: string
+    content: string
+    mtimeMs: number
+    dataless: boolean
+  }
+  type VaultWriteResult =
+    | { ok: true; mtimeMs: number }
+    | { ok: false; reason: 'conflict'; conflictPath: string }
+  interface VaultSearchHit {
+    path: string
+    title: string
+    snippet: string
+  }
+  interface VaultLink {
+    source: string
+    targetRaw: string
+    targetPath: string | null
+    line: number
+  }
+  type VaultIndexEvent =
+    | { type: 'index-progress'; indexed: number; total: number }
+    | { type: 'index-complete'; noteCount: number }
+    | { type: 'note-changed'; path: string }
+    | { type: 'note-removed'; path: string }
+    | { type: 'vault-changed' }
+  interface VaultConflictEvent {
+    path: string
+    conflictPath: string
+  }
+
   interface Window {
     hermesDesktop: {
+      // Markdown vault (BISEO second brain). All paths vault-relative POSIX.
+      vault: {
+        info: () => Promise<VaultInfo>
+        defaults: () => Promise<{ icloud: string | null; local: string }>
+        create: (baseDir?: string) => Promise<VaultInfo>
+        choose: () => Promise<VaultInfo | null>
+        open: (root: string) => Promise<VaultInfo>
+        reindex: () => Promise<void>
+        list: () => Promise<VaultNote[]>
+        listDir: (subdir?: string) => Promise<VaultEntry[]>
+        read: (relPath: string) => Promise<VaultReadResult>
+        write: (relPath: string, content: string, expectedMtimeMs: number | null) => Promise<VaultWriteResult>
+        createNote: (relPath: string) => Promise<VaultReadResult>
+        createDir: (relPath: string) => Promise<void>
+        rename: (fromRel: string, toRel: string) => Promise<void>
+        trash: (relPath: string) => Promise<void>
+        search: (query: string) => Promise<VaultSearchHit[]>
+        backlinks: (relPath: string) => Promise<VaultLink[]>
+        linksFrom: (relPath: string) => Promise<VaultLink[]>
+        resolveWikilink: (targetRaw: string) => Promise<string | null>
+        noteNames: () => Promise<Array<{ path: string; title: string; name: string }>>
+        onIndexEvent: (callback: (event: VaultIndexEvent) => void) => () => void
+        onConflict: (callback: (event: VaultConflictEvent) => void) => () => void
+      }
       // Resolve a backend connection. Omit `profile` (or pass the primary) for
       // the window's backend; pass a named profile to lazily spawn/reuse that
       // profile's backend from the pool.
