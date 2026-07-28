@@ -29,7 +29,7 @@ async function noteNames(): Promise<NoteName[]> {
   return cache
 }
 
-async function wikilinkSource(context: CompletionContext): Promise<CompletionResult | null> {
+export async function wikilinkSource(context: CompletionContext): Promise<CompletionResult | null> {
   const before = context.matchBefore(/\[\[([^\][|#]*)$/)
 
   if (!before) {
@@ -69,9 +69,9 @@ async function wikilinkSource(context: CompletionContext): Promise<CompletionRes
   }
 }
 
-export function wikilinkCompletion(): Extension {
+export function vaultCompletions(extraSources: Array<(context: CompletionContext) => CompletionResult | null | Promise<CompletionResult | null>> = []): Extension {
   return autocompletion({
-    override: [wikilinkSource],
+    override: [...extraSources, wikilinkSource],
     icons: false,
     activateOnTyping: true
   })

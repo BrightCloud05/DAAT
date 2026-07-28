@@ -24,7 +24,7 @@ import {
   touchSecondaryGateways
 } from '@/store/gateway'
 import { $gatewaySwitching, wipeSessionListsForGatewaySwitch } from '@/store/gateway-switch'
-import { notify, notifyError } from '@/store/notifications'
+import { dismissNotification, notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile, normalizeProfileKey, touchActiveGatewayBackend } from '@/store/profile'
 import {
   $activeSessionId,
@@ -374,6 +374,11 @@ export function useGatewayBoot({
         reauthNotified = false
         escalated = false
         clearReconnectTimer()
+
+        // The startup "Runtime not ready" warning is moot the moment the
+        // gateway actually opens (slow cold boots race the startup probe) —
+        // retract it instead of leaving a stale scare banner.
+        dismissNotification('runtime-not-ready')
 
         // A revalidate-driven reconnect can rebuild the backend in place when the
         // cached remote was found dead, which re-drives the boot-progress overlay.

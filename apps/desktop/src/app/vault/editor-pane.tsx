@@ -16,9 +16,13 @@ import { useEffect, useRef } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 
+import { foldGutter, foldKeymap } from '@codemirror/language'
+
+import { callouts } from './cm/callouts'
 import { livePreview } from './cm/live-preview'
 import { markdownStyling } from './cm/markdown-style'
-import { wikilinkCompletion } from './cm/wikilink-complete'
+import { slashSource } from './cm/slash-menu'
+import { vaultCompletions } from './cm/wikilink-complete'
 import { wikiLinkExtension } from './cm/wikilink-language'
 import { $activeDirty, $activeNote, $vaultConflicts, createNote, dismissConflict, flushActiveNote, noteEdited, openNote } from './store'
 
@@ -39,6 +43,43 @@ const editorTheme = EditorView.theme({
     height: '100%',
     fontSize: '13.5px',
     backgroundColor: 'transparent'
+  },
+  // Fold gutter: invisible chrome — chevrons surface on hover only, the
+  // Notion "controls appear when you reach for them" stance.
+  '.cm-gutters': {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: 'var(--ui-text-quaternary)'
+  },
+  '.cm-foldGutter .cm-gutterElement': {
+    opacity: 0,
+    transition: 'opacity 150ms ease-out',
+    cursor: 'pointer',
+    padding: '0 0.2rem'
+  },
+  '&:hover .cm-foldGutter .cm-gutterElement': { opacity: 0.7 },
+  '.cm-foldPlaceholder': {
+    background: 'color-mix(in srgb, var(--dt-primary) 8%, transparent)',
+    border: 'none',
+    borderRadius: '4px',
+    color: 'var(--ui-text-tertiary)',
+    padding: '0 0.4rem',
+    margin: '0 0.2rem'
+  },
+  // Completion popup rides the app's soft elevation.
+  '.cm-tooltip.cm-tooltip-autocomplete': {
+    borderRadius: '10px',
+    border: '1px solid var(--stroke-nous)',
+    boxShadow: 'var(--shadow-nous)',
+    backgroundColor: 'var(--dt-popover)',
+    overflow: 'hidden'
+  },
+  '.cm-tooltip-autocomplete ul li': {
+    padding: '0.3rem 0.6rem'
+  },
+  '.cm-tooltip-autocomplete ul li[aria-selected]': {
+    background: 'color-mix(in srgb, var(--dt-primary) 12%, transparent)',
+    color: 'inherit'
   },
   '.cm-scroller': {
     fontFamily: 'inherit',
@@ -113,7 +154,14 @@ export function VaultEditorPane() {
           markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [wikiLinkExtension] }),
           markdownStyling,
           livePreview({ openWikilink: target => void openWikilink(target) }),
-          wikilinkCompletion(),
+          callouts(),
+          vaultCompletions([slashSource]),
+          keymap.of(foldKeymap),
+          foldGutter({
+            openText: '▾',
+            closedText: '▸',
+            domEventHandlers: {}
+          }),
           EditorView.lineWrapping,
           placeholder('Start writing…'),
           editorTheme,
