@@ -25,6 +25,7 @@ import {
   openNote as openNoteInStore,
   runVaultSearch
 } from '../vault/store'
+import { openDailyNote } from './templates'
 import { closeTableView, openTableView } from './view-store'
 
 // Opening a page always returns the canvas to the note view.
@@ -176,6 +177,11 @@ export function NotesSidebar() {
       ) : null}
 
       {/* Views. */}
+      <button className={ROW} onClick={() => void openDailyNote()}>
+        <Codicon name="calendar" className="shrink-0 text-[13px] opacity-55" />
+        <span>Today</span>
+        <span className="ml-auto text-[11px] opacity-40">⌘D</span>
+      </button>
       <button className={ROW} onClick={openTableView}>
         <Codicon name="table" className="shrink-0 text-[13px] opacity-55" />
         <span>All pages</span>

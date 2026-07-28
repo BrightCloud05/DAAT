@@ -99,9 +99,61 @@ This folder is yours: plain markdown files on disk. Edit them here, in any
 other editor, or let the agent work on them with you.
 
 - Link notes with [[wikilinks]] — type \`[[\` in the editor
+- Type \`/\` on an empty line for blocks: headings, callouts, tables…
 - Organize with folders, or don't — search finds everything
 - Tag with #topics anywhere in a note
 `
+
+/** Starter templates seeded into <vault>/Templates on create — plain notes
+ *  the user can edit; {{date}} and {{title}} substitute on use. */
+const STARTER_TEMPLATES: Record<string, string> = {
+  'Daily.md': `---
+date: {{date}}
+---
+
+## Today
+
+- [ ]
+
+## Notes
+
+`,
+  'Meeting Notes.md': `---
+date: {{date}}
+attendees: []
+status: draft
+---
+
+## Agenda
+
+-
+
+## Decisions
+
+> [!note] Key decision
+>
+
+## Action items
+
+- [ ]
+`,
+  'Project.md': `---
+status: planning
+owner:
+due:
+tags: [project]
+---
+
+## Goal
+
+## Plan
+
+- [ ]
+
+## Log
+
+`
+}
 
 export class VaultService {
   private root: string | null = null
@@ -175,6 +227,17 @@ export class VaultService {
       await fsp.access(welcomePath)
     } catch {
       await writeNote(welcomePath, WELCOME_NOTE, null)
+    }
+
+    // Seed starter templates (skip any the user already has).
+    for (const [name, content] of Object.entries(STARTER_TEMPLATES)) {
+      const templatePath = path.join(target, 'Templates', name)
+
+      try {
+        await fsp.access(templatePath)
+      } catch {
+        await writeNote(templatePath, content, null)
+      }
     }
 
     return this.open(target)

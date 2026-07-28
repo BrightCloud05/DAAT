@@ -17,6 +17,7 @@ import { VaultEditorPane } from '../vault/editor-pane'
 import { $activeNote, $vaultNotes, createNote } from '../vault/store'
 import { NotesSidebar } from './sidebar'
 import { TableView } from './table-view'
+import { openDailyNote } from './templates'
 import { DocTopbar } from './topbar'
 import { $canvasView } from './view-store'
 
@@ -46,6 +47,12 @@ export function NotesShell() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
         event.preventDefault()
         setAgentOpen(open => !open)
+      }
+
+      // ⌘D — today's daily note.
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'd') {
+        event.preventDefault()
+        void openDailyNote()
       }
 
       // ⌘N — Notion's New page, from anywhere in the shell.

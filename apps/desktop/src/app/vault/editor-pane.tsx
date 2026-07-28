@@ -18,7 +18,9 @@ import { Codicon } from '@/components/ui/codicon'
 
 import { foldGutter, foldKeymap } from '@codemirror/language'
 
+import { BacklinksSection } from '../notes/backlinks-section'
 import { PropertiesPanel } from '../notes/properties-panel'
+import { TemplateSuggestions } from '../notes/template-suggestions'
 
 import { callouts } from './cm/callouts'
 import { bumpDocEpoch, setEditorView } from './editor-bridge'
@@ -215,6 +217,8 @@ export function VaultEditorPane() {
         </div>
       </div>
       <PropertiesPanel />
+      <BacklinksSection />
+      <TemplateSuggestions />
       {conflicts.map(conflict => (
         <div
           key={conflict.conflictPath}
