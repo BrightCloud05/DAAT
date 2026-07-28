@@ -25,9 +25,9 @@ const NOTES_TREE = split(
   'spl-notes-root'
 )
 
-// Simple-mode default: notes and chats share a tabbed left rail, then
-// editor │ chat. Three columns, no developer chrome — the whole app at a
-// glance for a non-technical user.
+// Simple-mode default: notes and chats share a tabbed left rail, the editor
+// is the hero, and the agent is a narrow companion column — the document is
+// the product, the agent assists (Notion-like stance, not chat-first).
 export const SIMPLE_DEFAULT_TREE = split(
   'row',
   [
@@ -35,7 +35,7 @@ export const SIMPLE_DEFAULT_TREE = split(
     group(['vault-editor'], { id: 'grp-vault-editor' }),
     group(['workspace'], { id: 'grp-main' })
   ],
-  [1, 2.4, 2.1],
+  [1, 3.6, 1.5],
   'spl-simple-root'
 )
 
