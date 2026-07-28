@@ -14,8 +14,9 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
 import { VaultEditorPane } from '../vault/editor-pane'
-import { VaultTreePane } from '../vault/tree-pane'
-import { $activeNote } from '../vault/store'
+import { $activeNote, $vaultNotes, createNote } from '../vault/store'
+import { NotesSidebar } from './sidebar'
+import { DocTopbar } from './topbar'
 
 const AGENT_PANEL_KEY = 'biseo.notes.agentOpen.v1'
 
@@ -43,6 +44,20 @@ export function NotesShell() {
         event.preventDefault()
         setAgentOpen(open => !open)
       }
+
+      // ⌘N — Notion's New page, from anywhere in the shell.
+      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'n') {
+        event.preventDefault()
+
+        const existing = new Set($vaultNotes.get().map(note => note.path))
+        let name = 'Untitled.md'
+
+        for (let i = 2; existing.has(name); i++) {
+          name = `Untitled ${i}.md`
+        }
+
+        void createNote(name)
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -54,25 +69,15 @@ export function NotesShell() {
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
       {/* Sidebar: pages + search. Translucent — the Glass material shows. */}
       <aside className="flex w-60 shrink-0 flex-col border-r border-(--stroke-nous) bg-(--ui-bg-sidebar)">
-        <VaultTreePane />
+        <NotesSidebar />
       </aside>
 
       {/* Document canvas — the product. */}
-      <main className="relative min-w-0 flex-1 bg-(--ui-bg-editor)">
-        <VaultEditorPane />
-
-        {/* Agent summon button — quiet, bottom-right, always reachable. */}
-        {!agentOpen && (
-          <Button
-            className="absolute bottom-5 right-5 z-20 shadow-nous"
-            size="icon"
-            title="Ask the agent (⌘J)"
-            variant="secondary"
-            onClick={() => setAgentOpen(true)}
-          >
-            <Codicon name="sparkle" />
-          </Button>
-        )}
+      <main className="relative flex min-w-0 flex-1 flex-col bg-(--ui-bg-editor)">
+        <DocTopbar agentOpen={agentOpen} onToggleAgent={() => setAgentOpen(open => !open)} />
+        <div className="min-h-0 flex-1">
+          <VaultEditorPane />
+        </div>
       </main>
 
       {/* Agent slide-over: the full chat surface, summoned — not resident. */}
