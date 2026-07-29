@@ -21,6 +21,7 @@ import { NotesSidebar } from './sidebar'
 import { TableView } from './table-view'
 import { TodoView } from './todo-view'
 import { MailView } from './mail-view'
+import { MoneyView } from './money-view'
 import { openDailyNote } from './templates'
 import { DocTopbar } from './topbar'
 import { $canvasView } from './view-store'
@@ -110,6 +111,8 @@ export function NotesShell() {
             <TodoView />
           ) : canvasView === 'mail' ? (
             <MailView onAskAgent={askAgent} />
+          ) : canvasView === 'money' ? (
+            <MoneyView onAskAgent={askAgent} />
           ) : (
             <VaultEditorPane />
           )}

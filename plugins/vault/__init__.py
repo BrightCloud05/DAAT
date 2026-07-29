@@ -12,7 +12,7 @@ Environment (injected by BISEO Desktop when it spawns the backend):
 
 from __future__ import annotations
 
-from . import context_bridge, tools
+from . import context_bridge, money, tools
 
 
 def register(ctx):
@@ -92,6 +92,48 @@ def register(ctx):
         handler=lambda args, **kw: tools.vault_search(args.get("query", "")),
         description="Search the vault",
         emoji="🔎",
+    )
+
+    ctx.register_tool(
+        name="money_add_transactions",
+        toolset="vault",
+        schema={
+            "name": "money_add_transactions",
+            "description": (
+                "Record transactions extracted from a bank statement (image, PDF or pasted text) into "
+                "the user's vault. Pass rows as a JSON array of "
+                '{"date": "YYYY-MM-DD", "description": str, "category": str, "amount": number} where '
+                "amount is negative for money out. Duplicates are skipped, so re-importing is safe. "
+                "Always show the user what you extracted before/after recording."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rows": {"type": "string", "description": "JSON array of transaction objects"},
+                    "source": {"type": "string", "description": "Optional statement name for provenance"},
+                },
+                "required": ["rows"],
+            },
+        },
+        handler=lambda args, **kw: money.money_add_transactions(args.get("rows", ""), args.get("source", "")),
+        description="Record transactions",
+        emoji="💰",
+    )
+
+    ctx.register_tool(
+        name="money_summary",
+        toolset="vault",
+        schema={
+            "name": "money_summary",
+            "description": "Totals and category breakdown for a month of transactions (YYYY-MM; latest if omitted).",
+            "parameters": {
+                "type": "object",
+                "properties": {"month": {"type": "string", "description": "YYYY-MM"}},
+            },
+        },
+        handler=lambda args, **kw: money.money_summary(args.get("month", "")),
+        description="Money summary",
+        emoji="📊",
     )
 
     ctx.register_tool(

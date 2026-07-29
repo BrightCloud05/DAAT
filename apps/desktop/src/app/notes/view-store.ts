@@ -2,7 +2,7 @@
 
 import { atom } from 'nanostores'
 
-export type CanvasView = 'home' | 'note' | 'table' | 'todo' | 'mail'
+export type CanvasView = 'home' | 'note' | 'table' | 'todo' | 'mail' | 'money'
 
 export const $canvasView = atom<CanvasView>('home')
 
@@ -20,6 +20,10 @@ export function openTodoView(): void {
 
 export function openMailView(): void {
   $canvasView.set('mail')
+}
+
+export function openMoneyView(): void {
+  $canvasView.set('money')
 }
 
 export function closeTableView(): void {
