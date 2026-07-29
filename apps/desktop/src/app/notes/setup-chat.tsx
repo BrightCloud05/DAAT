@@ -13,7 +13,6 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useRef, useState } from 'react'
 
-import { BrandMark } from '@/components/brand-mark'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
@@ -78,7 +77,6 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
         style={{ animation: 'daat-lift 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both' }}
       >
         <div className="flex shrink-0 items-center gap-2.5 border-b border-(--stroke-nous) px-5 py-3.5">
-          <BrandMark className="size-[22px]" />
           <span className="text-[13px] font-semibold">{s.settingUpTitle}</span>
           <button
             className="ml-auto rounded-md px-2 py-1 text-[12.5px] opacity-45 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-90"

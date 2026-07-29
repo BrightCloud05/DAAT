@@ -55,6 +55,13 @@ await page.evaluate(() => {
 await page.reload()
 await page.waitForTimeout(8000)
 
+// The installer and "connecting" overlays appear only because this probe runs
+// with no backend (HERMES_DESKTOP_BOOT_FAKE) — a real user with a working
+// install sees neither. They swallow clicks meant for the app underneath.
+await page.addStyleTag({
+  content: '[class*="z-setup"], [class*="z-connecting"] { display: none !important; pointer-events: none !important; }'
+})
+
 const check = (label, ok, detail = '') => {
   console.log(`${ok ? '  ok  ' : '  FAIL'} ${label}${detail ? ` — ${detail}` : ''}`)
 

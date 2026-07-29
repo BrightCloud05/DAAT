@@ -6,11 +6,9 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { $productLocale, productStrings } from './strings'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { BrandMark } from '@/components/brand-mark'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
@@ -27,7 +25,8 @@ import {
   openNote as openNoteInStore,
   runVaultSearch
 } from '../vault/store'
-import { openDailyNote } from './templates'
+
+import { $productLocale, productStrings } from './strings'
 import { $vaultTodos, initTodosStore } from './todos-store'
 import {
   $canvasView,
@@ -130,7 +129,6 @@ export function NotesSidebar() {
   if (!info?.root) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center">
-        <div className="grid size-10 place-items-center rounded-xl bg-(--dt-primary) text-lg font-bold text-white">B</div>
         <div className="text-[13px] opacity-75">Your notes live in a vault — a plain folder of markdown files you own.</div>
         <button
           className="rounded-md bg-(--dt-primary) px-3 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
@@ -161,32 +159,31 @@ export function NotesSidebar() {
     <div className="flex h-full flex-col px-2 pt-2">
       {/* Workspace header — the real mark, not a letter in a gradient box. */}
       <div className={cn(ROW, 'group mb-1')}>
-        <BrandMark className="size-[26px]" />
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-[13px] font-semibold">Daat</span>
           <span className="truncate text-[11px] opacity-50">{info.name ?? 'Vault'} · {info.noteCount}</span>
         </span>
         <button
           className="opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
-          title="New page"
           onClick={() => void createNote(newUntitled(notes))}
+          title="New page"
         >
-          <Codicon name="new-file" className="text-[14px]" />
+          <Codicon className="text-[14px]" name="new-file" />
         </button>
       </div>
 
       {/* Search — Notion's quiet inline field. */}
       <div className="mb-2 flex items-center gap-1.5 rounded-md bg-(--ui-control-hover-background) px-2 py-1">
-        <Codicon name="search" className="shrink-0 text-[12px] opacity-50" />
+        <Codicon className="shrink-0 text-[12px] opacity-50" name="search" />
         <input
-          value={search}
+          className="w-full bg-transparent text-[13px] outline-none placeholder:opacity-50"
           onChange={event => void runVaultSearch(event.target.value)}
           placeholder={s.search}
-          className="w-full bg-transparent text-[13px] outline-none placeholder:opacity-50"
+          value={search}
         />
         {search ? (
           <button className="opacity-50 hover:opacity-90" onClick={() => void runVaultSearch('')}>
-            <Codicon name="close" className="text-[11px]" />
+            <Codicon className="text-[11px]" name="close" />
           </button>
         ) : null}
       </div>
@@ -202,14 +199,14 @@ export function NotesSidebar() {
         className={cn(ROW, view === 'home' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
         onClick={openHomeView}
       >
-        <Codicon name="home" className="shrink-0 text-[13px] opacity-70" />
+        <Codicon className="shrink-0 text-[13px] opacity-70" name="home" />
         <span>Home</span>
       </button>
       <button
         className={cn(ROW, view !== 'home' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
         onClick={openTableView}
       >
-        <Codicon name="note" className="shrink-0 text-[13px] opacity-70" />
+        <Codicon className="shrink-0 text-[13px] opacity-70" name="note" />
         <span>Notes</span>
         <span className="ml-auto text-[11px] opacity-40">{notes.length}</span>
       </button>
@@ -223,12 +220,12 @@ export function NotesSidebar() {
           hits.length ? (
             hits.map(hit => (
               <button
-                key={hit.path}
                 className={cn(ROW, 'flex-col items-start gap-0', active?.path === hit.path && 'bg-(--ui-control-active-background)')}
+                key={hit.path}
                 onClick={() => void openNote(hit.path)}
               >
                 <span className="flex w-full items-center gap-1.5">
-                  <Codicon name="note" className="shrink-0 text-[13px] opacity-55" />
+                  <Codicon className="shrink-0 text-[13px] opacity-55" name="note" />
                   <span className="truncate font-medium">{hit.title}</span>
                 </span>
                 <span className="w-full truncate pl-[22px] text-[11px] opacity-55">{hit.snippet}</span>
@@ -241,29 +238,29 @@ export function NotesSidebar() {
           entries.map(entry =>
             entry.kind === 'dir' ? (
               <button
-                key={entry.path}
                 className={cn(ROW, 'opacity-80')}
-                style={{ paddingLeft: `${8 + entry.depth * 14}px` }}
+                key={entry.path}
                 onClick={() => toggleDir(entry.path)}
+                style={{ paddingLeft: `${8 + entry.depth * 14}px` }}
               >
                 <Codicon
-                  name={collapsed.has(entry.path) ? 'chevron-right' : 'chevron-down'}
                   className="shrink-0 text-[11px] opacity-55"
+                  name={collapsed.has(entry.path) ? 'chevron-right' : 'chevron-down'}
                 />
-                <Codicon name="folder" className="shrink-0 text-[13px] opacity-55" />
+                <Codicon className="shrink-0 text-[13px] opacity-55" name="folder" />
                 <span className="truncate">{entry.name}</span>
               </button>
             ) : (
               <button
-                key={entry.path}
                 className={cn(
                   ROW,
                   active?.path === entry.path && 'bg-(--ui-control-active-background) font-medium'
                 )}
-                style={{ paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
+                key={entry.path}
                 onClick={() => void openNote(entry.path)}
+                style={{ paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
               >
-                <Codicon name="note" className="shrink-0 text-[13px] opacity-55" />
+                <Codicon className="shrink-0 text-[13px] opacity-55" name="note" />
                 <span className="truncate">{entry.name}</span>
               </button>
             )
@@ -278,7 +275,7 @@ export function NotesSidebar() {
           className={cn(ROW, view === 'todo' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
           onClick={openTodoView}
         >
-          <Codicon name="checklist" className="shrink-0 text-[13px] opacity-70" />
+          <Codicon className="shrink-0 text-[13px] opacity-70" name="checklist" />
           <span>{s.todo}</span>
           <span className="ml-auto text-[11px] opacity-40">{openTodoCount || ''}</span>
         </button>
@@ -286,28 +283,28 @@ export function NotesSidebar() {
           className={cn(ROW, view === 'mail' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
           onClick={openMailView}
         >
-          <Codicon name="mail" className="shrink-0 text-[13px] opacity-70" />
+          <Codicon className="shrink-0 text-[13px] opacity-70" name="mail" />
           <span>{s.mail}</span>
         </button>
         <button
           className={cn(ROW, view === 'money' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
           onClick={openMoneyView}
         >
-          <Codicon name="symbol-currency" className="shrink-0 text-[13px] opacity-70" />
+          <Codicon className="shrink-0 text-[13px] opacity-70" name="symbol-currency" />
           <span>{s.money}</span>
         </button>
         <button
           className={cn(ROW, view === 'calendar' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
           onClick={openCalendarView}
         >
-          <Codicon name="calendar" className="shrink-0 text-[13px] opacity-70" />
+          <Codicon className="shrink-0 text-[13px] opacity-70" name="calendar" />
           <span>{s.calendar}</span>
         </button>
         <button
           className={cn(ROW, view === 'meetings' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
           onClick={openMeetingsView}
         >
-          <Codicon name="record" className="shrink-0 text-[13px] opacity-70" />
+          <Codicon className="shrink-0 text-[13px] opacity-70" name="record" />
           <span>{s.meetings}</span>
         </button>
       </div>
@@ -315,12 +312,12 @@ export function NotesSidebar() {
       {/* Bottom-anchored actions — Notion's New / Settings grammar. */}
       <div className="border-t border-(--stroke-nous) py-1.5">
         <button className={ROW} onClick={() => void createNote(newUntitled(notes))}>
-          <Codicon name="add" className="text-[13px] text-(--dt-primary)" />
+          <Codicon className="text-[13px] text-(--dt-primary)" name="add" />
           <span className="text-(--dt-primary)">New page</span>
           <span className="ml-auto text-[11px] opacity-40">⌘N</span>
         </button>
         <button className={ROW} onClick={() => navigate('/settings')}>
-          <Codicon name="settings-gear" className="text-[13px] opacity-55" />
+          <Codicon className="text-[13px] opacity-55" name="settings-gear" />
           <span>Settings</span>
         </button>
       </div>

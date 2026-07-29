@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { DesktopConnectionProbeResult } from '@/global'
@@ -225,7 +224,6 @@ export function FirstRunRemoteForm({ onBack }: FirstRunRemoteFormProps) {
     <div className="fixed inset-0 z-(--z-setup) flex items-center justify-center bg-background/90 p-4 backdrop-blur-md">
       <div className="flex w-full max-w-xl flex-col rounded-xl border border-(--stroke-nous) bg-card p-8 shadow-nous">
         <div className="flex items-start gap-4">
-          <BrandMark className="size-11 shrink-0" />
           <div className="min-w-0">
             <h2 className="text-xl font-semibold tracking-tight">{copy.remoteSetupTitle}</h2>
             <p className="mt-1.5 text-sm text-muted-foreground">{copy.remoteSetupDesc}</p>

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ErrorIcon } from '@/components/ui/error-state'
@@ -401,7 +400,6 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       <div className="fixed inset-0 z-(--z-setup) flex items-center justify-center bg-background/90 p-4 backdrop-blur-md">
         <div className="w-full max-w-2xl rounded-xl border border-(--stroke-nous) bg-card p-8 shadow-nous">
           <div className="flex items-start gap-4">
-            <BrandMark className="size-11 shrink-0" />
             <div className="min-w-0">
               <h2 className="text-xl font-semibold tracking-tight">{copy.setupChoiceTitle}</h2>
               <p className="mt-1.5 text-sm text-muted-foreground">{copy.setupChoiceDesc}</p>
@@ -551,7 +549,6 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
       <div className="flex w-full max-w-2xl max-h-[90vh] flex-col rounded-xl border border-(--stroke-nous) bg-card shadow-nous">
         {/* Header -- always visible, never scrolls */}
         <div className="flex flex-shrink-0 items-start gap-4 p-8 pb-4">
-          {!failed && <BrandMark className="size-11 shrink-0" />}
           <div className="min-w-0">
             <h2 className="text-xl font-semibold tracking-tight">
               {failed ? copy.failedTitle : state.active ? copy.settingUpTitle : copy.finishingTitle}

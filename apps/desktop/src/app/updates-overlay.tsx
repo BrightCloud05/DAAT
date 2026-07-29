@@ -1,7 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 
-import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
 import { writeClipboardText } from '@/components/ui/copy-button'
 import {
@@ -214,7 +213,7 @@ function IdleView({
     return (
       <CenteredStatus
         body={target === 'backend' ? u.latestBodyBackend : u.latestBody}
-        icon={<BrandMark className="size-12" />}
+        icon={<Check className="size-6 text-emerald-600 dark:text-emerald-400" />}
         title={u.allSetTitle}
       />
     )
@@ -233,7 +232,6 @@ function IdleView({
   return (
     <div className="grid gap-5 px-6 pb-6 pt-7 pr-8">
       <div className="flex flex-col items-center gap-3 text-center">
-        <BrandMark className="size-16" />
 
         <DialogTitle className="text-center text-xl">{title}</DialogTitle>
         <DialogDescription className="text-center text-sm">{body}</DialogDescription>
@@ -451,13 +449,13 @@ function CenteredStatus({
 }: {
   action?: React.ReactNode
   body?: string
-  icon: React.ReactNode
+  icon?: React.ReactNode
   title: string
 }) {
   return (
     <div className="grid gap-4 px-6 pb-6 pt-8 pr-8">
       <div className="flex flex-col items-center gap-3 text-center">
-        {icon}
+        {icon ?? null}
 
         <DialogTitle className="text-center text-lg">{title}</DialogTitle>
         {body && <DialogDescription className="text-center text-sm">{body}</DialogDescription>}
