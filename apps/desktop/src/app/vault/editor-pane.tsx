@@ -12,7 +12,7 @@ import { languages } from '@codemirror/language-data'
 import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { useStore } from '@nanostores/react'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 
@@ -114,30 +114,35 @@ export function VaultEditorPane() {
   const active = useStore($activeNote)
   const dirty = useStore($activeDirty)
   const conflicts = useStore($vaultConflicts)
-  const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   const pathRef = useRef<string | null>(null)
+  const [hostReady, setHostReady] = useState(0)
 
-  useEffect(() => {
-    if (!hostRef.current) {
+  // Callback ref, NOT a mount effect: the host div only exists while a note is
+  // open, so an effect with [] deps would run once against a null ref and no
+  // editor would ever be created (the "nothing is editable" bug). A callback
+  // ref fires exactly when the node attaches/detaches, whatever the render
+  // path, and the bump makes the doc effect re-run against the fresh view.
+  const attachHost = useCallback((node: HTMLDivElement | null) => {
+    if (!node) {
+      void flushActiveNote()
+      setEditorView(null)
+      viewRef.current?.destroy()
+      viewRef.current = null
+      pathRef.current = null
+
       return
     }
 
-    const view = new EditorView({
-      parent: hostRef.current,
-      state: EditorState.create({ doc: '' })
-    })
+    if (viewRef.current) {
+      return
+    }
+
+    const view = new EditorView({ parent: node, state: EditorState.create({ doc: '' }) })
 
     viewRef.current = view
     setEditorView(view)
-
-    return () => {
-      void flushActiveNote()
-      setEditorView(null)
-      view.destroy()
-      viewRef.current = null
-      pathRef.current = null
-    }
+    setHostReady(value => value + 1)
   }, [])
 
   useEffect(() => {
@@ -204,7 +209,7 @@ export function VaultEditorPane() {
     if (isNewNote) {
       view.focus()
     }
-  }, [active])
+  }, [active, hostReady])
 
   if (!active) {
     return (
@@ -265,7 +270,7 @@ export function VaultEditorPane() {
         </div>
       ))}
       <div className="relative min-h-0 flex-1">
-        <div ref={hostRef} className="h-full overflow-hidden" />
+        <div ref={attachHost} className="h-full overflow-hidden" />
         <BlockHandlesOverlay />
         <InlineAiOverlay />
       </div>

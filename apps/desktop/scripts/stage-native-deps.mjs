@@ -363,34 +363,33 @@ function resolvePackageRoot(name) {
 export function stageBetterSqlite3({ platform = process.platform, arch = process.arch } = {}) {
   const srcRoot = resolvePackageRoot('better-sqlite3')
   const destRoot = resolve(projectRoot, 'dist/node_modules/better-sqlite3')
-  const hostMatch = platform === process.platform && arch === process.arch
 
   rmSync(destRoot, { recursive: true, force: true })
   mkdirSync(destRoot, { recursive: true })
   cpSync(join(srcRoot, 'package.json'), join(destRoot, 'package.json'))
   copyGlobByExt(join(srcRoot, 'lib'), join(destRoot, 'lib'), ['.js'])
 
+  // better-sqlite3 v12+ ships N-API prebuilds (prebuilds/<platform>-<arch>.node)
+  // that are ABI-stable across Node and Electron — no electron-rebuild needed,
+  // and cross-target staging is safe because the payload for every platform is
+  // in the package. lib/binding.js prefers this path; build/Release is the
+  // compiled-from-source fallback (used when a prebuild is absent).
+  const prebuild = join(srcRoot, 'prebuilds', `${platform}-${arch}.node`)
   const buildBinary = join(srcRoot, 'build/Release/better_sqlite3.node')
 
-  if (!existsSync(buildBinary) || !hostMatch) {
-    if (platform !== process.platform) {
-      throw new Error(
-        `[stage-native-deps] better-sqlite3 has no binary for ${platform}-${arch} and cannot cross-compile.`
-      )
-    }
-    console.log(`[stage-native-deps] rebuilding better-sqlite3 for electron (${arch})...`)
-    const result = spawnSync(
-      process.execPath,
-      ['../../node_modules/.bin/electron-rebuild', '-f', '-w', 'better-sqlite3', '--arch', arch],
-      { cwd: projectRoot, stdio: 'inherit' }
+  if (existsSync(prebuild)) {
+    mkdirSync(join(destRoot, 'prebuilds'), { recursive: true })
+    cpSync(prebuild, join(destRoot, 'prebuilds', `${platform}-${arch}.node`))
+  } else if (existsSync(buildBinary) && platform === process.platform && arch === process.arch) {
+    mkdirSync(join(destRoot, 'build/Release'), { recursive: true })
+    cpSync(buildBinary, join(destRoot, 'build/Release/better_sqlite3.node'))
+  } else {
+    throw new Error(
+      `[stage-native-deps] better-sqlite3 has no binary for ${platform}-${arch} ` +
+        `(looked for prebuilds/${platform}-${arch}.node and build/Release).`
     )
-    if (result.status !== 0) {
-      throw new Error(`electron-rebuild failed for better-sqlite3 (exit ${result.status}).`)
-    }
   }
 
-  mkdirSync(join(destRoot, 'build/Release'), { recursive: true })
-  cpSync(buildBinary, join(destRoot, 'build/Release/better_sqlite3.node'))
   validateStagedBinaries(destRoot, platform)
   console.log(`[stage-native-deps] staged better-sqlite3 (${platform}-${arch}) -> ${destRoot}`)
   return destRoot
