@@ -14,6 +14,7 @@ import type { RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { contextBarLabel, LiveDuration, usageContextLabel } from '@/lib/statusbar'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
+import { isSimpleMode } from '@/store/ui-mode'
 import { copyFilePath, revealFile } from '@/store/file-actions'
 import { revealFileInTree } from '@/store/layout'
 import { $activeGatewayProfile } from '@/store/profile'
@@ -348,18 +349,23 @@ export function useStatusbarItems({
   const coreLeftStatusbarItems = useMemo<readonly StatusbarItem[]>(
     () => [
       ...(connectionItem ? [connectionItem] : []),
-      {
-        className: `w-7 justify-center px-0${commandCenterOpen ? ' bg-accent/55 text-foreground' : ''}`,
-        icon: <Command className="size-3.5" />,
-        id: 'command-center',
-        // The system icon: the way into every other surface, including the
-        // settings that would bring a hidden item back. Never hideable.
-        lockedVisible: true,
-        onSelect: toggleCommandCenter,
-        title: commandCenterOpen ? copy.closeCommandCenter : copy.openCommandCenter,
-        toggleLabel: copy.toggleCommandCenter,
-        variant: 'action'
-      },
+      // Command Center is developer chrome, and it is pinned "never hideable"
+      // — so in the notes product it has to be absent rather than merely
+      // hidden.
+      ...(isSimpleMode()
+        ? []
+        : [{
+            className: `w-7 justify-center px-0${commandCenterOpen ? ' bg-accent/55 text-foreground' : ''}`,
+            icon: <Command className="size-3.5" />,
+            id: 'command-center',
+            // The system icon: the way into every other surface, including the
+            // settings that would bring a hidden item back. Never hideable.
+            lockedVisible: true,
+            onSelect: toggleCommandCenter,
+            title: commandCenterOpen ? copy.closeCommandCenter : copy.openCommandCenter,
+            toggleLabel: copy.toggleCommandCenter,
+            variant: 'action' as const
+          }]),
       {
         className: gatewayRestarting ? undefined : gatewayClassName,
         detail: gatewayRestarting ? copy.gatewayRestarting : gatewayDetail,

@@ -117,6 +117,27 @@ console.log('--- Mail ---')
 await openModule('Mail')
 check('mail reports its real state', (await bodyHas('Mail')) && !(await bodyHas('undefined')))
 
+console.log('--- Command palette (developer surfaces stay hidden) ---')
+await page.keyboard.press('Meta+k')
+await page.waitForTimeout(1200)
+
+const paletteText = await page.evaluate(() => {
+  const dialog = document.querySelector('[cmdk-root]') ?? document.querySelector('[role="dialog"]')
+
+  return dialog?.textContent ?? ''
+})
+
+check('the palette opens', paletteText.length > 0)
+
+for (const forbidden of ['Messaging', 'Starmap', 'Cron', 'Pets', 'Command Center', 'Terminal', 'Profiles']) {
+  check(`"${forbidden}" is not offered`, !paletteText.includes(forbidden))
+}
+
+check('Settings is still reachable', paletteText.includes('Settings'))
+
+await page.keyboard.press('Escape')
+await page.waitForTimeout(500)
+
 console.log('--- Acknowledgements (licence compliance) ---')
 // The notices are read over IPC from inside the bundle; a broken path here
 // means we ship binaries with no attribution.

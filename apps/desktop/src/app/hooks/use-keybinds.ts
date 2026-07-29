@@ -9,6 +9,7 @@ import { findBarClaimsCombo } from '@/lib/find-in-page'
 import { contributedKeybindHandler, PROFILE_SLOT_COUNT, SESSION_SLOT_COUNT } from '@/lib/keybinds/actions'
 import { comboAllowedInInput, comboFromEvent, isEditableTarget } from '@/lib/keybinds/combo'
 import { composerFocusKeysAllowed, isComposerFocusSoftCombo, typeToFocusChar } from '@/lib/keybinds/composer-focus-keys'
+import { isSimpleMode } from '@/store/ui-mode'
 import { $repoStatus } from '@/store/coding-status'
 import { toggleCommandPalette } from '@/store/command-palette'
 import {
@@ -129,6 +130,13 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
     setTerminalTakeover(false)
   }
 
+  /** Run only outside simple mode; a no-op in the shipped notes product. */
+  const devOnly = (run: () => void) => {
+    if (!isSimpleMode()) {
+      run()
+    }
+  }
+
   handlersRef.current = {
     'keybinds.openPanel': () => navigate(`${SETTINGS_ROUTE}?tab=keybinds`),
 
@@ -137,14 +145,18 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
     'composer.voice': requestVoiceToggle,
 
     'nav.commandPalette': toggleCommandPalette,
-    'nav.commandCenter': deps.toggleCommandCenter,
     'nav.settings': () => navigate(SETTINGS_ROUTE),
-    'nav.profiles': () => navigate(PROFILES_ROUTE),
-    'nav.skills': () => navigateToWorkspacePage(navigate, SKILLS_ROUTE),
-    'nav.messaging': () => navigateToWorkspacePage(navigate, MESSAGING_ROUTE),
-    'nav.artifacts': () => navigateToWorkspacePage(navigate, ARTIFACTS_ROUTE),
-    'nav.cron': () => navigate(CRON_ROUTE),
-    'nav.agents': () => navigate(AGENTS_ROUTE),
+
+    // Developer destinations. Hiding the palette rows but leaving the
+    // shortcuts live would just make them a secret — in simple mode these
+    // do nothing.
+    'nav.commandCenter': () => devOnly(deps.toggleCommandCenter),
+    'nav.profiles': () => devOnly(() => navigate(PROFILES_ROUTE)),
+    'nav.skills': () => devOnly(() => navigateToWorkspacePage(navigate, SKILLS_ROUTE)),
+    'nav.messaging': () => devOnly(() => navigateToWorkspacePage(navigate, MESSAGING_ROUTE)),
+    'nav.artifacts': () => devOnly(() => navigateToWorkspacePage(navigate, ARTIFACTS_ROUTE)),
+    'nav.cron': () => devOnly(() => navigate(CRON_ROUTE)),
+    'nav.agents': () => devOnly(() => navigate(AGENTS_ROUTE)),
 
     'session.new': () => {
       // Match the sidebar New Session button. A plain keyboard new chat should

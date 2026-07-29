@@ -49,6 +49,7 @@ import {
 } from '@/lib/icons'
 import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
+import { isSimpleMode } from '@/store/ui-mode'
 import { $repoWorktrees } from '@/store/coding-status'
 import {
   $commandPaletteOpen,
@@ -382,6 +383,9 @@ export function CommandPalette() {
   const baseGroups = useMemo<PaletteGroup[]>(() => {
     const settingsTab = (tab: string) => `${SETTINGS_ROUTE}?tab=${tab}`
     const cc = t.commandCenter
+    // ⌘K is the one place a non-technical user can stumble into the whole
+    // hermes toolbox. Simple mode is the shipped notes product.
+    const simple = isSimpleMode()
 
     // The active repo's worktrees → "new conversation in <branch>". This is the
     // ⌘K-typed "I want to work on <branch>" reflex: each entry seeds a fresh
@@ -432,63 +436,76 @@ export function CommandPalette() {
               ]
             : []),
           {
-            action: 'view.showTerminal',
-            icon: Terminal,
-            id: 'nav-terminal',
-            keywords: ['terminal', 'shell', 'console'],
-            label: t.keybinds.actions['view.showTerminal'],
-            run: () => setTerminalTakeover(true)
-          },
-          {
             action: 'nav.settings',
             icon: Settings,
             id: 'nav-settings',
             label: cc.nav.settings.title,
             run: go(SETTINGS_ROUTE)
           },
-          {
-            action: 'nav.skills',
-            icon: Wrench,
-            id: 'nav-skills',
-            keywords: ['skills', 'tools', 'toolsets', 'mcp', 'capabilities'],
-            label: cc.nav.skills.title,
-            run: go(SKILLS_ROUTE)
-          },
-          {
-            action: 'nav.messaging',
-            icon: MessageCircle,
-            id: 'nav-messaging',
-            label: cc.nav.messaging.title,
-            run: go(MESSAGING_ROUTE)
-          },
-          {
-            action: 'nav.artifacts',
-            icon: Package,
-            id: 'nav-artifacts',
-            label: cc.nav.artifacts.title,
-            run: go(ARTIFACTS_ROUTE)
-          },
-          {
-            action: 'nav.cron',
-            icon: Clock,
-            id: 'nav-cron',
-            keywords: ['schedule', 'jobs'],
-            label: t.shell.statusbar.cron,
-            run: go(CRON_ROUTE)
-          },
-          { action: 'nav.profiles', icon: Users, id: 'nav-profiles', label: t.profiles.title, run: go(PROFILES_ROUTE) },
-          { action: 'nav.agents', icon: Cpu, id: 'nav-agents', label: t.agents.title, run: go(AGENTS_ROUTE) },
-          {
-            icon: Starmap,
-            id: 'nav-starmap',
-            keywords: ['star map', 'memory', 'memories', 'skills', 'graph', 'learning', 'constellation'],
-            label: t.starmap.title,
-            run: go(STARMAP_ROUTE)
-          }
+          // Developer surfaces. Simple mode is the shipped notes product; a
+          // buyer searching "terminal" or "cron" here would land in tooling
+          // that has nothing to do with their notes.
+          ...(simple
+            ? []
+            : [
+                {
+                  action: 'view.showTerminal',
+                  icon: Terminal,
+                  id: 'nav-terminal',
+                  keywords: ['terminal', 'shell', 'console'],
+                  label: t.keybinds.actions['view.showTerminal'],
+                  run: () => setTerminalTakeover(true)
+                },
+                {
+                  action: 'nav.skills',
+                  icon: Wrench,
+                  id: 'nav-skills',
+                  keywords: ['skills', 'tools', 'toolsets', 'mcp', 'capabilities'],
+                  label: cc.nav.skills.title,
+                  run: go(SKILLS_ROUTE)
+                },
+                {
+                  action: 'nav.messaging',
+                  icon: MessageCircle,
+                  id: 'nav-messaging',
+                  label: cc.nav.messaging.title,
+                  run: go(MESSAGING_ROUTE)
+                },
+                {
+                  action: 'nav.artifacts',
+                  icon: Package,
+                  id: 'nav-artifacts',
+                  label: cc.nav.artifacts.title,
+                  run: go(ARTIFACTS_ROUTE)
+                },
+                {
+                  action: 'nav.cron',
+                  icon: Clock,
+                  id: 'nav-cron',
+                  keywords: ['schedule', 'jobs'],
+                  label: t.shell.statusbar.cron,
+                  run: go(CRON_ROUTE)
+                },
+                {
+                  action: 'nav.profiles',
+                  icon: Users,
+                  id: 'nav-profiles',
+                  label: t.profiles.title,
+                  run: go(PROFILES_ROUTE)
+                },
+                { action: 'nav.agents', icon: Cpu, id: 'nav-agents', label: t.agents.title, run: go(AGENTS_ROUTE) },
+                {
+                  icon: Starmap,
+                  id: 'nav-starmap',
+                  keywords: ['star map', 'memory', 'memories', 'skills', 'graph', 'learning', 'constellation'],
+                  label: t.starmap.title,
+                  run: go(STARMAP_ROUTE)
+                }
+              ])
         ]
       },
       ...branchGroup,
-      {
+      ...(simple ? [] : [{
         heading: cc.commandCenter,
         items: [
           {
@@ -527,7 +544,7 @@ export function CommandPalette() {
             run: () => void applyBackendUpdate()
           }
         ]
-      },
+      }]),
       {
         // Declared before Settings: cmdk keeps group order, so this keeps the
         // theme/mode pickers on top for "theme"/"color" queries instead of
@@ -548,20 +565,24 @@ export function CommandPalette() {
             label: cc.changeColorMode,
             to: 'color-mode'
           },
-          {
-            icon: PawPrint,
-            id: 'appearance-pets',
-            keywords: ['pet', 'petdex', 'mascot', 'pets', '/pet', 'paw'],
-            label: cc.pets.title,
-            to: 'pets'
-          },
-          {
-            icon: Egg,
-            id: 'appearance-generate-pet',
-            keywords: ['pet', 'generate', 'create', 'make', 'new pet', 'mascot', 'hatch', 'ai'],
-            label: cc.generatePet.title,
-            run: () => openPetGenerate()
-          }
+          ...(simple
+            ? []
+            : [
+                {
+                  icon: PawPrint,
+                  id: 'appearance-pets',
+                  keywords: ['pet', 'petdex', 'mascot', 'pets', '/pet', 'paw'],
+                  label: cc.pets.title,
+                  to: 'pets' as const
+                },
+                {
+                  icon: Egg,
+                  id: 'appearance-generate-pet',
+                  keywords: ['pet', 'generate', 'create', 'make', 'new pet', 'mascot', 'hatch', 'ai'],
+                  label: cc.generatePet.title,
+                  run: () => openPetGenerate()
+                }
+              ])
         ]
       },
       {
