@@ -153,10 +153,15 @@ export function MailView({ onAskAgent }: { onAskAgent?: (prompt: string) => void
     return (
       <div className="mx-auto flex h-full max-w-[36rem] flex-col items-center justify-center gap-3 px-6 text-center">
         <Codicon name="mail" className="text-3xl opacity-50" />
-        <div className="text-[15px] font-semibold">No mail account configured</div>
+        <div className="text-[15px] font-semibold">No mail account connected</div>
         <p className="text-[13px] leading-relaxed opacity-65">
-          Run the mail setup wizard to connect an account, then reopen this screen.
+          BISEO reads mail through Himalaya, a small open-source IMAP client. Install it and run its account
+          wizard once — BISEO never sees your password.
         </p>
+        <code className="rounded-md bg-(--ui-control-hover-background) px-2 py-1 text-[12px]">
+          brew install himalaya && himalaya account configure
+        </code>
+        <p className="text-[12px] opacity-50">Then reopen this screen.</p>
       </div>
     )
   }

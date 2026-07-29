@@ -33,5 +33,10 @@ export function setUiMode(mode: UiMode): void {
   }
 
   persistString(KEY, mode)
-  window.location.reload()
+
+  // A hard reload drops whatever the editor hasn't written yet.
+  void import('@/app/vault/store')
+    .then(store => store.flushActiveNote())
+    .catch(() => undefined)
+    .finally(() => window.location.reload())
 }

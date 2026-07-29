@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { $vaultNotes, openNote } from '../vault/store'
 import { formatAmount, MONEY_DIR, parseMonthNote, summarize, type Transaction } from './money'
 import { closeTableView } from './view-store'
+import { $productLocale, productStrings } from './strings'
 
 const CATEGORY_TONES = [
   'rgba(255,115,105,0.22)',
@@ -42,6 +43,7 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
   const [month, setMonth] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(true)
+  const s = productStrings(useStore($productLocale))
 
   const months = useMemo(
     () =>
@@ -153,7 +155,7 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
                 void openNote(`${MONEY_DIR}/${activeMonth}.md`)
               }}
             >
-              Open the note
+              {s.openTheNote}
             </button>
           ) : null}
         </div>
@@ -166,10 +168,9 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
           )}
         >
           <Codicon name="cloud-upload" className="text-2xl opacity-55" />
-          <div className="text-[13.5px] font-medium">Drop a bank statement here</div>
+          <div className="text-[13.5px] font-medium">{s.dropStatement}</div>
           <p className="max-w-[28rem] text-[12.5px] leading-relaxed opacity-60">
-            A photo, a screenshot or a PDF. BISEO reads it, extracts every transaction, shows you the list, and files it
-            into this month's note. Duplicates are skipped, so re-importing is safe.
+            {s.dropStatementHint}
           </p>
         </div>
 
@@ -177,9 +178,9 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
         {rows.length ? (
           <div className="mb-6 grid grid-cols-3 gap-4">
             {[
-              { label: 'In', value: totals.income, tone: '#1F7A3D' },
-              { label: 'Out', value: -totals.spend, tone: '#C0392B' },
-              { label: 'Net', value: totals.net, tone: undefined }
+              { label: s.moneyIn, value: totals.income, tone: '#1F7A3D' },
+              { label: s.moneyOut, value: -totals.spend, tone: '#C0392B' },
+              { label: s.moneyNet, value: totals.net, tone: undefined }
             ].map(card => (
               <div key={card.label} className="rounded-xl border border-(--stroke-nous) p-4">
                 <div className="text-[12px] opacity-50">{card.label}</div>
@@ -193,7 +194,7 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
 
         {/* Transactions. */}
         {loading ? (
-          <div className="text-[13px] opacity-50">Loading…</div>
+          <div className="text-[13px] opacity-50">{s.loading}</div>
         ) : rows.length ? (
           <table className="w-full border-separate border-spacing-0">
             <thead>
@@ -240,14 +241,14 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
           </table>
         ) : (
           <div className="rounded-xl border border-(--stroke-nous) p-6 text-center text-[13px] opacity-60">
-            No transactions yet for this month.
+            {s.noTransactions}
           </div>
         )}
 
         {/* Category breakdown. */}
         {totals.byCategory.length ? (
           <div className="mt-6">
-            <div className="mb-2 text-[13px] font-semibold">By category</div>
+            <div className="mb-2 text-[13px] font-semibold">{s.byCategory}</div>
             <div className="flex flex-col gap-1.5">
               {totals.byCategory.map(entry => (
                 <div key={entry.category} className="flex items-center gap-2 text-[13px]">

@@ -49,6 +49,10 @@ await page.waitForTimeout(2500)
 await page.evaluate(() => {
   localStorage.setItem('hermes-desktop-onboarded-v1', '1')
   localStorage.setItem('hermes-onboarding-skipped-v1', '1')
+  // Pin the product language: it otherwise follows the OS, and this machine
+  // reports Korean — which is the feature working, but it makes assertions
+  // on English copy fail for the wrong reason.
+  localStorage.setItem('biseo.locale.v1', 'en')
   localStorage.removeItem('biseo.onboarded.v1')
   localStorage.removeItem('biseo.persona.v1')
 })
@@ -81,6 +85,22 @@ check('Continue is disabled before a choice', await continueButton.isDisabled())
 await cards.first().click()
 await page.waitForTimeout(200)
 check('Continue enables after choosing', !(await continueButton.isDisabled()))
+
+// Korean: the product is named 비서 and Korean support is a v1 requirement,
+// so the first-run screens must genuinely switch language. The toggle lives
+// on this step only, so check it before moving on.
+console.log('--- Korean ---')
+await page.locator('button', { hasText: '한국어' }).first().click()
+await page.waitForTimeout(600)
+check(
+  'the wizard switches to Korean',
+  await page.evaluate(() => document.body.textContent?.includes('BISEO를 어떤 일에 사용하시나요') ?? false)
+)
+check('persona names are translated', await page.evaluate(() => document.body.textContent?.includes('회계') ?? false))
+
+await page.locator('button', { hasText: 'English' }).first().click()
+await page.waitForTimeout(600)
+check('switching back to English works', (await page.locator('h1', { hasText: 'What will you use' }).count()) > 0)
 
 await continueButton.click()
 await page.waitForTimeout(400)

@@ -411,6 +411,16 @@ export function initVaultStore(): void {
   })
 
   // Don't lose edits on window close — best-effort flush.
+  // beforeunload cannot await, so by the time it runs the write may not
+  // finish. Flushing whenever the user leaves the window means the buffer is
+  // almost always already empty when they quit — and closing a laptop lid or
+  // switching apps is exactly when people stop typing.
+  window.addEventListener('blur', () => void flushActiveNote())
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      void flushActiveNote()
+    }
+  })
   window.addEventListener('beforeunload', () => {
     void flushActiveNote()
   })

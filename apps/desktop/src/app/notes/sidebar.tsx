@@ -6,6 +6,7 @@
  */
 
 import { useStore } from '@nanostores/react'
+import { $productLocale, productStrings } from './strings'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -106,6 +107,7 @@ function newUntitled(notes: VaultNote[]): string {
 }
 
 export function NotesSidebar() {
+  const s = productStrings(useStore($productLocale))
   const info = useStore($vaultInfo)
   const notes = useStore($vaultNotes)
   const active = useStore($activeNote)
@@ -182,7 +184,7 @@ export function NotesSidebar() {
         <input
           value={search}
           onChange={event => void runVaultSearch(event.target.value)}
-          placeholder="Search"
+          placeholder={s.search}
           className="w-full bg-transparent text-[13px] outline-none placeholder:opacity-50"
         />
         {search ? (
@@ -280,7 +282,7 @@ export function NotesSidebar() {
           onClick={openTodoView}
         >
           <Codicon name="checklist" className="shrink-0 text-[13px] opacity-70" />
-          <span>Todo</span>
+          <span>{s.todo}</span>
           <span className="ml-auto text-[11px] opacity-40">{openTodoCount || ''}</span>
         </button>
         <button
@@ -288,25 +290,25 @@ export function NotesSidebar() {
           onClick={openMailView}
         >
           <Codicon name="mail" className="shrink-0 text-[13px] opacity-70" />
-          <span>Mail</span>
+          <span>{s.mail}</span>
         </button>
         <button
           className={cn(ROW, view === 'money' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
           onClick={openMoneyView}
         >
           <Codicon name="symbol-currency" className="shrink-0 text-[13px] opacity-70" />
-          <span>Money</span>
+          <span>{s.money}</span>
         </button>
         <button
           className={cn(ROW, view === 'calendar' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
           onClick={openCalendarView}
         >
           <Codicon name="calendar" className="shrink-0 text-[13px] opacity-70" />
-          <span>Calendar</span>
+          <span>{s.calendar}</span>
         </button>
-        <div className={cn(ROW, 'cursor-default opacity-45')} title="Coming soon">
+        <div className={cn(ROW, 'cursor-default opacity-45')} title={s.comingSoon}>
           <Codicon name="organization" className="shrink-0 text-[13px]" />
-          <span>Meetings</span>
+          <span>{s.meetings}</span>
         </div>
       </div>
 

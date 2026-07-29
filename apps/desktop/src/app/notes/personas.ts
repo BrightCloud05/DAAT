@@ -14,6 +14,8 @@ export interface Persona {
   emoji: string
   name: string
   promise: string
+  /** Korean label + one-line promise, shown when the product locale is ko. */
+  ko: { name: string; promise: string }
   /** Assistant identity written to SOUL.md. */
   soul: string
   /** Starter notes: path → markdown. */
@@ -28,6 +30,7 @@ const COMMON_SOUL =
 export const PERSONAS: Persona[] = [
   {
     id: 'student',
+    ko: { name: '학생', promise: '수업 내용이 정리된 노트가 됩니다.' },
     emoji: '🎓',
     name: 'Student',
     promise: 'Lectures become organized notes.',
@@ -43,6 +46,7 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'accounting',
+    ko: { name: '회계', promise: '스스로 검산하는 조서.' },
     emoji: '🧾',
     name: 'Accounting',
     promise: 'Workpapers that check themselves.',
@@ -58,6 +62,7 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'office',
+    ko: { name: '사무 행정', promise: '받은 메일을 처리 목록으로.' },
     emoji: '🗂️',
     name: 'Office admin',
     promise: 'Inbox to done-list.',
@@ -72,6 +77,7 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'programming',
+    ko: { name: '개발', promise: '내 저장소에서 함께 일하는 손.' },
     emoji: '⌨️',
     name: 'Programming',
     promise: 'A pair of hands in your repo.',
@@ -87,6 +93,7 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'secretary',
+    ko: { name: '비서', promise: '하루를 미리 정리해 둡니다.' },
     emoji: '📇',
     name: 'Secretary',
     promise: 'Your day, pre-arranged.',
@@ -101,6 +108,7 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'general',
+    ko: { name: '이것저것', promise: '단순하게 시작해서 넓혀가기.' },
     emoji: '🗒️',
     name: 'A bit of everything',
     promise: 'Start plain, grow later.',

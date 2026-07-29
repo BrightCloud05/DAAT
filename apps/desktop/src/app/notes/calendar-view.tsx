@@ -24,6 +24,7 @@ import {
 import { applyTemplateToActive, listTemplates } from './templates'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView } from './view-store'
+import { $productLocale, productStrings } from './strings'
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -44,6 +45,7 @@ export function CalendarView() {
   })
   const [rows, setRows] = useState<TableLikeRow[]>([])
   const [selected, setSelected] = useState<string | null>(null)
+  const s = productStrings(useStore($productLocale))
 
   initTodosStore()
 
@@ -105,7 +107,7 @@ export function CalendarView() {
             <button
               className="grid size-7 place-items-center rounded-md opacity-60 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100"
               onClick={() => step(-1)}
-              title="Previous month"
+              title={s.previousMonth}
             >
               <Codicon name="chevron-left" className="text-[13px]" />
             </button>
@@ -118,12 +120,12 @@ export function CalendarView() {
                 setSelected(today)
               }}
             >
-              Today
+              {s.today}
             </button>
             <button
               className="grid size-7 place-items-center rounded-md opacity-60 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100"
               onClick={() => step(1)}
-              title="Next month"
+              title={s.nextMonth}
             >
               <Codicon name="chevron-right" className="text-[13px]" />
             </button>
@@ -181,7 +183,7 @@ export function CalendarView() {
                 ))}
 
                 {dayEntries.length > 3 ? (
-                  <span className="px-1 text-[11px] opacity-50">+{dayEntries.length - 3} more</span>
+                  <span className="px-1 text-[11px] opacity-50">{s.moreEntries(dayEntries.length - 3)}</span>
                 ) : null}
               </button>
             )
@@ -197,7 +199,7 @@ export function CalendarView() {
                 className="ml-auto rounded-md px-2 py-1 text-[12.5px] text-(--dt-primary) transition-opacity hover:opacity-70"
                 onClick={() => void openDay(selected)}
               >
-                Open this day's note
+                {s.openThisDaysNote}
               </button>
             </div>
 

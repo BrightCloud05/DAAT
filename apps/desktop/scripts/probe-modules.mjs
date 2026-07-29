@@ -66,6 +66,10 @@ await page.waitForTimeout(2500)
 await page.evaluate(() => {
   localStorage.setItem('hermes-desktop-onboarded-v1', '1')
   localStorage.setItem('hermes-onboarding-skipped-v1', '1')
+  // Pin the product language: it otherwise follows the OS, and this machine
+  // reports Korean — which is the feature working, but it makes assertions
+  // on English copy fail for the wrong reason.
+  localStorage.setItem('biseo.locale.v1', 'en')
   localStorage.setItem('biseo.onboarded.v1', '1')
 })
 await page.reload()

@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { $vaultInfo, chooseVault } from '../vault/store'
 import { PERSONAS } from './personas'
 import { applyPersona, finishOnboarding } from './persona-store'
+import { $productLocale, productStrings, setProductLocale } from './strings'
 import { openDailyNote } from './templates'
 import type { PersonaId } from './personas'
 
@@ -24,6 +25,8 @@ type Step = 'persona' | 'place' | 'ready'
 
 export function OnboardingWizard() {
   const info = useStore($vaultInfo)
+  const locale = useStore($productLocale)
+  const s = productStrings(locale)
   const [step, setStep] = useState<Step>('persona')
   const [chosen, setChosen] = useState<PersonaId | null>(null)
   const [applying, setApplying] = useState(false)
@@ -67,9 +70,30 @@ export function OnboardingWizard() {
       >
         {step === 'persona' && (
           <>
+            {/* Language sits on the first screen because that is the only
+                moment it matters: the OS language is a good guess, not a
+                certainty, and a Korean user on an English Mac shouldn't have
+                to read English to find this. */}
+            <div className="mb-3 flex justify-end gap-1">
+              {(['en', 'ko'] as const).map(option => (
+                <button
+                  key={option}
+                  onClick={() => setProductLocale(option)}
+                  className={cn(
+                    'rounded-md px-2 py-1 text-[12px] transition-colors',
+                    locale === option
+                      ? 'bg-(--ui-control-hover-background) font-medium'
+                      : 'opacity-50 hover:opacity-90'
+                  )}
+                >
+                  {option === 'en' ? 'English' : '한국어'}
+                </button>
+              ))}
+            </div>
+
             <Heading
-              title="What will you use BISEO for?"
-              subtitle="This sets up a few pages and how the assistant talks to you. You can change it any time."
+              title={s.onboardingQuestion}
+              subtitle={s.onboardingSubtitle}
             />
 
             <div className="grid grid-cols-3 gap-3">
@@ -90,8 +114,12 @@ export function OnboardingWizard() {
                     )}
                   >
                     <span className="text-[22px] leading-none">{entry.emoji}</span>
-                    <span className="mt-1 text-[13.5px] font-semibold">{entry.name}</span>
-                    <span className="text-[12.5px] leading-snug opacity-60">{entry.promise}</span>
+                    <span className="mt-1 text-[13.5px] font-semibold">
+                      {locale === 'ko' ? entry.ko.name : entry.name}
+                    </span>
+                    <span className="text-[12.5px] leading-snug opacity-60">
+                      {locale === 'ko' ? entry.ko.promise : entry.promise}
+                    </span>
                   </button>
                 )
               })}
@@ -100,7 +128,7 @@ export function OnboardingWizard() {
             <Actions
               onSkip={finishOnboarding}
               primary={{
-                label: 'Continue',
+                label: s.continue,
                 disabled: !chosen,
                 onClick: () => setStep('place')
               }}
@@ -111,8 +139,8 @@ export function OnboardingWizard() {
         {step === 'place' && (
           <>
             <Heading
-              title="Your notes live here"
-              subtitle="Plain markdown files in a folder you own. No database, no lock-in — open them in any editor, back them up however you like."
+              title={s.notesLiveHere}
+              subtitle={s.notesLiveHereSubtitle}
             />
 
             <div className="rounded-xl border border-(--stroke-nous) p-4">
@@ -122,18 +150,18 @@ export function OnboardingWizard() {
                   className="text-[18px] text-(--dt-primary)"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] font-medium">{info?.root ?? 'No folder chosen yet'}</div>
+                  <div className="truncate text-[13.5px] font-medium">{info?.root ?? s.noFolderYet}</div>
                   <div className="text-[12px] opacity-55">
                     {info?.location === 'icloud'
-                      ? 'In iCloud Drive — synced to your other Macs automatically.'
-                      : 'On this Mac.'}
+                      ? s.inICloud
+                      : s.onThisMac}
                   </div>
                 </div>
                 <button
                   className="shrink-0 rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors hover:bg-(--ui-control-hover-background)"
                   onClick={() => void chooseVault()}
                 >
-                  Choose another…
+                  {s.chooseAnother}
                 </button>
               </div>
             </div>
@@ -142,7 +170,7 @@ export function OnboardingWizard() {
               onBack={() => setStep('persona')}
               onSkip={finishOnboarding}
               primary={{
-                label: applying ? 'Setting up…' : 'Set up my pages',
+                label: applying ? s.settingUp : s.setUpMyPages,
                 disabled: applying,
                 onClick: () => void confirmPersona()
               }}
@@ -153,20 +181,16 @@ export function OnboardingWizard() {
         {step === 'ready' && (
           <>
             <Heading
-              title={`Ready${persona ? `, ${persona.name.toLowerCase()}` : ''}.`}
-              subtitle={
-                seeded > 0
-                  ? `${seeded} starter ${seeded === 1 ? 'page is' : 'pages are'} in your sidebar. Press ⌘J any time to ask the assistant for something — it can read and write these notes, and use your Mac.`
-                  : 'Press ⌘J any time to ask the assistant for something — it can read and write your notes, and use your Mac.'
-              }
+              title={`${s.ready}${persona ? ` · ${locale === 'ko' ? persona.ko.name : persona.name}` : ''}`}
+              subtitle={s.readySubtitle(seeded)}
             />
 
             <div className="flex flex-col gap-2">
               {[
-                { key: '⌘N', text: 'New page' },
-                { key: '⌘D', text: "Today's daily note" },
-                { key: '/', text: 'Insert a heading, to-do, callout…' },
-                { key: '⌘J', text: 'Ask the assistant' }
+                { key: '⌘N', text: s.newPage },
+                { key: '⌘D', text: s.todaysDailyNote },
+                { key: '/', text: s.insertBlock },
+                { key: '⌘J', text: s.askTheAssistant }
               ].map(row => (
                 <div key={row.key} className="flex items-center gap-3 text-[13px]">
                   <kbd className="min-w-[2.4rem] rounded-md bg-(--ui-control-hover-background) px-1.5 py-0.5 text-center text-[12px] opacity-80">
@@ -179,13 +203,13 @@ export function OnboardingWizard() {
 
             <Actions
               primary={{
-                label: "Start today's plan",
+                label: s.startTodaysPlan,
                 onClick: () => {
                   finishOnboarding()
                   void openDailyNote()
                 }
               }}
-              secondary={{ label: 'Just look around', onClick: finishOnboarding }}
+              secondary={{ label: s.justLookAround, onClick: finishOnboarding }}
             />
           </>
         )}
@@ -214,6 +238,8 @@ function Actions({
   onBack?: () => void
   onSkip?: () => void
 }) {
+  const label = productStrings(useStore($productLocale))
+
   return (
     <div className="mt-7 flex items-center gap-2">
       {onBack ? (
@@ -221,13 +247,13 @@ function Actions({
           className="rounded-lg px-2.5 py-1.5 text-[13px] opacity-60 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100"
           onClick={onBack}
         >
-          Back
+          {label.back}
         </button>
       ) : null}
 
       {onSkip ? (
         <button className="text-[12.5px] opacity-45 transition-opacity hover:opacity-80" onClick={onSkip}>
-          Skip setup
+          {label.skipSetup}
         </button>
       ) : null}
 
