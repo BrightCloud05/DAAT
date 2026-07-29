@@ -21,6 +21,7 @@ import { foldGutter, foldKeymap } from '@codemirror/language'
 import { BacklinksSection } from '../notes/backlinks-section'
 import { BlockHandlesOverlay } from '../notes/block-handles-overlay'
 import { InlineAiOverlay } from '../notes/inline-ai-overlay'
+import { PageIcon } from '../notes/page-icon'
 import { PropertiesPanel } from '../notes/properties-panel'
 import { TemplateSuggestions } from '../notes/template-suggestions'
 
@@ -50,7 +51,8 @@ async function openWikilink(target: string): Promise<void> {
 const editorTheme = EditorView.theme({
   '&': {
     height: '100%',
-    fontSize: '13.5px',
+    // Design 2a: body copy 14px / 1.65.
+    fontSize: '14px',
     backgroundColor: 'transparent'
   },
   // Fold gutter: invisible chrome — chevrons surface on hover only, the
@@ -206,10 +208,13 @@ export function VaultEditorPane() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Notion-style document header: big title on the canvas, no chrome. */}
-      <div className="shrink-0 px-6 pt-9 pb-1">
+      {/* Notion-style document header: emoji icon + big title (design 2a). */}
+      <div className="group shrink-0 px-6 pt-9 pb-1">
+        <div className="mx-auto max-w-[46rem]">
+          <PageIcon />
+        </div>
         <div className="mx-auto flex max-w-[46rem] items-baseline gap-3">
-          <h1 className="min-w-0 flex-1 truncate text-[1.7rem] font-bold tracking-tight">{title}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold leading-tight tracking-tight">{title}</h1>
           {active.dataless ? (
             <span className="flex items-center gap-1 text-[10px] opacity-60">
               <Codicon name="cloud-download" /> downloading from iCloud…

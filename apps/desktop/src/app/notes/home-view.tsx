@@ -13,14 +13,8 @@ import { activeGateway } from '@/store/gateway'
 
 import { $vaultInfo, $vaultNotes, openNote } from '../vault/store'
 import { openDailyNote, todayStamp } from './templates'
+import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView } from './view-store'
-
-interface Todo {
-  path: string
-  line: number
-  text: string
-  done: boolean
-}
 
 const CARD =
   'rounded-xl border border-(--stroke-nous) bg-(--dt-card) p-[18px] flex flex-col gap-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_10px_24px_-18px_rgba(0,0,0,0.22)]'
@@ -49,25 +43,10 @@ function editedAgo(mtimeMs: number): string {
 export function HomeView() {
   const notes = useStore($vaultNotes)
   const info = useStore($vaultInfo)
-  const [todos, setTodos] = useState<Todo[]>([])
+  const todos = useStore($vaultTodos)
   const [aiConnected, setAiConnected] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-
-    void window.hermesDesktop.vault
-      .todos(60)
-      .then(result => {
-        if (!cancelled) {
-          setTodos(result)
-        }
-      })
-      .catch(() => undefined)
-
-    return () => {
-      cancelled = true
-    }
-  }, [notes])
+  initTodosStore()
 
   useEffect(() => {
     const check = () => setAiConnected(activeGateway()?.connectionState === 'open')
@@ -170,17 +149,7 @@ export function HomeView() {
                 <button
                   key={`${todo.path}:${todo.line}`}
                   className="group flex items-center gap-2 text-left"
-                  onClick={() => {
-                    void window.hermesDesktop.vault.toggleTodo(todo.path, todo.line).then(ok => {
-                      if (ok) {
-                        setTodos(current =>
-                          current.map(item =>
-                            item.path === todo.path && item.line === todo.line ? { ...item, done: !item.done } : item
-                          )
-                        )
-                      }
-                    })
-                  }}
+                  onClick={() => void toggleTodo(todo)}
                   title={todo.path}
                 >
                   <span

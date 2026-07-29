@@ -26,7 +26,8 @@ import {
   runVaultSearch
 } from '../vault/store'
 import { openDailyNote } from './templates'
-import { closeTableView, openHomeView, openTableView } from './view-store'
+import { $vaultTodos, initTodosStore } from './todos-store'
+import { $canvasView, closeTableView, openHomeView, openTableView } from './view-store'
 
 // Opening a page always returns the canvas to the note view.
 async function openNote(relPath: string): Promise<void> {
@@ -102,8 +103,14 @@ export function NotesSidebar() {
   const search = useStore($vaultSearch)
   const hits = useStore($vaultSearchHits)
   const indexing = useStore($vaultIndexing)
+  const view = useStore($canvasView)
+  const todos = useStore($vaultTodos)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const navigate = useNavigate()
+
+  initTodosStore()
+
+  const openTodoCount = todos.filter(todo => !todo.done).length
 
   const entries = useMemo(() => buildTree(notes, collapsed), [notes, collapsed])
 
@@ -139,12 +146,18 @@ export function NotesSidebar() {
 
   return (
     <div className="flex h-full flex-col px-2 pt-2">
-      {/* Workspace header — Notion's identity row. */}
-      <div className={cn(ROW, 'group mb-1 font-medium')}>
-        <span className="grid size-5 shrink-0 place-items-center rounded-[6px] bg-(--dt-primary) text-[11px] font-bold text-white">
+      {/* Workspace header — design 2a identity row: gradient B + subtitle. */}
+      <div className={cn(ROW, 'group mb-1')}>
+        <span
+          className="grid size-[26px] shrink-0 place-items-center rounded-[7px] text-[14px] font-semibold text-white shadow-[0_2px_6px_-1px_rgba(0,122,255,0.45)]"
+          style={{ background: 'linear-gradient(160deg,#007AFF,#5AC8FA)' }}
+        >
           B
         </span>
-        <span className="min-w-0 flex-1 truncate">{info.name ?? 'Vault'}</span>
+        <span className="flex min-w-0 flex-1 flex-col leading-tight">
+          <span className="truncate text-[13px] font-semibold">Biseo</span>
+          <span className="truncate text-[11px] opacity-50">{info.name ?? 'Vault'} · {info.noteCount}</span>
+        </span>
         <button
           className="opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
           title="New page"
@@ -176,23 +189,25 @@ export function NotesSidebar() {
         </div>
       ) : null}
 
-      {/* Views (design 1a nav order). */}
-      <button className={ROW} onClick={openHomeView}>
-        <Codicon name="home" className="shrink-0 text-[13px] opacity-55" />
+      {/* Module nav (design 2a): Home, Notes(+tree), then the module rows. */}
+      <button
+        className={cn(ROW, view === 'home' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+        onClick={openHomeView}
+      >
+        <Codicon name="home" className="shrink-0 text-[13px] opacity-70" />
         <span>Home</span>
       </button>
-      <button className={ROW} onClick={() => void openDailyNote()}>
-        <Codicon name="calendar" className="shrink-0 text-[13px] opacity-55" />
-        <span>Today</span>
-        <span className="ml-auto text-[11px] opacity-40">⌘D</span>
-      </button>
-      <button className={ROW} onClick={openTableView}>
-        <Codicon name="table" className="shrink-0 text-[13px] opacity-55" />
-        <span>All pages</span>
+      <button
+        className={cn(ROW, view !== 'home' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+        onClick={openTableView}
+      >
+        <Codicon name="note" className="shrink-0 text-[13px] opacity-70" />
+        <span>Notes</span>
+        <span className="ml-auto text-[11px] opacity-40">{notes.length}</span>
       </button>
 
-      {/* Pages. */}
-      <div className="px-2 pb-1 pt-1 text-[11px] font-medium tracking-wide opacity-45">
+      {/* Pages tree, nested under Notes. */}
+      <div className="px-2 pb-0.5 pt-1 pl-4 text-[11px] font-medium tracking-wide opacity-45">
         {search.trim() ? 'Results' : 'Pages'}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
@@ -248,11 +263,32 @@ export function NotesSidebar() {
         )}
       </div>
 
+      {/* Module rows (design 2a): real counts where the data exists,
+          quiet "soon" rows for modules not wired yet. */}
+      <div className="border-t border-(--stroke-nous) pt-1.5">
+        <button className={ROW} onClick={() => void openDailyNote()} title="Today's daily note (⌘D)">
+          <Codicon name="checklist" className="shrink-0 text-[13px] opacity-55" />
+          <span>Todo</span>
+          <span className="ml-auto text-[11px] opacity-40">{openTodoCount || ''}</span>
+        </button>
+        {[
+          { icon: 'calendar', label: 'Calendar' },
+          { icon: 'mail', label: 'Mail' },
+          { icon: 'symbol-currency', label: 'Money' },
+          { icon: 'organization', label: 'Meetings' }
+        ].map(module => (
+          <div key={module.label} className={cn(ROW, 'cursor-default opacity-45')} title="Coming soon">
+            <Codicon name={module.icon} className="shrink-0 text-[13px]" />
+            <span>{module.label}</span>
+          </div>
+        ))}
+      </div>
+
       {/* Bottom-anchored actions — Notion's New / Settings grammar. */}
       <div className="border-t border-(--stroke-nous) py-1.5">
         <button className={ROW} onClick={() => void createNote(newUntitled(notes))}>
-          <Codicon name="add" className="text-[13px] opacity-55" />
-          <span>New page</span>
+          <Codicon name="add" className="text-[13px] text-(--dt-primary)" />
+          <span className="text-(--dt-primary)">New page</span>
           <span className="ml-auto text-[11px] opacity-40">⌘N</span>
         </button>
         <button className={ROW} onClick={() => navigate('/settings')}>
