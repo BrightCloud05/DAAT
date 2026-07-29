@@ -20,11 +20,13 @@ import { foldGutter, foldKeymap } from '@codemirror/language'
 
 import { BacklinksSection } from '../notes/backlinks-section'
 import { BlockHandlesOverlay } from '../notes/block-handles-overlay'
+import { InlineAiOverlay } from '../notes/inline-ai-overlay'
 import { PropertiesPanel } from '../notes/properties-panel'
 import { TemplateSuggestions } from '../notes/template-suggestions'
 
 import { blockHandles } from './cm/block-handles'
 import { callouts } from './cm/callouts'
+import { inlineAiTrigger } from './cm/inline-ai-trigger'
 import { bumpDocEpoch, setEditorView } from './editor-bridge'
 import { livePreview } from './cm/live-preview'
 import { markdownStyling } from './cm/markdown-style'
@@ -159,6 +161,7 @@ export function VaultEditorPane() {
         doc: active.content,
         extensions: [
           history(),
+          inlineAiTrigger(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [wikiLinkExtension] }),
           markdownStyling,
@@ -248,6 +251,7 @@ export function VaultEditorPane() {
       <div className="relative min-h-0 flex-1">
         <div ref={hostRef} className="h-full overflow-hidden" />
         <BlockHandlesOverlay />
+        <InlineAiOverlay />
       </div>
     </div>
   )
