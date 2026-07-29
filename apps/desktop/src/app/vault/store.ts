@@ -19,6 +19,27 @@ export const $vaultIndexing = atom<{ indexed: number; total: number } | null>(nu
 export const $vaultConflicts = atom<VaultConflictEvent[]>([])
 /** Set when a save failed; the editor keeps the text and retries. */
 export const $vaultSaveError = atom<string | null>(null)
+/**
+ * Coarse "the vault changed" counter for panels that run an IPC query.
+ *
+ * $vaultNotes gets a fresh array on every index event, so using it as an
+ * effect dependency re-queried the index on every autosave. This bumps at
+ * most a few times a second and only when something actually landed.
+ */
+export const $vaultRevision = atom(0)
+
+let revisionTimer: ReturnType<typeof setTimeout> | null = null
+
+function bumpVaultRevision(): void {
+  if (revisionTimer) {
+    return
+  }
+
+  revisionTimer = setTimeout(() => {
+    revisionTimer = null
+    $vaultRevision.set($vaultRevision.get() + 1)
+  }, 500)
+}
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 let pendingContent: string | null = null
@@ -205,20 +226,47 @@ export function flushActiveNote(): Promise<void> {
   return flushInFlight
 }
 
-export async function runVaultSearch(query: string): Promise<void> {
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let searchToken = 0
+
+/**
+ * Run a vault search, debounced.
+ *
+ * The query is FTS5 in the main process — synchronous, and a one-character
+ * query becomes a prefix match over the entire corpus. Firing that on every
+ * keystroke froze the whole app (all windows, all IPC) while the user typed.
+ */
+export function runVaultSearch(query: string): void {
   $vaultSearch.set(query)
 
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+
   if (!query.trim()) {
+    searchToken++
     $vaultSearchHits.set([])
 
     return
   }
 
-  try {
-    $vaultSearchHits.set(await vault().search(query))
-  } catch {
-    $vaultSearchHits.set([])
-  }
+  const token = ++searchToken
+
+  searchTimer = setTimeout(async () => {
+    try {
+      const hits = await vault().search(query)
+
+      // A slower earlier query must not overwrite a newer one's results.
+      if (token === searchToken) {
+        $vaultSearchHits.set(hits)
+      }
+    } catch {
+      if (token === searchToken) {
+        $vaultSearchHits.set([])
+      }
+    }
+  }, 180)
 }
 
 export function dismissConflict(conflictPath: string): void {
@@ -240,9 +288,11 @@ export function initVaultStore(): void {
       $vaultIndexing.set({ indexed: event.indexed, total: event.total })
     } else if (event.type === 'index-complete') {
       $vaultIndexing.set(null)
+      bumpVaultRevision()
       void refreshVaultInfo()
       void refreshVaultNotes()
     } else {
+      bumpVaultRevision()
       void refreshVaultNotes()
 
       // Another writer (agent, external editor, iCloud sync) touched the open

@@ -61,6 +61,8 @@ await page.waitForTimeout(2500)
 await page.evaluate(() => {
   localStorage.setItem('hermes-desktop-onboarded-v1', '1')
   localStorage.setItem('hermes-onboarding-skipped-v1', '1')
+  // BISEO's own first-run wizard (scripts/probe-onboarding.mjs covers it).
+  localStorage.setItem('biseo.onboarded.v1', '1')
 })
 await page.reload()
 await page.waitForTimeout(9000)

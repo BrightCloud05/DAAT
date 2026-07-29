@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
-import { $vaultNotes, openNote } from '../vault/store'
+import { $vaultRevision, openNote } from '../vault/store'
 import { closeTableView } from './view-store'
 
 interface TableRow {
@@ -92,12 +92,12 @@ function formatDate(mtimeMs: number): string {
 }
 
 export function TableView() {
-  const notes = useStore($vaultNotes)
+  const revision = useStore($vaultRevision)
   const [rows, setRows] = useState<TableRow[]>([])
   const [sortKey, setSortKey] = useState<string>('__modified')
   const [sortAsc, setSortAsc] = useState(false)
 
-  // Refresh whenever the vault contents change (index events refresh $vaultNotes).
+  // Refresh when the vault actually changed — see $vaultRevision.
   useEffect(() => {
     let cancelled = false
 
@@ -113,7 +113,7 @@ export function TableView() {
     return () => {
       cancelled = true
     }
-  }, [notes])
+  }, [revision])
 
   // Columns: frontmatter keys by frequency (top 8), then Modified.
   const columns = useMemo(() => {

@@ -23,7 +23,7 @@ export function PageIcon() {
     return null
   }
 
-  const content = view ? view.state.doc.toString() : active.content
+  const content = view ? view.state.doc.sliceString(0, 8192) : active.content
   const icon = String(readFrontmatter(content)?.props.icon ?? '').trim()
 
   const setIcon = (value: string) => {

@@ -9,11 +9,11 @@ import { useEffect, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 
-import { $activeNote, $vaultNotes, openNote } from '../vault/store'
+import { $activeNote, $vaultRevision, openNote } from '../vault/store'
 
 export function BacklinksSection() {
   const active = useStore($activeNote)
-  const notes = useStore($vaultNotes)
+  const revision = useStore($vaultRevision)
   const [links, setLinks] = useState<VaultLink[]>([])
   const [open, setOpen] = useState(false)
 
@@ -38,8 +38,9 @@ export function BacklinksSection() {
     return () => {
       cancelled = true
     }
-    // notes dependency: re-query when the index changes (edits elsewhere).
-  }, [active?.path, notes])
+    // revision, not the notes array: the array's identity changes on every
+    // autosave, which re-queried the index for a result that never differed.
+  }, [active?.path, revision])
 
   if (!active || !links.length) {
     return null

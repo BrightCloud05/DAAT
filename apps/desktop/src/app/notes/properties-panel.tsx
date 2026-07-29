@@ -16,6 +16,9 @@ import { $docEpoch, $editorView } from '../vault/editor-bridge'
 import { $activeNote } from '../vault/store'
 import { coerceScalar, propertyEdit, readFrontmatter } from './frontmatter'
 
+/** Frontmatter blocks past this are pathological; don't scan the whole note. */
+const FRONTMATTER_SCAN_CHARS = 8192
+
 function iconFor(key: string, value: unknown): string {
   const k = key.toLowerCase()
 
@@ -115,9 +118,10 @@ export function PropertiesPanel() {
 
   useStore($docEpoch) // re-derive from the live doc on every edit
 
-  // Live document wins over the store's last-saved snapshot; parsing only
-  // touches the leading YAML block, so this is cheap per keystroke.
-  const content = view ? view.state.doc.toString() : active?.content ?? ''
+  // Live document wins over the store's last-saved snapshot. Only the leading
+  // YAML block is ever read, so slice the head rather than materializing a
+  // whole (possibly multi-megabyte) note on every keystroke.
+  const content = view ? view.state.doc.sliceString(0, FRONTMATTER_SCAN_CHARS) : active?.content ?? ''
   const block = active ? readFrontmatter(content) : null
   const [adding, setAdding] = useState(false)
   const [newKey, setNewKey] = useState('')

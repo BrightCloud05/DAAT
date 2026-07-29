@@ -209,13 +209,22 @@ export class VaultIndex {
     return rows.map(row => ({ ...row, dataless: Boolean(row.dataless) }))
   }
 
-  /** All note base-names + titles, for wikilink autocomplete in the editor. */
+  /**
+   * All note base-names + titles, for wikilink autocomplete in the editor.
+   *
+   * The name is derived from the path, not from `name_key` — that column is
+   * lowercased and NFC-folded for matching, so returning it made autocomplete
+   * write `[[my note]]` into the user's file for a note called "My Note".
+   */
   noteNames(): Array<{ path: string; title: string; name: string }> {
-    return this.db
-      .prepare(
-        `SELECT path, title, name_key as name FROM notes ORDER BY mtime_ms DESC`
-      )
-      .all() as Array<{ path: string; title: string; name: string }>
+    const rows = this.db
+      .prepare(`SELECT path, title FROM notes ORDER BY mtime_ms DESC`)
+      .all() as Array<{ path: string; title: string }>
+
+    return rows.map(row => ({
+      ...row,
+      name: (row.path.split('/').pop() ?? row.path).replace(/\.(md|markdown)$/i, '')
+    }))
   }
 
   resolveWikilink(targetRaw: string): string | null {
