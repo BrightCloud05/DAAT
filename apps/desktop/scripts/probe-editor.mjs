@@ -55,6 +55,14 @@ const page = await app.firstWindow()
 page.on('console', message => console.log(`[renderer:${message.type()}]`, message.text()))
 page.on('pageerror', error => console.log('[pageerror]', error.message))
 
+// The first-run overlay covers the whole window and eats every click. It is
+// not what we're probing, so mark onboarding done and reload into the app.
+await page.waitForTimeout(2500)
+await page.evaluate(() => {
+  localStorage.setItem('hermes-desktop-onboarded-v1', '1')
+  localStorage.setItem('hermes-onboarding-skipped-v1', '1')
+})
+await page.reload()
 await page.waitForTimeout(9000)
 
 const report = await page.evaluate(async () => {
@@ -106,7 +114,9 @@ console.log(JSON.stringify(report, null, 2))
 
 // Click the Probe page in the sidebar, then try to type.
 const noteLabel = process.env.PROBE_NOTE || 'Probe'
-const probeRow = page.locator('aside button', { hasText: noteLabel }).first()
+// Sidebar rows show the note TITLE, not its path.
+const rowLabel = noteLabel.split('/').pop().replace(/\.(md|markdown)$/i, '')
+const probeRow = page.locator('aside button', { hasText: rowLabel }).first()
 
 if (await probeRow.count()) {
   await probeRow.click()
@@ -150,7 +160,8 @@ if (await content.count()) {
   await content.click()
   await page.waitForTimeout(300)
   await page.keyboard.type('TYPED')
-  await page.waitForTimeout(800)
+  // Autosave is debounced 1s; wait past it so we can check the real file.
+  await page.waitForTimeout(3000)
 
   const afterTyping = await page.evaluate(() => ({
     docText: document.querySelector('.cm-content')?.textContent ?? null,
@@ -160,6 +171,19 @@ if (await content.count()) {
   console.log('--- after typing "TYPED" ---')
   console.log(JSON.stringify(afterTyping, null, 2))
   console.log(afterTyping.docText?.includes('TYPED') ? 'RESULT: TYPING WORKS' : 'RESULT: TYPING BLOCKED')
+
+  // Typing that never reaches disk is the failure that matters most.
+  const notePath = path.join(vault, process.env.PROBE_NOTE || 'Probe.md')
+  const onDisk = fs.readFileSync(notePath, 'utf8')
+
+  console.log('--- file on disk ---')
+  console.log(JSON.stringify(onDisk))
+  console.log(onDisk.includes('TYPED') ? 'RESULT: SAVE WORKS' : 'RESULT: SAVE LOST THE EDIT')
+  console.log(
+    onDisk.startsWith('---\n') && onDisk.includes('date:')
+      ? 'RESULT: FRONTMATTER PRESERVED'
+      : 'RESULT: FRONTMATTER DESTROYED'
+  )
 } else {
   console.log('RESULT: no .cm-content in the DOM — the editor never mounted')
 }

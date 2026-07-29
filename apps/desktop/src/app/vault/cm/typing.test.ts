@@ -73,3 +73,54 @@ test('the document accepts typed input with the full extension stack', () => {
     view.destroy()
   }
 })
+
+/**
+ * Every starter template opens with a `---` block, so this path is the common
+ * case, not an edge case. Providing the fold from a ViewPlugin threw
+ * "Block decorations may not be specified via plugins" out of dispatch the
+ * moment the cursor left the block — i.e. on the first click into the body.
+ */
+test('a note with frontmatter survives the cursor moving below it', () => {
+  const doc = '---\ndate: 2026-07-29\ntags: [daily]\n---\n\nBody text here.\n'
+  const view = new EditorView({
+    parent: document.body,
+    state: EditorState.create({ doc, selection: { anchor: 0 }, extensions: fullStack() })
+  })
+
+  try {
+    const body = doc.indexOf('Body text')
+
+    view.dispatch({ selection: { anchor: body } })
+    view.dispatch(view.state.replaceSelection('X'))
+
+    assert.ok(view.state.doc.toString().includes('XBody text'), 'typing below frontmatter must work')
+
+    // Back inside the block: it unfolds and stays editable by hand.
+    view.dispatch({ selection: { anchor: 6 } })
+    view.dispatch(view.state.replaceSelection(''))
+
+    assert.ok(view.state.doc.toString().startsWith('---\n'), 'frontmatter must remain in the file')
+
+    // Select-all across the fold is a common accident; it must not throw.
+    view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } })
+  } finally {
+    view.destroy()
+  }
+})
+
+test('frontmatter with no body is left alone', () => {
+  // Folding every line would leave nowhere to put the cursor.
+  const view = new EditorView({
+    parent: document.body,
+    state: EditorState.create({ doc: '---\ndate: 2026-07-29\n---', extensions: fullStack() })
+  })
+
+  try {
+    view.dispatch({ selection: { anchor: view.state.doc.length } })
+    view.dispatch(view.state.replaceSelection('\nhello'))
+
+    assert.ok(view.state.doc.toString().endsWith('hello'))
+  } finally {
+    view.destroy()
+  }
+})

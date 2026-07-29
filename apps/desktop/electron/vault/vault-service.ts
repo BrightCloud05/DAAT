@@ -160,6 +160,9 @@ export class VaultService {
   private index: VaultIndex | null = null
   private watcher: VaultWatcher | null = null
   private indexing = false
+  /** Bumped on every open/close; in-flight index runs compare against it. */
+  private openEpoch = 0
+  private indexingEpoch = -1
   private events: VaultServiceEvents
 
   constructor(events: VaultServiceEvents) {
@@ -198,6 +201,16 @@ export class VaultService {
       throw new Error(`Not a directory: ${resolved}`)
     }
 
+    // Reject the folder BEFORE writing anything into it. Seeding first meant
+    // picking $HOME by mistake littered it with Templates/*.md and only then
+    // raised the error.
+    const home = app.getPath('home')
+    const forbidden = [app.getPath('userData'), path.join(home, '.biseo'), path.join(home, '.hermes')]
+
+    if (resolved === home || forbidden.some(dir => resolved === dir || resolved.startsWith(dir + path.sep))) {
+      throw new Error(`This folder can't be used as a vault: ${resolved}`)
+    }
+
     // Vaults created before templates shipped get the starters on open —
     // skip-existing, and only when the folder is absent entirely so a user
     // who deleted it stays deleted... (folder present = user's call).
@@ -207,13 +220,6 @@ export class VaultService {
       for (const [name, content] of Object.entries(STARTER_TEMPLATES)) {
         await writeNote(path.join(resolved, 'Templates', name), content, null).catch(() => undefined)
       }
-    }
-
-    const home = app.getPath('home')
-    const forbidden = [app.getPath('userData'), path.join(home, '.biseo'), path.join(home, '.hermes')]
-
-    if (resolved === home || forbidden.some(dir => resolved === dir || resolved.startsWith(dir + path.sep))) {
-      throw new Error(`This folder can't be used as a vault: ${resolved}`)
     }
 
     await this.close()
@@ -255,6 +261,10 @@ export class VaultService {
   }
 
   async close(): Promise<void> {
+    // Invalidate any in-flight index run before the handles go away.
+    this.openEpoch += 1
+    this.indexing = false
+
     await this.watcher?.close()
     this.watcher = null
     this.index?.close()
@@ -325,17 +335,33 @@ export class VaultService {
     return [...new Set(results)].sort()
   }
 
+  /**
+   * Rebuild the index for the currently open vault.
+   *
+   * The loop yields between notes, so a vault switch can land mid-run. Each
+   * run is stamped with the open epoch: an orphaned run stops instead of
+   * writing into a closed SQLite handle, and — the part that actually broke
+   * things — it no longer holds `indexing` true and starve the new vault's
+   * reindex, which used to leave the freshly opened vault showing zero notes.
+   */
   async reindex(): Promise<void> {
     const { root, index } = this.requireOpen()
+    const epoch = this.openEpoch
 
-    if (this.indexing) {
+    if (this.indexing && this.indexingEpoch === epoch) {
       return
     }
 
     this.indexing = true
+    this.indexingEpoch = epoch
 
     try {
       const files = await this.scanMarkdownFiles(root)
+
+      if (this.openEpoch !== epoch) {
+        return
+      }
+
       const known = new Set(files)
 
       // Drop rows for notes that no longer exist on disk.
@@ -348,7 +374,16 @@ export class VaultService {
       let indexed = 0
 
       for (const relPath of files) {
-        await this.indexOne(relPath, { skipUnchanged: true })
+        if (this.openEpoch !== epoch) {
+          return
+        }
+
+        try {
+          await this.indexOne(relPath, { skipUnchanged: true })
+        } catch {
+          // One unreadable/unparseable note must not abort the whole index.
+        }
+
         indexed += 1
 
         if (indexed % INDEX_YIELD_EVERY === 0) {
@@ -359,7 +394,9 @@ export class VaultService {
 
       this.events.onIndexEvent({ type: 'index-complete', noteCount: index.noteCount() })
     } finally {
-      this.indexing = false
+      if (this.openEpoch === epoch) {
+        this.indexing = false
+      }
     }
   }
 
@@ -475,10 +512,15 @@ export class VaultService {
     return { path: relPath, ...result }
   }
 
-  async write(relPath: string, content: string, expectedMtimeMs: number | null): Promise<VaultWriteResult> {
+  async write(
+    relPath: string,
+    content: string,
+    expectedMtimeMs: number | null,
+    expectedContent?: string
+  ): Promise<VaultWriteResult> {
     const { root } = this.requireOpen()
     const absolute = resolveInVault(root, relPath)
-    const result = await writeNote(absolute, content, expectedMtimeMs)
+    const result = await writeNote(absolute, content, expectedMtimeMs, expectedContent)
 
     if (!result.ok && result.conflictPath) {
       const conflictRel = toVaultRelative(root, result.conflictPath)
@@ -606,8 +648,15 @@ export class VaultService {
     return results
   }
 
-  /** Flip a checkbox task found by todos() — safe line edit via write(). */
-  async toggleTodo(relPath: string, lineNo: number): Promise<boolean> {
+  /**
+   * Flip a checkbox task found by todos() — safe line edit via write().
+   *
+   * `expectedText` is what the user actually clicked. Line numbers come from a
+   * todos() snapshot that goes stale on every edit, so without this an insert
+   * above the task silently flips a *different* checkbox. When the line has
+   * moved we re-find the task by its text instead of trusting the number.
+   */
+  async toggleTodo(relPath: string, lineNo: number, expectedText?: string): Promise<boolean> {
     const { root } = this.requireOpen()
     const absolute = resolveInVault(root, relPath)
     const { content, mtimeMs, dataless } = await readNote(absolute)
@@ -617,6 +666,18 @@ export class VaultService {
     }
 
     const lines = content.split('\n')
+    const textOf = (value: string | undefined) => /^\s*[-*]\s+\[[ xX]\]\s+(.+)$/.exec(value ?? '')?.[1]?.trim()
+
+    if (expectedText && textOf(lines[lineNo - 1]) !== expectedText) {
+      const found = lines.findIndex(candidate => textOf(candidate) === expectedText)
+
+      if (found === -1) {
+        return false
+      }
+
+      lineNo = found + 1
+    }
+
     const line = lines[lineNo - 1]
 
     if (!line) {

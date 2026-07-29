@@ -163,6 +163,20 @@ export function VaultEditorPane() {
 
     pathRef.current = active.path
 
+    // Same note, new text from disk: patch the document instead of replacing
+    // the state. setState() destroys every plugin, drops undo history and
+    // resets the cursor to 0 — which the user sees as the caret jumping to the
+    // top of the file mid-sentence whenever a save round-trips.
+    if (!isNewNote) {
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: active.content },
+        selection: { anchor: Math.min(view.state.selection.main.anchor, active.content.length) },
+        scrollIntoView: false
+      })
+
+      return
+    }
+
     view.setState(
       EditorState.create({
         doc: active.content,
@@ -206,9 +220,7 @@ export function VaultEditorPane() {
       })
     )
 
-    if (isNewNote) {
-      view.focus()
-    }
+    view.focus()
   }, [active, hostReady])
 
   if (!active) {

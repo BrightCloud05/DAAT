@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -43,6 +44,26 @@ def available() -> bool:
     return binary() is not None
 
 
+def safe_id(value: str) -> str:
+    """Envelope ids only: digits and commas. Refuses anything flag-shaped."""
+    clean = str(value).strip()
+
+    if not re.fullmatch(r"\d+(,\d+)*", clean):
+        raise MailError(f"Invalid message id: {value!r}. Use an id from the message list.")
+
+    return clean
+
+
+def safe_name(value: str, what: str) -> str:
+    """Folder/account/flag names: no leading dash, no control characters."""
+    clean = str(value).strip()
+
+    if not clean or clean.startswith("-") or any(char in clean for char in "\r\n\x00"):
+        raise MailError(f"Invalid {what}: {value!r}.")
+
+    return clean
+
+
 def run(args: list[str], *, account: str | None = None, json_out: bool = True, timeout: int = TIMEOUT_S,
         stdin_text: str | None = None, positional: list[str] | None = None):
     """Run himalaya and return parsed JSON (or raw text when json_out=False).
@@ -68,19 +89,29 @@ def run(args: list[str], *, account: str | None = None, json_out: bool = True, t
         argv += ["-o", "json"]
 
     if positional:
-        argv += positional
+        # `--` terminates option parsing. Without it the FIRST positional is
+        # still parsed as a flag by clap, and himalaya's `-c/--config` would
+        # let model-controlled text load an arbitrary TOML whose
+        # `auth.cmd` executes a shell command (verified RCE).
+        argv += ["--", *positional]
 
     try:
         proc = subprocess.run(
             argv,
             capture_output=True,
-            text=True,
+            # Mail is not reliably UTF-8 (Latin-1, ISO-2022-JP, cp1252 are
+            # routine); strict decoding turned a merely old message into an
+            # uncatchable UnicodeDecodeError.
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             input=stdin_text,
             env={**os.environ, "NO_COLOR": "1"},
         )
     except subprocess.TimeoutExpired:
         raise MailError(f"Email command timed out after {timeout}s.") from None
+    except (OSError, UnicodeError) as error:
+        raise MailError(f"Email command could not run: {error}") from None
 
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip().splitlines()

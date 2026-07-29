@@ -155,7 +155,19 @@ async function atomicWrite(absolutePath: string, content: string): Promise<numbe
   const tmp = path.join(dir, `.${path.basename(absolutePath)}.tmp-${randomBytes(4).toString('hex')}`)
 
   await fsp.mkdir(dir, { recursive: true })
-  await fsp.writeFile(tmp, content, 'utf8')
+
+  // rename() is atomic with respect to the *name*, but the bytes may still be
+  // in the page cache. Without the fsync, a crash or power loss between write
+  // and flush leaves a note that exists and is empty — the one failure mode a
+  // notes app must not have.
+  const handle = await fsp.open(tmp, 'w')
+
+  try {
+    await handle.writeFile(content, 'utf8')
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
 
   try {
     await fsp.rename(tmp, absolutePath)
@@ -178,6 +190,9 @@ export interface WriteNoteResult {
  * last read; if the file on disk has moved past it (remote/concurrent edit),
  * the caller's content goes to a conflict copy and the on-disk file is left
  * alone. `expectedMtimeMs === null` means "new file or overwrite knowingly".
+ * `expectedContent`, when given, is the text the caller believes it is
+ * replacing — a stronger check than mtime on filesystems with coarse
+ * timestamps.
  *
  * Unchanged content is never rewritten — sync engines treat every write as a
  * new version, so no-op saves would churn iCloud for nothing.
@@ -185,7 +200,8 @@ export interface WriteNoteResult {
 export async function writeNote(
   absolutePath: string,
   content: string,
-  expectedMtimeMs: number | null
+  expectedMtimeMs: number | null,
+  expectedContent?: string
 ): Promise<WriteNoteResult> {
   let existing: fs.Stats | null = null
 
@@ -195,24 +211,28 @@ export async function writeNote(
     existing = null
   }
 
-  if (existing && expectedMtimeMs !== null && Math.abs(existing.mtimeMs - expectedMtimeMs) > 1) {
+  if (existing) {
     const current = await fsp.readFile(absolutePath, 'utf8').catch(() => null)
 
+    // Unchanged content: never rewrite (see the doc comment).
     if (current !== null && current === content) {
       return { ok: true, mtimeMs: existing.mtimeMs }
     }
 
-    const conflictPath = conflictCopyPath(absolutePath)
-    const mtimeMs = await atomicWrite(conflictPath, content)
+    // mtime alone is not enough to detect a concurrent edit: HFS+, SMB and
+    // some iCloud paths report whole-second granularity, so an edit landing in
+    // the same second as our read is invisible and would be clobbered. When
+    // the caller told us what it expected to be replacing, verify the bytes.
+    const movedOn =
+      expectedMtimeMs !== null &&
+      (Math.abs(existing.mtimeMs - expectedMtimeMs) > 1 ||
+        (expectedContent !== undefined && current !== null && current !== expectedContent))
 
-    return { ok: false, mtimeMs, conflictPath }
-  }
+    if (movedOn) {
+      const conflictPath = conflictCopyPath(absolutePath)
+      const mtimeMs = await atomicWrite(conflictPath, content)
 
-  if (existing) {
-    const current = await fsp.readFile(absolutePath, 'utf8').catch(() => null)
-
-    if (current !== null && current === content) {
-      return { ok: true, mtimeMs: existing.mtimeMs }
+      return { ok: false, mtimeMs, conflictPath }
     }
   }
 

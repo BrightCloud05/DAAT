@@ -125,8 +125,8 @@ export function initVaultIpc(): VaultService {
 
   ipcMain.handle(
     'hermes:vault:write',
-    (_event, relPath: string, content: string, expectedMtimeMs: number | null) =>
-      service.write(relPath, content, expectedMtimeMs ?? null)
+    (_event, relPath: string, content: string, expectedMtimeMs: number | null, expectedContent?: string) =>
+      service.write(relPath, content, expectedMtimeMs ?? null, expectedContent)
   )
 
   ipcMain.handle('hermes:vault:createNote', (_event, relPath: string) => service.createNote(relPath))
@@ -148,8 +148,8 @@ export function initVaultIpc(): VaultService {
   ipcMain.handle('hermes:vault:noteNames', () => service.noteNames())
   ipcMain.handle('hermes:vault:propertiesTable', () => service.propertiesTable())
   ipcMain.handle('hermes:vault:todos', (_event, limit?: number) => service.todos(limit))
-  ipcMain.handle('hermes:vault:toggleTodo', (_event, relPath: string, line: number) =>
-    service.toggleTodo(relPath, line)
+  ipcMain.handle('hermes:vault:toggleTodo', (_event, relPath: string, line: number, text?: string) =>
+    service.toggleTodo(relPath, line, text)
   )
 
   return service

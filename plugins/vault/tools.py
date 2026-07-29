@@ -12,12 +12,23 @@ import re
 import sqlite3
 import subprocess
 import tempfile
+import time
 import unicodedata
 from pathlib import Path
 
 MAX_READ_CHARS = 120_000
 MAX_LIST = 400
 MAX_SEARCH_RESULTS = 40
+MAX_WALK_ENTRIES = 20_000
+
+# Folders that exist for the app, not the user. Listing or searching them
+# surfaces deleted notes and app state as if they were real content.
+SKIP_DIRS = {".trash", ".obsidian", ".biseo", ".git", ".stversions", "node_modules"}
+
+# Captured at import (backend start). A bridge file older than this is a
+# leftover from a previous run and must not outrank the env the desktop
+# just spawned us with.
+_STARTED_AT = time.time()
 
 
 def _bridge_file() -> Path:
@@ -35,28 +46,47 @@ def _vault_root() -> Path | None:
     first so tools work in the session the user opened their vault in.
     """
     candidates = []
+    bridge_path = _bridge_file()
 
     try:
         import json
 
-        bridge = json.loads(_bridge_file().read_text(encoding="utf-8"))
+        fresh = bridge_path.stat().st_mtime >= _STARTED_AT - 1
+        bridge = json.loads(bridge_path.read_text(encoding="utf-8"))
         vault = str(bridge.get("vault") or "").strip()
 
-        if vault:
+        if vault and fresh:
             candidates.append(vault)
     except (OSError, ValueError):
-        pass
+        fresh = False
 
     env_path = os.environ.get("VAULT_PATH", "").strip()
 
     if env_path:
         candidates.append(env_path)
 
+    # A stale bridge is still better than nothing when the env is unset.
+    if not candidates and not fresh:
+        try:
+            import json
+
+            stale = str(json.loads(bridge_path.read_text(encoding="utf-8")).get("vault") or "").strip()
+
+            if stale:
+                candidates.append(stale)
+        except (OSError, ValueError):
+            pass
+
     for candidate in candidates:
         root = Path(candidate).expanduser()
 
-        if root.is_dir():
-            return root
+        try:
+            if root.is_dir():
+                # Resolve once: every later relative_to() compares against
+                # this, and a symlinked vault root would never match.
+                return root.resolve()
+        except OSError:
+            continue
 
     return None
 
@@ -79,6 +109,46 @@ def _resolve(root: Path, rel: str) -> Path | None:
     return candidate
 
 
+def _backup_existing(target: Path, rel: str) -> str | None:
+    """Copy the file we are about to replace outside the vault.
+
+    vault_write has no expected-mtime to check against, so it can overwrite a
+    note the user is editing right now. Keeping the old bytes makes that
+    recoverable instead of silent. Backups live in HERMES_HOME, never in the
+    vault, so they never appear as notes or reach iCloud.
+    """
+    if not target.is_file():
+        return None
+
+    try:
+        previous = target.read_bytes()
+    except OSError:
+        return None
+
+    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".biseo")
+    folder = Path(home) / "state" / "vault-backups"
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    safe = re.sub(r"[^A-Za-z0-9._-]", "_", rel)[-80:]
+    backup = folder / f"{stamp}-{safe}"
+
+    try:
+        backup.write_bytes(previous)
+    except OSError:
+        return None
+
+    # Keep the folder from growing without bound.
+    try:
+        entries = sorted(folder.iterdir(), key=lambda item: item.name)
+
+        for old in entries[:-200]:
+            old.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    return str(backup)
+
+
 def vault_read(rel: str) -> str:
     root = _vault_root()
 
@@ -90,16 +160,16 @@ def vault_read(rel: str) -> str:
     if not target:
         return f"Refused: '{rel}' escapes the vault."
 
-    if not target.exists() and not rel.lower().endswith((".md", ".markdown")):
-        alt = _resolve(root, rel + ".md")
-
-        if alt and alt.exists():
-            target = alt
-
-    if not target.exists():
-        return f"Not found: {rel}"
-
     try:
+        if not target.exists() and not rel.lower().endswith((".md", ".markdown")):
+            alt = _resolve(root, rel + ".md")
+
+            if alt and alt.exists():
+                target = alt
+
+        if not target.exists():
+            return f"Not found: {rel}"
+
         content = target.read_text(encoding="utf-8")
     except Exception as error:  # noqa: BLE001 — surface the reason to the model
         return f"Could not read {rel}: {error}"
@@ -124,7 +194,11 @@ def vault_write(rel: str, content: str) -> str:
     if not target:
         return f"Refused: '{rel}' escapes the vault."
 
-    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        replaced = _backup_existing(target, rel)
+    except OSError as error:
+        return f"Could not write {rel}: {error}"
 
     fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=f".{target.name}.tmp-")
 
@@ -141,7 +215,38 @@ def vault_write(rel: str, content: str) -> str:
 
         return f"Could not write {rel}: {error}"
 
+    if replaced:
+        return (
+            f"Wrote {rel} ({len(content)} chars). The previous version was kept at {replaced} "
+            "in case the user had unsaved edits."
+        )
+
     return f"Wrote {rel} ({len(content)} chars)."
+
+
+def _walk_notes(base: Path):
+    """Yield markdown files under `base`, pruning app folders as we go.
+
+    os.walk lets us prune whole directories (a 10k-note .trash costs nothing);
+    Path.rglob('*') would materialize every entry in the vault first.
+    """
+    seen = 0
+
+    for current, dirs, files in os.walk(base, followlinks=False):
+        dirs[:] = sorted(
+            name for name in dirs if not name.startswith(".") and name.lower() not in SKIP_DIRS
+        )
+
+        for name in sorted(files):
+            seen += 1
+
+            if seen > MAX_WALK_ENTRIES:
+                return
+
+            if name.startswith(".") or not name.lower().endswith((".md", ".markdown")):
+                continue
+
+            yield Path(current) / name
 
 
 def vault_list(subdir: str = "") -> str:
@@ -156,17 +261,22 @@ def vault_list(subdir: str = "") -> str:
         return f"Not a folder: {subdir}"
 
     results: list[str] = []
+    truncated = False
 
-    for path in sorted(base.rglob("*")):
+    for note in _walk_notes(base):
         if len(results) >= MAX_LIST:
-            results.append(f"[... more than {MAX_LIST} entries]")
+            truncated = True
             break
 
-        if path.name.startswith("."):
+        try:
+            results.append(str(note.relative_to(root)))
+        except ValueError:
             continue
 
-        if path.is_file() and path.suffix.lower() in (".md", ".markdown"):
-            results.append(str(path.relative_to(root)))
+    results.sort()
+
+    if truncated:
+        results.append(f"[... more than {MAX_LIST} notes; narrow the subdir]")
 
     return "\n".join(results) if results else "(no notes)"
 
@@ -183,9 +293,33 @@ def vault_search(query: str) -> str:
     # ripgrep when available (installed by the runtime), python scan otherwise.
     try:
         proc = subprocess.run(
-            ["rg", "--no-heading", "-n", "-i", "-m", "4", "-g", "*.md", "-g", "*.markdown", query, str(root)],
+            [
+                "rg",
+                "--no-heading",
+                "-n",
+                "-i",
+                "-m",
+                "4",
+                # -F: the user's words are a literal phrase, not a regex.
+                # -e: bind the query to the pattern flag, and `--` ends option
+                # parsing — without both, a query like "--pre=bash" is read as
+                # a flag and ripgrep executes it on every file (verified RCE).
+                "-F",
+                "-e",
+                query,
+                "-g",
+                "*.md",
+                "-g",
+                "*.markdown",
+                *(f"-g!{name}/" for name in sorted(SKIP_DIRS)),
+                "-g",
+                "!.*/",
+                "--",
+                str(root),
+            ],
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
 
@@ -194,18 +328,15 @@ def vault_search(query: str) -> str:
             rel_lines = [line.replace(str(root) + os.sep, "", 1) for line in lines]
 
             return "\n".join(rel_lines) if rel_lines else "No matches."
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired, UnicodeError):
         pass
 
     needle = query.lower()
     hits: list[str] = []
 
-    for path in root.rglob("*.md"):
+    for path in _walk_notes(root):
         if len(hits) >= MAX_SEARCH_RESULTS:
             break
-
-        if path.name.startswith("."):
-            continue
 
         try:
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):

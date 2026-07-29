@@ -93,7 +93,12 @@ declare global {
         list: () => Promise<VaultNote[]>
         listDir: (subdir?: string) => Promise<VaultEntry[]>
         read: (relPath: string) => Promise<VaultReadResult>
-        write: (relPath: string, content: string, expectedMtimeMs: number | null) => Promise<VaultWriteResult>
+        write: (
+          relPath: string,
+          content: string,
+          expectedMtimeMs: number | null,
+          expectedContent?: string
+        ) => Promise<VaultWriteResult>
         createNote: (relPath: string) => Promise<VaultReadResult>
         createDir: (relPath: string) => Promise<void>
         rename: (fromRel: string, toRel: string) => Promise<void>
@@ -106,7 +111,7 @@ declare global {
         propertiesTable: () => Promise<Array<{ path: string; title: string; mtimeMs: number; props: Record<string, unknown> }>>
         todos: (limit?: number) => Promise<Array<{ path: string; line: number; text: string; done: boolean }>>
         reportContext: (payload: { activeNote: string | null; selection: string }) => void
-        toggleTodo: (relPath: string, line: number) => Promise<boolean>
+        toggleTodo: (relPath: string, line: number, text?: string) => Promise<boolean>
         onIndexEvent: (callback: (event: VaultIndexEvent) => void) => () => void
         onConflict: (callback: (event: VaultConflictEvent) => void) => () => void
       }

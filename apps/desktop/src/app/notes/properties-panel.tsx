@@ -38,7 +38,10 @@ function applyProperty(key: string, value: unknown): void {
 
   const edit = propertyEdit(view.state.doc.toString(), key, value)
 
-  view.dispatch({ changes: edit })
+  // null means "this block must not be rewritten" (malformed or non-map YAML).
+  if (edit) {
+    view.dispatch({ changes: edit })
+  }
 }
 
 function ValueEditor({ propKey, value }: { propKey: string; value: unknown }) {
@@ -126,6 +129,22 @@ export function PropertiesPanel() {
 
   const props = block?.props ?? {}
   const keys = Object.keys(props)
+
+  // Broken YAML: say so. Rendering "Add a property" here hid the problem —
+  // the raw block is folded out of the editor, so the user had no way to see
+  // that their properties were unreadable, let alone fix them.
+  if (block && block.kind !== 'ok') {
+    return (
+      <div className="mx-auto w-full max-w-[46rem] px-6">
+        <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] opacity-60">
+          <Codicon name="warning" className="text-[12px]" />
+          {block.kind === 'invalid'
+            ? "This note's properties aren't valid YAML — edit the block at the top of the note to fix it."
+            : "This note's frontmatter isn't a property list."}
+        </div>
+      </div>
+    )
+  }
 
   if (!keys.length && !adding) {
     return (

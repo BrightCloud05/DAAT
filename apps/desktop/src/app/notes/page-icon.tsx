@@ -35,7 +35,12 @@ export function PageIcon() {
 
     const edit = propertyEdit(target.state.doc.toString(), 'icon', value.trim() || undefined)
 
-    target.dispatch({ changes: edit })
+    // null when the note's YAML is malformed — better no icon than a rewritten
+    // block that buries the user's broken frontmatter under a second one.
+    if (edit) {
+      target.dispatch({ changes: edit })
+    }
+
     setEditing(false)
   }
 

@@ -78,7 +78,11 @@ export function parseNote(content: string, fallbackTitle: string): ParsedNote {
   let body = content
 
   try {
-    const parsed = matter(content)
+    // The options object is load-bearing: called with no options, gray-matter
+    // memoizes every distinct string it has ever parsed in a module-level
+    // cache that is never evicted, so indexing a 10k-note vault pins the whole
+    // vault's text in the main process for the life of the app.
+    const parsed = matter(content, {})
 
     frontmatter = parsed.data && typeof parsed.data === 'object' ? (parsed.data as Record<string, unknown>) : {}
     body = parsed.content

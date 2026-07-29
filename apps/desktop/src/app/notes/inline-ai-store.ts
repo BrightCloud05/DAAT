@@ -32,6 +32,14 @@ const IDLE: InlineAiState = { status: 'idle', top: 0, left: 0, anchor: 0, sessio
 
 export const $inlineAi = atom<InlineAiState>(IDLE)
 
+/**
+ * Teardown for the run in flight. It lives at module scope because the things
+ * that must stop a run — the Stop button, Escape, switching notes, unmounting
+ * the pane — all happen outside `runInlineAi`'s closure. Without it, "Stop"
+ * only hid the overlay while deltas kept writing into the document.
+ */
+let activeRun: { notePath: string | null; stop: () => void } | null = null
+
 export function openInlineAiAt(anchor: number): void {
   const view = $editorView.get()
 
@@ -59,9 +67,21 @@ export function closeInlineAi(): void {
     void cancelRun(state.sessionId)
   }
 
+  activeRun?.stop()
   $inlineAi.set(IDLE)
   $editorView.get()?.focus()
 }
+
+/**
+ * Switching notes mid-generation used to keep streaming into the same
+ * EditorView — whose document is now a different file — at the old offset,
+ * and then persist the damage. Stop the run instead.
+ */
+$activeNote.subscribe(note => {
+  if (activeRun && note?.path !== activeRun.notePath) {
+    closeInlineAi()
+  }
+})
 
 async function cancelRun(sessionId: string): Promise<void> {
   try {
@@ -135,6 +155,8 @@ export async function runInlineAi(task: string): Promise<void> {
 
   let anchor = state.anchor
   let finished = false
+  let graceTimer: ReturnType<typeof setTimeout> | null = null
+  const notePath = note?.path ?? null
 
   $inlineAi.set({ ...state, status: 'running', sessionId, error: null })
 
@@ -144,6 +166,16 @@ export async function runInlineAi(task: string): Promise<void> {
     }
 
     finished = true
+
+    if (graceTimer) {
+      clearTimeout(graceTimer)
+      graceTimer = null
+    }
+
+    if (activeRun?.notePath === notePath) {
+      activeRun = null
+    }
+
     unsubscribe()
     unsubscribeEdits()
 
@@ -191,30 +223,52 @@ export async function runInlineAi(task: string): Promise<void> {
   })
 
   // A user edit during generation would corrupt the anchor — cancel instead.
+  // `beforeinput` is the event that actually means "the document is about to
+  // change": it covers typing, paste, drop, cut and IME commits alike, where
+  // keydown both missed paste and fired on harmless arrow keys.
   const unsubscribeEdits = (() => {
-    const listener = view.dom.addEventListener.bind(view.dom)
-    const onInput = () => {
+    const onEdit = () => {
       if (!finished) {
         void cancelRun(sessionId!)
         void finish(false)
       }
     }
 
-    listener('keydown', onInput)
+    const events = ['beforeinput', 'paste', 'drop', 'cut'] as const
 
-    return () => view.dom.removeEventListener('keydown', onInput)
+    for (const name of events) {
+      view.dom.addEventListener(name, onEdit)
+    }
+
+    return () => {
+      for (const name of events) {
+        view.dom.removeEventListener(name, onEdit)
+      }
+    }
   })()
+
+  activeRun = {
+    notePath,
+    stop: () => {
+      void finish(false)
+    }
+  }
 
   try {
     await gateway.request('prompt.submit', { session_id: sessionId, text: buildPrompt(task) }, PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
-    void finish(true)
-  } catch (error) {
-    void finish(false)
 
-    const current = $inlineAi.get()
-
-    if (current.status !== 'idle') {
-      $inlineAi.set({ ...current, status: 'prompt', error: error instanceof Error ? error.message : 'Generation failed.' })
+    // The request resolving does not guarantee the last delta has arrived, so
+    // let message.complete terminate normally and only force the issue if it
+    // never comes — tearing down immediately truncated the output.
+    if (!finished) {
+      graceTimer = setTimeout(() => void finish(true), 1500)
     }
+  } catch (error) {
+    // Read the message before finish() resets the store, or the user is shown
+    // nothing at all.
+    const message = error instanceof Error ? error.message : 'Generation failed.'
+
+    await finish(false)
+    $inlineAi.set({ ...$inlineAi.get(), status: 'prompt', anchor: state.anchor, top: state.top, left: state.left, error: message })
   }
 }

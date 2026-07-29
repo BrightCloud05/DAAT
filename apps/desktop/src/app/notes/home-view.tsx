@@ -177,9 +177,14 @@ export function HomeView() {
           <div className={CARD}>
             <div className="flex items-baseline">
               <span className={CARD_TITLE}>Recent notes</span>
-              <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={() => openNoteFromHome(recent[0]?.path ?? '')}>
-                Open latest
-              </button>
+              {recent.length ? (
+                <button
+                  className="ml-auto text-xs text-(--dt-primary) hover:opacity-70"
+                  onClick={() => openNoteFromHome(recent[0].path)}
+                >
+                  Open latest
+                </button>
+              ) : null}
             </div>
             <div className="flex flex-col gap-3">
               {recent.map(note => (

@@ -5,8 +5,11 @@
  * Daily/YYYY-MM-DD.md.
  */
 
-import { $vaultNotes, createNote, openNote, refreshVaultNotes } from '../vault/store'
+import type { EditorView } from '@codemirror/view'
+
+import { createNote, refreshVaultNotes } from '../vault/store'
 import { $editorView } from '../vault/editor-bridge'
+import { closeTableView } from './view-store'
 
 const vault = () => window.hermesDesktop.vault
 
@@ -49,9 +52,40 @@ export function isTemplateNote(relPath: string | null | undefined): boolean {
   return Boolean(relPath && /^templates\//i.test(relPath))
 }
 
+/**
+ * Resolve once the editor pane has mounted and registered its view.
+ *
+ * Callers that switch the canvas to the note view and immediately apply a
+ * template would otherwise read a null view on the same tick and silently do
+ * nothing — the "Start today's plan" button that created a blank note.
+ */
+async function waitForEditor(timeoutMs = 2000): Promise<EditorView | null> {
+  const existing = $editorView.get()
+
+  if (existing) {
+    return existing
+  }
+
+  return new Promise(resolve => {
+    const timer = setTimeout(() => {
+      unsubscribe()
+      resolve(null)
+    }, timeoutMs)
+
+    const unsubscribe = $editorView.subscribe(view => {
+      if (view) {
+        clearTimeout(timer)
+        // Defer: nanostores notifies synchronously from inside set().
+        setTimeout(() => unsubscribe(), 0)
+        resolve(view as EditorView)
+      }
+    })
+  })
+}
+
 /** Replace the whole current document with a filled template (undoable). */
 export async function applyTemplateToActive(templatePath: string, title: string): Promise<void> {
-  const view = $editorView.get()
+  const view = await waitForEditor()
 
   if (!view) {
     return
@@ -68,20 +102,27 @@ export async function applyTemplateToActive(templatePath: string, title: string)
 export async function openDailyNote(): Promise<void> {
   const stamp = todayStamp()
   const relPath = `Daily/${stamp}.md`
-  const existed = $vaultNotes.get().some(note => note.path === relPath)
 
-  await createNote(relPath)
+  // Show the editor: from Home or the table the canvas is on another view, so
+  // the editor pane isn't mounted and the note would open into nothing.
+  closeTableView()
 
-  if (!existed) {
-    const templates = await listTemplates()
-    const daily = templates.find(template => template.name.toLowerCase() === 'daily')
+  // The template is applied with a full-document replace, so "did this note
+  // already exist" has to come from the filesystem, not the $vaultNotes cache
+  // — that cache is stale during the initial index and whenever the agent or
+  // another device created today's note, and a wrong answer wipes real work.
+  const opened = await createNote(relPath)
 
-    if (daily) {
-      await applyTemplateToActive(daily.path, stamp)
-    }
-
-    await refreshVaultNotes()
-  } else {
-    await openNote(relPath)
+  if (!opened || opened.content.trim()) {
+    return
   }
+
+  const templates = await listTemplates()
+  const daily = templates.find(template => template.name.toLowerCase() === 'daily')
+
+  if (daily) {
+    await applyTemplateToActive(daily.path, stamp)
+  }
+
+  await refreshVaultNotes()
 }

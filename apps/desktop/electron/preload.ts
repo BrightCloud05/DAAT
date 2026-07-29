@@ -156,8 +156,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     list: () => ipcRenderer.invoke('hermes:vault:list'),
     listDir: subdir => ipcRenderer.invoke('hermes:vault:listDir', subdir),
     read: relPath => ipcRenderer.invoke('hermes:vault:read', relPath),
-    write: (relPath, content, expectedMtimeMs) =>
-      ipcRenderer.invoke('hermes:vault:write', relPath, content, expectedMtimeMs),
+    write: (relPath, content, expectedMtimeMs, expectedContent) =>
+      ipcRenderer.invoke('hermes:vault:write', relPath, content, expectedMtimeMs, expectedContent),
     createNote: relPath => ipcRenderer.invoke('hermes:vault:createNote', relPath),
     createDir: relPath => ipcRenderer.invoke('hermes:vault:createDir', relPath),
     rename: (fromRel, toRel) => ipcRenderer.invoke('hermes:vault:rename', fromRel, toRel),
@@ -170,7 +170,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     propertiesTable: () => ipcRenderer.invoke('hermes:vault:propertiesTable'),
     todos: limit => ipcRenderer.invoke('hermes:vault:todos', limit),
     reportContext: payload => ipcRenderer.send('hermes:vault:context', payload),
-    toggleTodo: (relPath, line) => ipcRenderer.invoke('hermes:vault:toggleTodo', relPath, line),
+    toggleTodo: (relPath, line, text) => ipcRenderer.invoke('hermes:vault:toggleTodo', relPath, line, text),
     onIndexEvent: callback => {
       const listener = (_event, payload) => callback(payload)
       ipcRenderer.on('hermes:vault:index-event', listener)

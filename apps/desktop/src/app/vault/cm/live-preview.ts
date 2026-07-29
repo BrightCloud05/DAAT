@@ -10,7 +10,7 @@
  */
 
 import { syntaxTree } from '@codemirror/language'
-import type { Extension, Range } from '@codemirror/state'
+import { type EditorState, type Extension, type Range, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 
 import { splitWikilink } from './wikilink-language'
@@ -28,12 +28,23 @@ const HIDDEN_MARKS = new Set([
 const hideMark = Decoration.replace({})
 const urlHide = Decoration.replace({})
 
+/**
+ * Line numbers the selection touches, clipped to what's on screen.
+ *
+ * Unclipped, ⌘A on a long note builds a Set with one entry per line on every
+ * keystroke. Off-screen lines can't show their syntax marks anyway.
+ */
 function selectionLines(view: EditorView): Set<number> {
   const lines = new Set<number>()
+  const doc = view.state.doc
+  const first = view.visibleRanges.length ? doc.lineAt(view.visibleRanges[0].from).number : 1
+  const last = view.visibleRanges.length
+    ? doc.lineAt(view.visibleRanges[view.visibleRanges.length - 1].to).number
+    : doc.lines
 
   for (const range of view.state.selection.ranges) {
-    const from = view.state.doc.lineAt(range.from).number
-    const to = view.state.doc.lineAt(range.to).number
+    const from = Math.max(first, doc.lineAt(range.from).number)
+    const to = Math.min(last, doc.lineAt(range.to).number)
 
     for (let line = from; line <= to; line++) {
       lines.add(line)
@@ -44,41 +55,67 @@ function selectionLines(view: EditorView): Set<number> {
 }
 
 /**
- * Char range of the leading `---` YAML block, or null. The properties panel
- * renders it as Notion-style rows, so the raw block is folded out of the
- * document (still in the file, one click from view when the cursor enters).
+ * Whole-line span of the leading `---` YAML block, or null. The properties
+ * panel renders it as Notion-style rows, so the raw block is folded out of
+ * the document (still in the file, one click from view when the cursor
+ * enters). `to` is the last line's end — no trailing newline, because a block
+ * replacement must cover entire lines.
  */
-function frontmatterRange(view: EditorView): { from: number; to: number } | null {
-  const doc = view.state.doc
+function frontmatterRange(state: EditorState): { from: number; to: number; lastLine: number } | null {
+  const doc = state.doc
 
-  if (doc.lines < 2 || doc.line(1).text.trim() !== '---') {
+  if (doc.lines < 3 || doc.line(1).text.trim() !== '---') {
     return null
   }
 
   for (let lineNo = 2; lineNo <= Math.min(doc.lines, 200); lineNo++) {
     if (doc.line(lineNo).text.trim() === '---') {
-      const end = doc.line(lineNo)
+      // Folding the entire document would leave nowhere to click to unfold.
+      if (lineNo >= doc.lines) {
+        return null
+      }
 
-      return { from: 0, to: Math.min(end.to + 1, doc.length) }
+      return { from: 0, to: doc.line(lineNo).to, lastLine: lineNo }
     }
   }
 
   return null
 }
 
+/**
+ * The frontmatter fold lives in a StateField, not the ViewPlugin below.
+ *
+ * CodeMirror forbids block decorations (and any decoration spanning a line
+ * break) from a plugin — it throws a RangeError out of `view.dispatch` the
+ * first time one is emitted. Only a state field may provide them.
+ */
+const frontmatterFold = StateField.define<DecorationSet>({
+  create: state => foldFor(state),
+  update: (value, tr) => (tr.docChanged || tr.selection ? foldFor(tr.state) : value),
+  provide: field => EditorView.decorations.from(field)
+})
+
+function foldFor(state: EditorState): DecorationSet {
+  const range = frontmatterRange(state)
+
+  if (!range) {
+    return Decoration.none
+  }
+
+  // Keep it open while the cursor is inside, so it stays editable by hand.
+  const cursorInside = state.selection.ranges.some(sel => sel.from <= range.to && sel.to >= range.from)
+
+  if (cursorInside) {
+    return Decoration.none
+  }
+
+  return Decoration.set([Decoration.replace({ block: true }).range(range.from, range.to)])
+}
+
 function buildDecorations(view: EditorView): DecorationSet {
   const decorations: Range<Decoration>[] = []
   const activeLines = selectionLines(view)
   const doc = view.state.doc
-
-  const frontmatter = frontmatterRange(view)
-  const cursorInFrontmatter =
-    frontmatter !== null &&
-    view.state.selection.ranges.some(range => range.from <= frontmatter.to && range.to >= frontmatter.from)
-
-  if (frontmatter && !cursorInFrontmatter) {
-    decorations.push(Decoration.replace({ block: true }).range(frontmatter.from, Math.max(0, frontmatter.to - 1)))
-  }
 
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
@@ -149,6 +186,7 @@ function wikilinkAt(view: EditorView, pos: number): string | null {
 
 export function livePreview(options: LivePreviewOptions): Extension {
   return [
+    frontmatterFold,
     livePreviewPlugin,
     EditorView.domEventHandlers({
       mousedown: (event, view) => {

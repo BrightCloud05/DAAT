@@ -3,47 +3,79 @@ import { test } from 'vitest'
 
 import { coerceScalar, propertyEdit, readFrontmatter } from './frontmatter'
 
+/** Apply an edit the way a CM dispatch would, so tests assert on the file. */
+function apply(doc: string, edit: { from: number; to: number; insert: string } | null): string {
+  assert.ok(edit, 'edit must not be refused')
+
+  return doc.slice(0, edit!.from) + edit!.insert + doc.slice(edit!.to)
+}
+
 test('readFrontmatter parses the leading block and its range', () => {
   const doc = '---\ntitle: Hi\ntags: [a, b]\n---\nbody'
   const block = readFrontmatter(doc)
 
   assert.ok(block)
+  assert.equal(block!.kind, 'ok')
   assert.equal(block!.from, 0)
   assert.equal(doc.slice(block!.to), 'body')
   assert.deepEqual(block!.props, { title: 'Hi', tags: ['a', 'b'] })
 })
 
-test('readFrontmatter returns null without a block or on bad yaml', () => {
+test('readFrontmatter distinguishes absent, invalid and non-map blocks', () => {
   assert.equal(readFrontmatter('no frontmatter'), null)
-  assert.equal(readFrontmatter('---\n: [broken\n---\nbody'), null)
+  assert.equal(readFrontmatter('---\n: [broken\n---\nbody')?.kind, 'invalid')
+  assert.equal(readFrontmatter('---\n- a\n- b\n---\nbody')?.kind, 'other')
 })
 
 test('propertyEdit sets, adds, and deletes keys', () => {
   const doc = '---\nstatus: draft\n---\nbody'
 
-  const set = propertyEdit(doc, 'status', 'done')
-
-  assert.ok(set.insert.includes('status: done'))
-
-  const add = propertyEdit(doc, 'owner', 'joseph')
-
-  assert.ok(add.insert.includes('status: draft'))
-  assert.ok(add.insert.includes('owner: joseph'))
-
-  const del = propertyEdit(doc, 'status', undefined)
-
-  assert.equal(del.insert, '')
-  assert.equal(del.from, 0)
-  assert.equal(doc.slice(del.to), 'body')
+  assert.equal(apply(doc, propertyEdit(doc, 'status', 'done')), '---\nstatus: done\n---\nbody')
+  assert.equal(apply(doc, propertyEdit(doc, 'owner', 'joseph')), '---\nstatus: draft\nowner: joseph\n---\nbody')
+  assert.equal(apply(doc, propertyEdit(doc, 'status', undefined)), 'body')
 })
 
 test('propertyEdit creates a block when none exists', () => {
-  const edit = propertyEdit('just body', 'status', 'draft')
+  assert.equal(apply('just body', propertyEdit('just body', 'status', 'draft')), '---\nstatus: draft\n---\njust body')
+})
 
-  assert.equal(edit.from, 0)
-  assert.equal(edit.to, 0)
-  assert.ok(edit.insert.startsWith('---\n'))
-  assert.ok(edit.insert.endsWith('---\n'))
+test('editing one property leaves comments, key order and formatting alone', () => {
+  // A re-dump through js-yaml would drop the comment, reorder the keys and
+  // rewrite the inline list — all invisible to the user until they open the
+  // file in another editor.
+  const doc = ['---', '# what stage this is at', 'status: draft', 'tags: [a, b]', 'zzz: last', '---', 'body'].join('\n')
+
+  const result = apply(doc, propertyEdit(doc, 'status', 'done'))
+
+  assert.ok(result.includes('# what stage this is at'), 'comment must survive')
+  assert.ok(result.includes('tags: [a, b]'), 'untouched values keep their formatting')
+  assert.equal(result.indexOf('status'), doc.indexOf('status'), 'key order must not change')
+  assert.ok(result.includes('status: done'))
+  assert.ok(result.endsWith('---\nbody'))
+})
+
+test('multi-line values are replaced whole, not line-by-line', () => {
+  const doc = '---\ntags:\n  - a\n  - b\nstatus: draft\n---\nbody'
+
+  const result = apply(doc, propertyEdit(doc, 'tags', ['x']))
+
+  assert.ok(!result.includes('- a'), 'the old list must be gone')
+  assert.ok(result.includes('- x'))
+  assert.ok(result.includes('status: draft'))
+})
+
+test('a malformed block is never rewritten', () => {
+  // Rewriting prepends a second --- block above the broken one, and the panel
+  // shows "no properties" — so the user can neither see nor repair it.
+  const doc = '---\n: [broken\n---\nbody'
+
+  assert.equal(propertyEdit(doc, 'status', 'done'), null)
+})
+
+test('a valid non-map block is never silently deleted', () => {
+  const doc = '---\n- a\n- b\n---\nbody'
+
+  assert.equal(propertyEdit(doc, 'status', 'done'), null)
 })
 
 test('coerceScalar types numbers and booleans', () => {

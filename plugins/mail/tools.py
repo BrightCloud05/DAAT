@@ -9,13 +9,18 @@ no human can answer.
 
 from __future__ import annotations
 
-import json
+import shlex
 from typing import Any
 
 from . import himalaya
 
 MAX_BODY_CHARS = 20_000
 DEFAULT_PAGE_SIZE = 25
+
+
+def _account(name: str | None) -> str | None:
+    """Account names reach argv; refuse flag-shaped or multiline values."""
+    return himalaya.safe_name(name, "account") if name and str(name).strip() else None
 
 
 def _fmt_envelope(env: dict[str, Any]) -> str:
@@ -54,7 +59,7 @@ def mail_accounts() -> str:
 
 def mail_folders(account: str | None = None) -> str:
     try:
-        data = himalaya.run(["folder", "list"], account=account)
+        data = himalaya.run(["folder", "list"], account=_account(account))
     except himalaya.MailError as error:
         return str(error)
 
@@ -67,7 +72,10 @@ def mail_list(folder: str = "INBOX", limit: int = DEFAULT_PAGE_SIZE, account: st
     size = max(1, min(int(limit or DEFAULT_PAGE_SIZE), 100))
 
     try:
-        data = himalaya.run(["envelope", "list", "-f", folder, "-s", str(size)], account=account)
+        data = himalaya.run(
+            ["envelope", "list", "-f", himalaya.safe_name(folder, "folder"), "-s", str(size)],
+            account=_account(account),
+        )
     except himalaya.MailError as error:
         return str(error)
 
@@ -110,10 +118,10 @@ def _read_raw_body(message_id: str, folder: str, account: str | None) -> str | N
 
         try:
             himalaya.run(
-                ["message", "export", "-f", folder, "--full", "-d", str(target)],
-                account=account,
+                ["message", "export", "-f", himalaya.safe_name(folder, "folder"), "--full", "-d", str(target)],
+                account=_account(account),
                 json_out=False,
-                positional=[str(message_id)],
+                positional=[himalaya.safe_id(message_id)],
             )
         except himalaya.MailError:
             return None
@@ -159,13 +167,15 @@ def mail_read(message_id: str, folder: str = "INBOX", account: str | None = None
     if not str(message_id).strip():
         return "Provide the message id from mail_list."
 
-    args = ["message", "read", "-f", folder]
-
-    if not mark_seen:
-        args.append("--preview")
-
     try:
-        body = himalaya.run(args, account=account, json_out=False, positional=[str(message_id)])
+        args = ["message", "read", "-f", himalaya.safe_name(folder, "folder")]
+
+        if not mark_seen:
+            args.append("--preview")
+
+        body = himalaya.run(
+            args, account=_account(account), json_out=False, positional=[himalaya.safe_id(message_id)]
+        )
     except himalaya.MailError as error:
         return str(error)
 
@@ -205,11 +215,13 @@ def mail_search(query: str, folder: str = "INBOX", limit: int = DEFAULT_PAGE_SIZ
 
     try:
         data = himalaya.run(
-            ["envelope", "list", "-f", folder, "-s", str(size)],
-            account=account,
-            positional=query.split(),
+            ["envelope", "list", "-f", himalaya.safe_name(folder, "folder"), "-s", str(size)],
+            account=_account(account),
+            # shlex keeps quoted phrases intact ('subject "invoice 42"');
+            # str.split would shred them into three bogus terms.
+            positional=shlex.split(query),
         )
-    except himalaya.MailError as error:
+    except (himalaya.MailError, ValueError) as error:
         return str(error)
 
     if not isinstance(data, list) or not data:
@@ -224,10 +236,10 @@ def mail_move(message_id: str, target_folder: str, folder: str = "INBOX", accoun
 
     try:
         himalaya.run(
-            ["message", "move", "-f", folder],
-            account=account,
+            ["message", "move", "-f", himalaya.safe_name(folder, "folder")],
+            account=_account(account),
             json_out=False,
-            positional=[target_folder, str(message_id)],
+            positional=[himalaya.safe_name(target_folder, "target folder"), himalaya.safe_id(message_id)],
         )
     except himalaya.MailError as error:
         return str(error)
@@ -240,14 +252,20 @@ def mail_flag(message_id: str, flag: str, remove: bool = False, folder: str = "I
     """Add/remove an IMAP flag (Seen, Flagged, Answered, Draft)."""
     clean = flag.strip().capitalize()
 
-    if clean not in {"Seen", "Flagged", "Answered", "Draft", "Deleted"}:
-        return "Flag must be one of: Seen, Flagged, Answered, Draft, Deleted."
+    if clean not in {"Seen", "Flagged", "Answered", "Draft"}:
+        return (
+            "Flag must be one of: Seen, Flagged, Answered, Draft. Deleting mail is not available to "
+            "the agent — ask the user to delete it in their mail app."
+        )
 
     action = "remove" if remove else "add"
 
     try:
         himalaya.run(
-            ["flag", action, "-f", folder], account=account, json_out=False, positional=[str(message_id), clean]
+            ["flag", action, "-f", himalaya.safe_name(folder, "folder")],
+            account=_account(account),
+            json_out=False,
+            positional=[himalaya.safe_id(message_id), clean],
         )
     except himalaya.MailError as error:
         return str(error)
@@ -255,17 +273,29 @@ def mail_flag(message_id: str, flag: str, remove: bool = False, folder: str = "I
     return f"{'Removed' if remove else 'Added'} flag {clean} on message {message_id}."
 
 
-def _compose(to: str, subject: str, body: str, cc: str = "", bcc: str = "", reply_to_id: str = "") -> str:
-    headers = [f"To: {to}", f"Subject: {subject}"]
+def _header_safe(value: str, field: str) -> str:
+    """Reject CR/LF in a header value.
+
+    Without this a subject like "Q3\\nBcc: attacker@evil.com" injects a hidden
+    recipient AND renders identically to the approval prompt's own lines — the
+    user approves a mail to their boss and a stranger receives it too.
+    """
+    text = str(value)
+
+    if "\r" in text or "\n" in text or "\x00" in text:
+        raise ValueError(f"{field} must be a single line (no newlines).")
+
+    return text.strip()
+
+
+def _compose(to: str, subject: str, body: str, cc: str = "", bcc: str = "") -> str:
+    headers = [f"To: {_header_safe(to, 'Recipient')}", f"Subject: {_header_safe(subject, 'Subject')}"]
 
     if cc.strip():
-        headers.append(f"Cc: {cc}")
+        headers.append(f"Cc: {_header_safe(cc, 'Cc')}")
 
     if bcc.strip():
-        headers.append(f"Bcc: {bcc}")
-
-    if reply_to_id.strip():
-        headers.append(f"In-Reply-To: {reply_to_id}")
+        headers.append(f"Bcc: {_header_safe(bcc, 'Bcc')}")
 
     return "\n".join(headers) + "\n\n" + body
 
@@ -276,11 +306,11 @@ def mail_draft(to: str, subject: str, body: str, cc: str = "", bcc: str = "",
     if not to.strip():
         return "Provide at least one recipient."
 
-    raw = _compose(to, subject, body, cc, bcc)
-
     try:
-        himalaya.run(["message", "save", "-f", "drafts"], account=account, json_out=False, stdin_text=raw)
-    except himalaya.MailError as error:
+        raw = _compose(to, subject, body, cc, bcc)
+
+        himalaya.run(["message", "save", "-f", "drafts"], account=_account(account), json_out=False, stdin_text=raw)
+    except (himalaya.MailError, ValueError) as error:
         return str(error)
 
     return f"Draft saved to Drafts — To: {to}, Subject: {subject}. The user can review and send it."
@@ -294,6 +324,11 @@ def mail_send(to: str, subject: str, body: str, cc: str = "", bcc: str = "", acc
 
     from tools.approval import request_tool_approval
 
+    try:
+        raw = _compose(to, subject, body, cc, bcc)
+    except ValueError as error:
+        return str(error)
+
     preview = body.strip()
     preview = preview[:400] + ("…" if len(preview) > 400 else "")
     reason = (
@@ -305,20 +340,20 @@ def mail_send(to: str, subject: str, body: str, cc: str = "", bcc: str = "", acc
         f"  Body: {preview}"
     )
 
+    # No rule_key on purpose: the gate then derives the allowlist key from
+    # tool + a hash of THIS reason, so an "always" answer can never
+    # pre-approve a different recipient/subject/body.
     decision = request_tool_approval(
         "mail_send",
         reason,
-        rule_key="mail_send",
         approval_callback=approval_callback,
     )
 
     if not decision.get("approved"):
         return decision.get("message") or "Sending was not approved — nothing was sent."
 
-    raw = _compose(to, subject, body, cc, bcc)
-
     try:
-        himalaya.run(["message", "send"], account=account, json_out=False,
+        himalaya.run(["message", "send"], account=_account(account), json_out=False,
                      timeout=himalaya.SEND_TIMEOUT_S, stdin_text=raw)
     except himalaya.MailError as error:
         return str(error)
