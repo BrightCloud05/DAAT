@@ -1,20 +1,23 @@
 /**
  * Home dashboard — implementation of "BISEO Home.dc.html" (design 1a).
- * Real data where the product has it today (briefing numbers, todos with
- * working checkboxes, recent notes); modules that aren't wired yet (Mail,
- * Money, Calendar) render the designed card with an honest "coming soon"
- * state instead of fake numbers.
+ *
+ * Every card reads the user's real files: tasks and dates out of their
+ * notes, mail from their own account, money from the month's ledger note.
+ * A card with nothing behind it yet says so plainly rather than showing a
+ * plausible number — a dashboard that invents figures is worse than none.
  */
 
 import { useStore } from '@nanostores/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { activeGateway } from '@/store/gateway'
 
-import { $vaultInfo, $vaultNotes, openNote } from '../vault/store'
+import { $vaultInfo, $vaultNotes, $vaultRevision, openNote } from '../vault/store'
+import { collectEntries, type TableLikeRow } from './calendar'
+import { formatAmount, MONEY_DIR, type MoneySummary, parseMonthNote, summarize } from './money'
 import { openDailyNote, todayStamp } from './templates'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
-import { closeTableView } from './view-store'
+import { closeTableView, openCalendarView, openMailView, openMoneyView } from './view-store'
 
 const CARD =
   'rounded-xl border border-(--stroke-nous) bg-(--dt-card) p-[18px] flex flex-col gap-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_10px_24px_-18px_rgba(0,0,0,0.22)]'
@@ -38,6 +41,172 @@ function editedAgo(mtimeMs: number): string {
   const hours = Math.round(minutes / 60)
 
   return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`
+}
+
+/** Next few dated things, from the same source the Calendar reads. */
+function UpNextCard() {
+  const revision = useStore($vaultRevision)
+  const todos = useStore($vaultTodos)
+  const [rows, setRows] = useState<TableLikeRow[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void window.hermesDesktop.vault
+      .propertiesTable()
+      .then(data => !cancelled && setRows(data))
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [revision])
+
+  const upcoming = useMemo(() => {
+    const today = todayStamp()
+
+    return [...collectEntries(rows, todos).entries()]
+      .filter(([date]) => date >= today)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .flatMap(([date, entries]) => entries.filter(entry => !entry.done).map(entry => ({ date, entry })))
+      .slice(0, 4)
+  }, [rows, todos])
+
+  return (
+    <div className={CARD}>
+      <div className="flex items-baseline">
+        <span className={CARD_TITLE}>Up next</span>
+        <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openCalendarView}>
+          Calendar
+        </button>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {upcoming.map(({ date, entry }) => (
+          <button
+            key={`${date}-${entry.path}-${entry.line ?? 0}`}
+            className="flex items-baseline gap-2 text-left"
+            onClick={() => {
+              closeTableView()
+              void openNote(entry.path)
+            }}
+          >
+            <span className="shrink-0 text-[11.5px] opacity-45">{date === todayStamp() ? 'Today' : date.slice(5)}</span>
+            <span className="truncate text-[13px]">{entry.label}</span>
+          </button>
+        ))}
+        {!upcoming.length && <span className={MUTED}>Nothing scheduled. Add a due date and it shows up here.</span>}
+      </div>
+    </div>
+  )
+}
+
+/** Real inbox state, or an honest "not connected yet". */
+function InboxCard() {
+  const [state, setState] = useState<{ connected: boolean; mail: MailEnvelope[] } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const status = await window.hermesDesktop.mail.status()
+
+        if (!status.installed || !status.accounts.length) {
+          if (!cancelled) setState({ connected: false, mail: [] })
+
+          return
+        }
+
+        const mail = await window.hermesDesktop.mail.list({ limit: 5 })
+
+        if (!cancelled) setState({ connected: true, mail })
+      } catch {
+        if (!cancelled) setState({ connected: false, mail: [] })
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const unread = state?.mail.filter(item => !item.seen) ?? []
+
+  return (
+    <div className={CARD}>
+      <div className="flex items-baseline">
+        <span className={CARD_TITLE}>Inbox</span>
+        {state?.connected ? (
+          <span className={`ml-auto ${MUTED}`}>{unread.length} unread</span>
+        ) : (
+          <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openMailView}>
+            Connect
+          </button>
+        )}
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {state === null ? (
+          <span className={MUTED}>Checking…</span>
+        ) : state.connected ? (
+          <>
+            {state.mail.slice(0, 3).map(item => (
+              <button key={item.id} className="flex flex-col gap-0.5 text-left" onClick={openMailView}>
+                <span className="truncate text-[13px]">{item.subject || '(no subject)'}</span>
+                <span className={MUTED}>{item.fromName || item.fromAddr || 'unknown'}</span>
+              </button>
+            ))}
+            {!state.mail.length && <span className={MUTED}>Inbox is empty.</span>}
+          </>
+        ) : (
+          <span className={MUTED}>Connect an account and BISEO can read, sort and draft replies.</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** This month's totals, straight out of the month note. */
+function MoneyCard() {
+  const revision = useStore($vaultRevision)
+  const [totals, setTotals] = useState<MoneySummary | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const month = todayStamp().slice(0, 7)
+    const relPath = `${MONEY_DIR}/${month}.md`
+
+    void window.hermesDesktop.vault
+      .read(relPath)
+      .then(note => !cancelled && setTotals(summarize(parseMonthNote(relPath, note.content))))
+      .catch(() => !cancelled && setTotals(null))
+
+    return () => {
+      cancelled = true
+    }
+  }, [revision])
+
+  return (
+    <div className={CARD}>
+      <div className="flex items-baseline">
+        <span className={CARD_TITLE}>Money</span>
+        <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openMoneyView}>
+          {totals ? 'Open' : 'Import'}
+        </button>
+      </div>
+      {totals && (totals.income || totals.spend) ? (
+        <div className="flex flex-col gap-1">
+          <span className="text-[19px] font-semibold" style={{ color: totals.net >= 0 ? '#1F7A3D' : '#C0392B' }}>
+            {formatAmount(totals.net)}
+          </span>
+          <span className={MUTED}>
+            {formatAmount(totals.income)} in · {formatAmount(-totals.spend)} out this month
+          </span>
+        </div>
+      ) : (
+        <span className={MUTED}>Drop a bank statement photo in Money and BISEO files the transactions.</span>
+      )}
+    </div>
+  )
 }
 
 export function HomeView() {
@@ -216,20 +385,18 @@ export function HomeView() {
             )}
           </div>
 
-          {/* Coming-soon modules — designed cards, honest state. */}
-          {[
-            { title: 'Inbox', hint: 'Mail lands here once connected.' },
-            { title: 'Money', hint: 'Track spending from your notes — coming soon.' },
-            { title: 'Meetings', hint: 'Record → transcript → summary — coming soon.' }
-          ].map(module => (
-            <div key={module.title} className={`${CARD} opacity-75`}>
-              <div className="flex items-baseline">
-                <span className={CARD_TITLE}>{module.title}</span>
-                <span className={`ml-auto ${MUTED}`}>soon</span>
-              </div>
-              <span className={MUTED}>{module.hint}</span>
+          <UpNextCard />
+          <InboxCard />
+          <MoneyCard />
+
+          {/* Still honest about what isn't built. */}
+          <div className={`${CARD} opacity-75`}>
+            <div className="flex items-baseline">
+              <span className={CARD_TITLE}>Meetings</span>
+              <span className={`ml-auto ${MUTED}`}>soon</span>
             </div>
-          ))}
+            <span className={MUTED}>Record → transcript → summary — coming soon.</span>
+          </div>
         </div>
       </div>
     </div>
