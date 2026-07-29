@@ -130,7 +130,7 @@ def main() -> int:
     )
 
     with tempfile.TemporaryDirectory() as tmp:
-        iconset = os.path.join(tmp, 'biseo.iconset')
+        iconset = os.path.join(tmp, 'daat.iconset')
         os.makedirs(iconset)
 
         for px in (16, 32, 64, 128, 256, 512, 1024):

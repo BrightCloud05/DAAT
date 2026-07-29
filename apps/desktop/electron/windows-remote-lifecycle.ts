@@ -34,10 +34,10 @@ async function probeWindowsRemote(ssh, explicitHermesPath = '') {
     '$candidates+=(Join-Path $hermesHome "hermes-agent\\venv\\Scripts\\hermes.exe")',
     '$candidates+=(Join-Path $HOME "hermes-agent\\.venv\\Scripts\\hermes.exe")',
     '$hermes=$candidates|Where-Object{Test-Path -LiteralPath $_ -PathType Leaf}|Select-Object -First 1',
-    'if(-not $hermes){throw "BISEO is not installed on the remote Windows host."}',
-    'if($explicit -and $hermes -ne $explicit){throw "The configured BISEO path is not an executable file."}',
+    'if(-not $hermes){throw "Daat is not installed on the remote Windows host."}',
+    'if($explicit -and $hermes -ne $explicit){throw "The configured Daat path is not an executable file."}',
     '$python=Join-Path (Split-Path $hermes) "python.exe"',
-    'if(-not (Test-Path -LiteralPath $python -PathType Leaf)){throw "The remote BISEO Python runtime was not found."}',
+    'if(-not (Test-Path -LiteralPath $python -PathType Leaf)){throw "The remote Daat Python runtime was not found."}',
     '[ordered]@{os="Windows";arch=$env:PROCESSOR_ARCHITECTURE;hermesHome=$hermesHome;hermesPath=$hermes;python=$python}|ConvertTo-Json -Compress'
   ].join(';')
 
@@ -278,7 +278,7 @@ async function connectWindowsRemote(deps) {
   const inspection = await helper(ssh, runtime, 'inspect', [runtime.hermesPath])
 
   if (!inspection.supported) {
-    const error: any = new Error('Update BISEO on the remote Windows host before connecting with Desktop SSH.')
+    const error: any = new Error('Update Daat on the remote Windows host before connecting with Desktop SSH.')
     error.kind = 'update-required'
     throw error
   }
@@ -436,7 +436,7 @@ function buildWindowsInteractiveCommand(remoteCwd = '') {
     )
   }
 
-  script.push('$host.UI.RawUI.WindowTitle="BISEO SSH"', 'powershell.exe -NoLogo')
+  script.push('$host.UI.RawUI.WindowTitle="Daat SSH"', 'powershell.exe -NoLogo')
 
   return powerShellCommand(script.join(';'))
 }

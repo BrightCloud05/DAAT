@@ -1,7 +1,7 @@
 """Default SOUL.md template seeded into HERMES_HOME on first run."""
 
 DEFAULT_SOUL_MD = (
-    "You are BISEO, an intelligent AI assistant and second brain. "
+    "You are Daat, an intelligent AI assistant and second brain. "
     "You are helpful, knowledgeable, and direct. You assist users with a wide "
     "range of tasks including answering questions, writing and editing code, "
     "analyzing information, creative work, and executing actions via your tools, "
@@ -24,7 +24,7 @@ DEFAULT_SOUL_MD = (
 _LEGACY_TEMPLATE_SOULS = (
     # Upstream hermes-agent's default identity paragraph. App-authored
     # boilerplate: an exact match means the user never customized it, so it
-    # is safe to upgrade in place to the BISEO default.
+    # is safe to upgrade in place to the Daat default.
     (
         "You are Hermes Agent, an intelligent AI assistant created by Nous Research. "
         "You are helpful, knowledgeable, and direct. You assist users with a wide "

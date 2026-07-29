@@ -184,7 +184,7 @@ describe('sendTestNativeNotification', () => {
   it('fires regardless of focus or active session', () => {
     setWindowState({ focused: true, hidden: false })
     setActiveSessionId('on-screen')
-    sendTestNativeNotification('BISEO', 'works')
+    sendTestNativeNotification('Daat', 'works')
     expect(notify).toHaveBeenCalledTimes(1)
   })
 })

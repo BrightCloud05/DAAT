@@ -29,15 +29,15 @@ const APPLE_BLUE = '#007AFF'
 const APPLE_BLUE_DARK = '#0A84FF'
 
 /**
- * BISEO Glass — the product's default skin. macOS Liquid Glass treatment:
+ * Daat Glass — the product's default skin. macOS Liquid Glass treatment:
  * window chrome and sidebar carry alpha so the native NSVisualEffectView
  * vibrancy blurs the desktop through them; content surfaces (cards, editor,
  * popovers) stay near-opaque for legibility. Typography rides the system
  * stack, which resolves to SF Pro on macOS.
  */
-export const biseoGlassTheme: DesktopTheme = {
-  name: 'biseo-glass',
-  label: 'BISEO Glass',
+export const daatGlassTheme: DesktopTheme = {
+  name: 'daat-glass',
+  label: 'Daat Glass',
   description: 'Liquid-glass chrome with Apple system blue',
   colors: {
     background: 'rgba(245, 245, 247, 0.82)',
@@ -100,7 +100,7 @@ const nousTint = (pct: number) => `color-mix(in srgb, ${NOUS_BLUE} ${pct}%, #FFF
 const nousTintTransparent = (pct: number) => `color-mix(in srgb, ${NOUS_BLUE} ${pct}%, transparent)`
 
 /**
- * Nous — canonical BISEO desktop identity. The palette keeps the current
+ * Nous — canonical Daat desktop identity. The palette keeps the current
  * glass geometry neutral, then lets the old bb/gui blue and psyche cream
  * return as accent seeds.
  */
@@ -350,7 +350,7 @@ export const slateTheme: DesktopTheme = {
 }
 
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
-  'biseo-glass': biseoGlassTheme,
+  'daat-glass': daatGlassTheme,
   nous: nousTheme,
   midnight: midnightTheme,
   ember: emberTheme,
@@ -362,4 +362,4 @@ export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
 export const BUILTIN_THEME_LIST = Object.values(BUILTIN_THEMES)
 
 /** Skin used when nothing is persisted or the persisted name is retired. */
-export const DEFAULT_SKIN_NAME = 'biseo-glass'
+export const DEFAULT_SKIN_NAME = 'daat-glass'

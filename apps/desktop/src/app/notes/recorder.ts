@@ -85,7 +85,7 @@ export async function startRecording(title: string): Promise<boolean> {
       status: 'error',
       error:
         error instanceof DOMException && error.name === 'NotAllowedError'
-          ? 'BISEO needs microphone access. Grant it in System Settings → Privacy & Security → Microphone.'
+          ? 'Daat needs microphone access. Grant it in System Settings → Privacy & Security → Microphone.'
           : error instanceof Error
             ? error.message
             : 'No microphone available.'

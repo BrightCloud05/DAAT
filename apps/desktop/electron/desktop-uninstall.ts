@@ -59,8 +59,8 @@ function modeRemovesUserData(mode) {
  * Resolve the on-disk app bundle/dir to remove for the running desktop app,
  * given the path to the running executable (`process.execPath`) and platform.
  *
- *   macOS:   …/BISEO.app/Contents/MacOS/BISEO  → …/BISEO.app
- *   Windows: …\BISEO\BISEO.exe                 → …\BISEO  (install dir)
+ *   macOS:   …/Daat.app/Contents/MacOS/Daat  → …/Daat.app
+ *   Windows: …\Daat\Daat.exe                 → …\Daat  (install dir)
  *   Linux:   AppImage → the APPIMAGE env path; unpacked → the *-unpacked dir
  *
  * Returns null when we can't confidently identify a removable bundle (e.g.
@@ -79,10 +79,10 @@ function resolveRemovableAppPath(execPath, platform, env: any = {}) {
   const p = platform === 'win32' ? path.win32 : path.posix
 
   if (platform === 'darwin') {
-    // …/BISEO.app/Contents/MacOS/BISEO → strip 3 segments to the .app
+    // …/Daat.app/Contents/MacOS/Daat → strip 3 segments to the .app
     const macOsDir = p.dirname(exe) // …/Contents/MacOS
     const contents = p.dirname(macOsDir) // …/Contents
-    const appBundle = p.dirname(contents) // …/BISEO.app
+    const appBundle = p.dirname(contents) // …/Daat.app
 
     if (appBundle.endsWith('.app')) {
       return appBundle
@@ -92,10 +92,10 @@ function resolveRemovableAppPath(execPath, platform, env: any = {}) {
   }
 
   if (platform === 'win32') {
-    // NSIS per-user installs BISEO.exe directly in the install dir.
+    // NSIS per-user installs Daat.exe directly in the install dir.
     const dir = p.dirname(exe)
 
-    if (/[\\/]BISEO$/i.test(dir) || /[\\/]hermes-desktop$/i.test(dir)) {
+    if (/[\\/]Daat$/i.test(dir) || /[\\/]hermes-desktop$/i.test(dir)) {
       return dir
     }
 
@@ -203,7 +203,7 @@ function buildWindowsCleanupScript({
   const pid = Number(desktopPid) || 0
   // cmd.exe has no string escaping inside quotes; strip embedded quotes (paths
   // under %LOCALAPPDATA% never contain them). `&`/`^` in a path would still be
-  // a problem, but BISEO install paths don't use them.
+  // a problem, but Daat install paths don't use them.
   const q = s => `"${String(s).replace(/"/g, '')}"`
 
   const lines = [

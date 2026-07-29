@@ -1,4 +1,4 @@
-"""Injection regressions for the BISEO vault and mail tools.
+"""Injection regressions for the Daat vault and mail tools.
 
 Every argument in these tools can be written by the model, and the model
 reads untrusted text (an incoming email, a note someone shared). So each

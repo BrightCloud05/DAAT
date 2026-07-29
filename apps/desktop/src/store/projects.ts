@@ -296,7 +296,7 @@ async function gatewayRequest<T>(method: string, params: Record<string, unknown>
   }
 
   if (!gateway) {
-    throw new Error('BISEO gateway is not connected')
+    throw new Error('Daat gateway is not connected')
   }
 
   return gateway.request<T>(method, params)
@@ -324,7 +324,7 @@ async function activeProjectsContext(): Promise<ActiveProjectsContext> {
   }
 
   if (!gateway || gateway !== activeGateway() || profile !== ($activeGatewayProfile.get() || 'default')) {
-    throw new Error('Active BISEO profile changed while connecting')
+    throw new Error('Active Daat profile changed while connecting')
   }
 
   return { gateway, profile }
@@ -935,7 +935,7 @@ export function refreshWorktrees(): void {
 }
 
 // Spin up a fresh worktree the lightest way (`git worktree add -b`) under the
-// repo, returning where BISEO should start working. Git is the source of
+// repo, returning where Daat should start working. Git is the source of
 // truth; the caller starts a session in the returned path.
 export async function startWorkInRepo(
   repoPath: string,

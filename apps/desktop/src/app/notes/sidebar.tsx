@@ -161,9 +161,9 @@ export function NotesSidebar() {
     <div className="flex h-full flex-col px-2 pt-2">
       {/* Workspace header — the real mark, not a letter in a gradient box. */}
       <div className={cn(ROW, 'group mb-1')}>
-        <BrandMark className="size-[26px] rounded-[7px] shadow-[0_2px_6px_-1px_rgba(0,122,255,0.45)]" />
+        <BrandMark className="size-[26px]" />
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
-          <span className="truncate text-[13px] font-semibold">BISEO</span>
+          <span className="truncate text-[13px] font-semibold">Daat</span>
           <span className="truncate text-[11px] opacity-50">{info.name ?? 'Vault'} · {info.noteCount}</span>
         </span>
         <button

@@ -16,7 +16,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 const DESKTOP_ROOT = path.resolve(import.meta.dirname, '..')
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'biseo-modules-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'daat-modules-'))
 const home = path.join(tmp, 'home')
 const vault = path.join(tmp, 'vault')
 const userData = path.join(tmp, 'userData')
@@ -91,12 +91,20 @@ await page.waitForTimeout(2500)
 await page.evaluate(() => {
   localStorage.setItem('hermes-desktop-onboarded-v1', '1')
   localStorage.setItem('hermes-onboarding-skipped-v1', '1')
-  localStorage.setItem('biseo.onboarded.v1', '1')
+  localStorage.setItem('daat.onboarded.v1', '1')
   // Pretend the user picked Student at first run.
-  localStorage.setItem('biseo.persona.v1', 'student')
+  localStorage.setItem('daat.persona.v1', 'student')
 })
 await page.reload()
 await page.waitForTimeout(9000)
+
+// The installer and "connecting" overlays appear because this probe runs with
+// no backend (HERMES_DESKTOP_BOOT_FAKE) — a real user with a working install
+// sees neither. They are not what these checks are about and they swallow
+// clicks, so take them out of the way rather than failing every module.
+await page.addStyleTag({
+  content: '[class*="z-setup"], [class*="z-connecting"] { display: none !important; pointer-events: none !important; }'
+})
 
 const check = (label, ok, detail = '') => {
   console.log(`${ok ? '  ok  ' : '  FAIL'} ${label}${detail ? ` — ${detail}` : ''}`)

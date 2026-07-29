@@ -99,7 +99,7 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
             <div className="flex items-center gap-3">
               <span
                 className="size-2.5 shrink-0 rounded-full bg-[#FF3B30]"
-                style={{ animation: 'biseo-pulse 1.4s ease-in-out infinite' }}
+                style={{ animation: 'daat-pulse 1.4s ease-in-out infinite' }}
               />
               <span className="text-[15px] font-semibold tabular-nums">{formatElapsed(recorder.elapsed)}</span>
               <span className="text-[13px] opacity-60">{s.recording}</span>

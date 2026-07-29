@@ -86,11 +86,11 @@ export function defaultICloudVaultDir(): string | null {
     return null
   }
 
-  return path.join(cloudDocs, 'BISEO', 'Notes')
+  return path.join(cloudDocs, 'Daat', 'Notes')
 }
 
 export function defaultLocalVaultDir(): string {
-  return path.join(app.getPath('documents'), 'BISEO', 'Notes')
+  return path.join(app.getPath('documents'), 'Daat', 'Notes')
 }
 
 const WELCOME_NOTE = `# Welcome to your vault
@@ -205,7 +205,7 @@ export class VaultService {
     // picking $HOME by mistake littered it with Templates/*.md and only then
     // raised the error.
     const home = app.getPath('home')
-    const forbidden = [app.getPath('userData'), path.join(home, '.biseo'), path.join(home, '.hermes')]
+    const forbidden = [app.getPath('userData'), path.join(home, '.daat'), path.join(home, '.hermes')]
 
     if (resolved === home || forbidden.some(dir => resolved === dir || resolved.startsWith(dir + path.sep))) {
       throw new Error(`This folder can't be used as a vault: ${resolved}`)
@@ -279,7 +279,7 @@ export class VaultService {
 
     return {
       root: this.root,
-      name: path.basename(path.dirname(this.root)) === 'BISEO' ? 'BISEO' : path.basename(this.root),
+      name: path.basename(path.dirname(this.root)) === 'Daat' ? 'Daat' : path.basename(this.root),
       noteCount: this.index.noteCount(),
       location: isICloudPath(this.root) ? 'icloud' : 'local',
       indexing: this.indexing

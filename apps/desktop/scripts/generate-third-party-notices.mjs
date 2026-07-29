@@ -2,7 +2,7 @@
 /**
  * Build THIRD_PARTY_NOTICES.txt from the dependencies that actually ship.
  *
- * Most of BISEO's licences (MIT, ISC, BSD, Apache-2.0, CC-BY-4.0) require the
+ * Most of Daat's licences (MIT, ISC, BSD, Apache-2.0, CC-BY-4.0) require the
  * notice to travel with binary copies — including our own base, Hermes Agent.
  * The file is listed in package.json `build.files`, so it lands inside the
  * .app rather than only in the repo.
@@ -107,7 +107,7 @@ if (upstreamLicense) {
   fs.writeFileSync(path.join(DESKTOP_ROOT, 'LICENSE'), `${upstreamLicense}\n`, 'utf8')
 }
 
-const header = `BISEO — Third-party notices
+const header = `Daat — Third-party notices
 ${'='.repeat(72)}
 
 This product includes software developed by third parties. Their licences and
@@ -121,7 +121,7 @@ ${'-'.repeat(72)}
 Hermes Agent — the base this application is built on
 ${'-'.repeat(72)}
 
-BISEO is a fork of Hermes Agent (https://github.com/NousResearch/hermes-agent)
+Daat is a fork of Hermes Agent (https://github.com/NousResearch/hermes-agent)
 by Nous Research, used under the MIT licence reproduced here.
 
 ${upstreamLicense ?? '(LICENSE file not found at the repository root)'}

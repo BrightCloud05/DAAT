@@ -1,6 +1,6 @@
 """Current-note context bridge.
 
-BISEO Desktop writes <HERMES_HOME>/state/vault-context.json whenever the
+Daat Desktop writes <HERMES_HOME>/state/vault-context.json whenever the
 active note or selection changes; this hook injects a compact block into the
 next turn so the agent always knows what the user is looking at. Stale
 payloads (older than the freshness window) are ignored — an idle desktop
@@ -19,7 +19,7 @@ MAX_SELECTION_CHARS = 3_000
 
 
 def _bridge_path() -> Path:
-    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".biseo")
+    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".daat")
 
     return Path(home) / "state" / "vault-context.json"
 
@@ -40,7 +40,7 @@ def pre_llm_call(**kwargs):
     if not note:
         return None
 
-    parts = [f"[BISEO context] The user is currently viewing the vault note: {note}"]
+    parts = [f"[Daat context] The user is currently viewing the vault note: {note}"]
     selection = str(payload.get("selection") or "").strip()
 
     if selection:

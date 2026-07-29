@@ -3,7 +3,7 @@
 Every call is a subprocess with an explicit argv list — no shell — so
 addresses and subjects can never be interpreted as shell syntax. Himalaya
 owns the account config and credentials (~/.config/himalaya/config.toml);
-BISEO never handles passwords.
+Daat never handles passwords.
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def run(args: list[str], *, account: str | None = None, json_out: bool = True, t
 
     if not exe:
         raise MailError(
-            "Himalaya is not installed. BISEO uses it for email — install it, then run the "
+            "Himalaya is not installed. Daat uses it for email — install it, then run the "
             "account wizard (`himalaya account configure`)."
         )
 

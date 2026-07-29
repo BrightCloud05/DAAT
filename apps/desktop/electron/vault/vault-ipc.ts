@@ -30,7 +30,7 @@ function broadcast(channel: string, payload: VaultIndexEvent | VaultConflictEven
  */
 function writeVaultBridge(service: VaultService, extra: { activeNote?: string | null; selection?: string } = {}): void {
   try {
-    const home = process.env.HERMES_HOME || path.join(app.getPath('home'), '.biseo')
+    const home = process.env.HERMES_HOME || path.join(app.getPath('home'), '.daat')
     const target = path.join(home, 'state', 'vault-context.json')
 
     let previous: Record<string, unknown> = {}

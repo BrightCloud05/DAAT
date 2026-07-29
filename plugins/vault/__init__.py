@@ -1,11 +1,11 @@
-"""BISEO vault plugin.
+"""Daat vault plugin.
 
 Gives the agent first-class tools over the user's markdown vault (the folder
-BISEO Desktop manages) and injects the currently-open note as ephemeral
+Daat Desktop manages) and injects the currently-open note as ephemeral
 context each turn (bridge file written by the desktop, mirroring the proven
 obsidian-context-bridge pattern).
 
-Environment (injected by BISEO Desktop when it spawns the backend):
+Environment (injected by Daat Desktop when it spawns the backend):
   VAULT_PATH      absolute path of the open vault root
   VAULT_INDEX_DB  optional path of the desktop's SQLite link/FTS index
 """

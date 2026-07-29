@@ -313,7 +313,7 @@ if (IS_WINDOWS) {
   // engaged — icacls /T recurses the whole install tree, so healthy launches
   // skip it (the installer already granted the ACE at install time). Repair
   // targets the install dir only: granting AppContainer read on userData would
-  // expose BISEO sessions/config to every packaged app on the machine.
+  // expose Daat sessions/config to every packaged app on the machine.
   if (shouldAttemptAclRepair(priorMarker)) {
     const exeDir = path.dirname(process.execPath)
     const acl = grantAllApplicationPackagesAcl(exeDir, { execFileSync })
@@ -475,18 +475,18 @@ if (INSTALL_STAMP) {
   )
 }
 
-// HERMES_HOME — the user-facing root for everything BISEO-related. Mirrors
+// HERMES_HOME — the user-facing root for everything Daat-related. Mirrors
 // scripts/install.ps1's $HermesHome and scripts/install.sh's $HERMES_HOME.
 //
 // Defaults:
-//   Windows: %LOCALAPPDATA%\biseo (matches install.ps1)
-//   macOS / Linux: ~/.biseo (matches install.sh)
+//   Windows: %LOCALAPPDATA%\daat (matches install.ps1)
+//   macOS / Linux: ~/.daat (matches install.sh)
 //
-// Special case for Windows: if the user has a legacy ~/.biseo directory
-// (e.g., from a manual setup) AND no %LOCALAPPDATA%\biseo yet, prefer the
+// Special case for Windows: if the user has a legacy ~/.daat directory
+// (e.g., from a manual setup) AND no %LOCALAPPDATA%\daat yet, prefer the
 // legacy path so we don't orphan their existing config / sessions / .env.
-// New installs go to %LOCALAPPDATA%. NOTE: this deliberately checks ~/.biseo,
-// NOT ~/.hermes — an upstream BISEO install must never be adopted as our home.
+// New installs go to %LOCALAPPDATA%. NOTE: this deliberately checks ~/.daat,
+// NOT ~/.hermes — an upstream Daat install must never be adopted as our home.
 //
 // HERMES_DESKTOP_USER_DATA_DIR (used by test:desktop:fresh) puts the sandbox
 // HERMES_HOME beneath the throwaway userData dir so a fresh-install run never
@@ -515,8 +515,8 @@ function resolveHermesHome() {
   }
 
   if (IS_WINDOWS && process.env.LOCALAPPDATA) {
-    const localappdata = path.join(process.env.LOCALAPPDATA, 'biseo')
-    const legacy = path.join(app.getPath('home'), '.biseo')
+    const localappdata = path.join(process.env.LOCALAPPDATA, 'daat')
+    const legacy = path.join(app.getPath('home'), '.daat')
 
     // Migrate transparently to LOCALAPPDATA, but honour an existing legacy
     // ~/.hermes setup (no LOCALAPPDATA install yet) so users don't lose state.
@@ -527,7 +527,7 @@ function resolveHermesHome() {
     return localappdata
   }
 
-  return path.join(app.getPath('home'), '.biseo')
+  return path.join(app.getPath('home'), '.daat')
 }
 
 const HERMES_HOME = resolveHermesHome()
@@ -547,7 +547,7 @@ function pathWithHermesManagedNode(...entries) {
   return [...hermesManagedNodePathEntries(), ...entries, process.env.PATH].filter(Boolean).join(path.delimiter)
 }
 
-// ACTIVE_HERMES_ROOT — the canonical mutable BISEO install. Same path
+// ACTIVE_HERMES_ROOT — the canonical mutable Daat install. Same path
 // install.ps1 / install.sh use, so a desktop-only user and a CLI-only user end
 // up with identical layouts and can share one install.
 const ACTIVE_HERMES_ROOT = path.join(HERMES_HOME, 'hermes-agent')
@@ -571,7 +571,7 @@ const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'conne
 const DESKTOP_INSTALLATION_PATH = path.join(app.getPath('userData'), 'desktop-installation.json')
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
 const DESKTOP_WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-state.json')
-// active-profile.json records which BISEO profile the desktop launches its
+// active-profile.json records which Daat profile the desktop launches its
 // local backend as. When set, startHermes() passes `hermes --profile <name>
 // dashboard …`, which deterministically pins HERMES_HOME (see
 // _apply_profile_override in hermes_cli/main.py) and bypasses the sticky
@@ -627,7 +627,7 @@ const BOOT_FAKE_STEP_MS = (() => {
   return Math.max(120, raw)
 })()
 
-const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'BISEO'
+const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Daat'
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
 
@@ -937,7 +937,7 @@ if (IS_WINDOWS) {
   app.setAppUserModelId('com.nousresearch.hermes')
 }
 
-// Seed the native About panel with the live BISEO version. This is refreshed
+// Seed the native About panel with the live Daat version. This is refreshed
 // on every open via the explicit "About" menu handler (refreshAboutPanel), so
 // an in-place `hermes update` mid-session is reflected without an app restart;
 // the seed here just covers the first open and any non-menu invocation path.
@@ -1081,7 +1081,7 @@ let nativeThemeListenerInstalled = false
 let bootProgressState = {
   error: null,
   fakeMode: BOOT_FAKE_MODE,
-  message: 'Waiting to start BISEO backend',
+  message: 'Waiting to start Daat backend',
   phase: 'idle',
   progress: 0,
   running: false,
@@ -1730,7 +1730,7 @@ async function waitForUpdateToFinish() {
   while (marker && Date.now() < deadline) {
     await advanceBootProgress(
       'backend.update-wait',
-      'An update is finishing — BISEO will start automatically when it completes…',
+      'An update is finishing — Daat will start automatically when it completes…',
       12
     )
     await new Promise(r => setTimeout(r, UPDATE_WAIT_POLL_MS))
@@ -1975,7 +1975,7 @@ function findSystemPython() {
   //      miss real Python 3.13 installs (user-reported case).
   //
   // We also restrict ourselves to Python 3.11–3.13. 3.14 is the latest
-  // CPython but several BISEO deps (notably pywinpty's Rust-built
+  // CPython but several Daat deps (notably pywinpty's Rust-built
   // windows_x86_64_msvc crate) don't yet publish 3.14 wheels, and
   // `pip install -e .` falls back to source-build, which fails without
   // a Rust toolchain. install.ps1 sidesteps this by pinning to 3.11
@@ -2389,12 +2389,12 @@ async function checkUpdates() {
   // then strips the quarantine bit. On a signed, notarized install that
   // replaces a trusted app with an unsigned one and hides the fact — so it is
   // only ever allowed for an explicitly opted-in developer build.
-  if (app.isPackaged && process.env.BISEO_ALLOW_SOURCE_UPDATE !== '1') {
+  if (app.isPackaged && process.env.Daat_ALLOW_SOURCE_UPDATE !== '1') {
     return {
       supported: false,
       reason: 'packaged-build',
       message:
-        'This is a released build — update by downloading the latest signed BISEO from the releases page.',
+        'This is a released build — update by downloading the latest signed Daat from the releases page.',
       hermesRoot: updateRoot,
       branch
     }
@@ -2771,7 +2771,7 @@ async function releaseBackendLock(updateRoot, tag) {
 //
 // The desktop is a pure consumer: it does NOT git pull / pip install / rebuild
 // itself (the old open-coded git dance lived here and drifted from
-// `hermes update`). Instead we spawn the staged BISEO-Setup binary with
+// `hermes update`). Instead we spawn the staged Daat-Setup binary with
 // --update and quit, so it can run `hermes update` (which refuses while we
 // hold the venv shim) and rebuild the desktop with our exe already gone.
 //
@@ -2834,7 +2834,7 @@ async function applyUpdates(opts = {}) {
     emitUpdateProgress({
       stage: 'restart',
       message:
-        'Updating BISEO — this window will close and the updater will open. Don’t reopen BISEO yourself; it restarts automatically when the update finishes.',
+        'Updating Daat — this window will close and the updater will open. Don’t reopen Daat yourself; it restarts automatically when the update finishes.',
       percent: 100
     })
     repairMacUpdaterHelper(updater)
@@ -2869,8 +2869,8 @@ async function applyUpdates(opts = {}) {
       // user close the holder and retry. Restart our own backend so the app
       // keeps working after the failed attempt.
       const message =
-        'Update aborted: another process is holding the BISEO install open ' +
-        '(a second BISEO window or a terminal running hermes?). Close it and retry.'
+        'Update aborted: another process is holding the Daat install open ' +
+        '(a second Daat window or a terminal running hermes?). Close it and retry.'
 
       emitUpdateProgress({ stage: 'error', message, percent: null })
       startHermes().catch(() => {})
@@ -3160,7 +3160,7 @@ async function applyUpdatesPosixInApp(opts: any) {
   // ── Pre-flight state.db integrity guard (#68474) ──
   preflightStateDb(HERMES_HOME, rememberLog)
 
-  // Put the BISEO-managed Node and the venv on PATH so `hermes desktop`'s
+  // Put the Daat-managed Node and the venv on PATH so `hermes desktop`'s
   // npm build can find them on a machine with no system Node. Windows portable
   // Node lives directly under %LOCALAPPDATA%\\hermes\\node, not node\\bin.
   // PYTHONUNBUFFERED: `hermes update` writes to a pipe here, so CPython
@@ -3216,7 +3216,7 @@ async function applyUpdatesPosixInApp(opts: any) {
     // best effort
   }
 
-  emitUpdateProgress({ stage: 'update', message: 'Updating BISEO (git + dependencies)…', percent: 10 })
+  emitUpdateProgress({ stage: 'update', message: 'Updating Daat (git + dependencies)…', percent: 10 })
 
   const updated = (await runStreamedUpdate(hermes, ['update', '--yes', ...branchArgs], {
     cwd: updateRoot,
@@ -3246,7 +3246,7 @@ async function applyUpdatesPosixInApp(opts: any) {
   if (rebuilt.code !== 0) {
     emitUpdateProgress({
       stage: 'error',
-      message: 'Backend updated, but the desktop rebuild failed. Restart BISEO to retry.',
+      message: 'Backend updated, but the desktop rebuild failed. Restart Daat to retry.',
       error: rebuilt.error || 'rebuild-failed'
     })
 
@@ -3293,7 +3293,7 @@ async function applyUpdatesPosixInApp(opts: any) {
     const outcome = decideRelaunchOutcome({ underUnpacked, sandboxOk })
 
     if (outcome === 'relaunch') {
-      emitUpdateProgress({ stage: 'restart', message: 'Restarting BISEO…', percent: 100 })
+      emitUpdateProgress({ stage: 'restart', message: 'Restarting Daat…', percent: 100 })
       // Preserve launch context across the re-exec: replay the original args
       // (filtered of Electron internals) and the env/cwd that define which
       // backend/profile/root this instance talks to. Without this the
@@ -3331,7 +3331,7 @@ async function applyUpdatesPosixInApp(opts: any) {
           backendUpdated: true,
           guiUpdated: false,
           manualRestart: true,
-          message: 'Backend updated. Quit and reopen BISEO to load the new version.'
+          message: 'Backend updated. Quit and reopen Daat to load the new version.'
         }
       }
     }
@@ -3341,7 +3341,7 @@ async function applyUpdatesPosixInApp(opts: any) {
         stage: 'guiSkew',
         message:
           'Backend updated, but the desktop app package was not changed. ' +
-          'Update or reinstall the BISEO desktop app to match.',
+          'Update or reinstall the Daat desktop app to match.',
         percent: 100
       })
       rememberLog(
@@ -3367,13 +3367,13 @@ async function applyUpdatesPosixInApp(opts: any) {
       sandboxBlocked: true,
       message:
         'Backend updated. The rebuilt app can’t relaunch automatically ' +
-        '(sandbox helper needs root). Quit and reopen BISEO to finish.'
+        '(sandbox helper needs root). Quit and reopen Daat to finish.'
     }
   }
 
   const rebuiltApp = [
-    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac-arm64', 'BISEO.app'),
-    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac', 'BISEO.app')
+    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac-arm64', 'Daat.app'),
+    path.join(updateRoot, 'apps', 'desktop', 'release', 'mac', 'Daat.app')
   ].find(directoryExists)
 
   const targetApp = runningAppBundle()
@@ -3383,7 +3383,7 @@ async function applyUpdatesPosixInApp(opts: any) {
   if (!rebuiltApp || !targetApp) {
     emitUpdateProgress({
       stage: 'done',
-      message: 'Backend updated. Restart BISEO to load the new version.',
+      message: 'Backend updated. Restart Daat to load the new version.',
       percent: 100
     })
 
@@ -3422,7 +3422,7 @@ fi
   } catch (err) {
     emitUpdateProgress({
       stage: 'done',
-      message: 'Backend + app updated. Restart BISEO to load the new version.',
+      message: 'Backend + app updated. Restart Daat to load the new version.',
       percent: 100
     })
     rememberLog(`[updates] could not write swap script: ${err.message}; rebuilt app at ${rebuiltApp}`)
@@ -3579,7 +3579,7 @@ function isPackagedInstallPath(dir) {
 
 function resolveHermesCwd() {
   // In a packaged build, `process.cwd()` resolves to the install root (e.g.
-  // `…/win-unpacked` on Windows or `/Applications/BISEO.app/Contents/...`
+  // `…/win-unpacked` on Windows or `/Applications/Daat.app/Contents/...`
   // on macOS). Sessions spawned there leave files inside the app bundle
   // and bewilder users when "where did my files go?" is the install dir.
   // The user-configurable default project directory wins over everything,
@@ -3713,7 +3713,7 @@ function createActiveBackend(backendArgs) {
 
   return {
     kind: 'python',
-    label: `BISEO at ${ACTIVE_HERMES_ROOT}`,
+    label: `Daat at ${ACTIVE_HERMES_ROOT}`,
     command,
     args: ['-m', 'hermes_cli.main', ...backendArgs],
     env: buildDesktopBackendEnv({
@@ -3734,7 +3734,7 @@ function resolveHermesBackend(backendArgs) {
   const overrideRoot = process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT)
 
   if (overrideRoot && isHermesSourceRoot(overrideRoot)) {
-    const backend = createPythonBackend(overrideRoot, `BISEO source at ${overrideRoot}`, backendArgs)
+    const backend = createPythonBackend(overrideRoot, `Daat source at ${overrideRoot}`, backendArgs)
 
     if (backend) {
       return backend
@@ -3746,7 +3746,7 @@ function resolveHermesBackend(backendArgs) {
   //    installed `hermes` on PATH so local Python edits are actually exercised.
   //    (In dev with no checkout, SOURCE_REPO_ROOT won't pass isHermesSourceRoot.)
   if (!IS_PACKAGED && isHermesSourceRoot(SOURCE_REPO_ROOT)) {
-    const backend = createPythonBackend(SOURCE_REPO_ROOT, `BISEO source at ${SOURCE_REPO_ROOT}`, backendArgs)
+    const backend = createPythonBackend(SOURCE_REPO_ROOT, `Daat source at ${SOURCE_REPO_ROOT}`, backendArgs)
 
     if (backend) {
       return backend
@@ -3766,7 +3766,7 @@ function resolveHermesBackend(backendArgs) {
   if (activeRuntime.shouldUseActiveRuntime && !bootstrapRepairRequested) {
     if (!activeRuntime.hasValidMarker) {
       rememberLog(
-        `[bootstrap] Active BISEO runtime at ${ACTIVE_HERMES_ROOT} is usable but the bootstrap marker is missing or stale; skipping first-run bootstrap.`
+        `[bootstrap] Active Daat runtime at ${ACTIVE_HERMES_ROOT} is usable but the bootstrap marker is missing or stale; skipping first-run bootstrap.`
       )
     }
 
@@ -3794,7 +3794,7 @@ function resolveHermesBackend(backendArgs) {
       } else if (!isWindowsBinaryPathInWsl(hermesOverride, { isWsl: IS_WSL })) {
         hermesCommand = hermesOverride
       } else {
-        rememberLog(`Ignoring Windows BISEO override under WSL: ${hermesOverride}`)
+        rememberLog(`Ignoring Windows Daat override under WSL: ${hermesOverride}`)
       }
     } else {
       hermesCommand = findOnPath('hermes')
@@ -3802,7 +3802,7 @@ function resolveHermesBackend(backendArgs) {
 
     if (hermesCommand) {
       if (looksLikeDesktopAppBinary(hermesCommand)) {
-        rememberLog(`Ignoring desktop app executable on PATH while resolving BISEO CLI: ${hermesCommand}`)
+        rememberLog(`Ignoring desktop app executable on PATH while resolving Daat CLI: ${hermesCommand}`)
         hermesCommand = null
       }
     }
@@ -3830,7 +3830,7 @@ function resolveHermesBackend(backendArgs) {
       if (shouldTrustHermesOverride(hermesOverride) || verifyHermesCli(hermesCommand, { shell: shellForProbe })) {
         return (
           unwrapWindowsVenvHermesCommand(hermesCommand, backendArgs) || {
-            label: `existing BISEO CLI at ${hermesCommand}`,
+            label: `existing Daat CLI at ${hermesCommand}`,
             command: hermesCommand,
             args: backendArgs,
             bootstrap: false,
@@ -3842,7 +3842,7 @@ function resolveHermesBackend(backendArgs) {
       }
 
       rememberLog(
-        `Ignoring existing BISEO CLI at ${hermesCommand}: --version probe failed; falling through to bootstrap.`
+        `Ignoring existing Daat CLI at ${hermesCommand}: --version probe failed; falling through to bootstrap.`
       )
     }
   }
@@ -3888,7 +3888,7 @@ function resolveHermesBackend(backendArgs) {
   //    is a recoverable state the GUI can drive through.
   return {
     kind: 'bootstrap-needed',
-    label: 'BISEO Agent not installed yet; bootstrap required',
+    label: 'Daat Agent not installed yet; bootstrap required',
     command: null,
     args: backendArgs,
     bootstrap: true,
@@ -3919,11 +3919,11 @@ async function ensureRuntime(backend) {
   // will rewire startup to spawn the window first and route bootstrap events
   // to a renderer-side install overlay.
   if (backend.kind === 'bootstrap-needed') {
-    rememberLog('[bootstrap] no BISEO install found; starting first-launch bootstrap')
+    rememberLog('[bootstrap] no Daat install found; starting first-launch bootstrap')
 
     if (await handOffWindowsBootstrapRecovery('bootstrap-needed')) {
       const handoffError: Error & { isBootstrapFailure?: boolean; bootstrapHandedOff?: boolean } = new Error(
-        'BISEO recovery was handed off to BISEO Setup. The desktop will restart when recovery completes.'
+        'Daat recovery was handed off to Daat Setup. The desktop will restart when recovery completes.'
       )
 
       handoffError.isBootstrapFailure = true
@@ -3984,7 +3984,7 @@ async function ensureRuntime(backend) {
     bootstrapAbortController = null
 
     if (bootstrapResult.cancelled) {
-      const cancelledError = new Error('BISEO install was cancelled.') as any
+      const cancelledError = new Error('Daat install was cancelled.') as any
       cancelledError.isBootstrapFailure = true
       cancelledError.bootstrapCancelled = true
       bootstrapFailure = cancelledError
@@ -3993,7 +3993,7 @@ async function ensureRuntime(backend) {
 
     if (!bootstrapResult.ok) {
       const bootstrapError = new Error(
-        `BISEO bootstrap failed${bootstrapResult.failedStage ? ` at stage '${bootstrapResult.failedStage}'` : ''}: ` +
+        `Daat bootstrap failed${bootstrapResult.failedStage ? ` at stage '${bootstrapResult.failedStage}'` : ''}: ` +
           `${bootstrapResult.error || 'unknown error'}. ` +
           `Check ${path.join(HERMES_HOME, 'logs', 'desktop.log')} for the full transcript.`
       ) as any
@@ -4022,12 +4022,12 @@ async function ensureRuntime(backend) {
   // attests they ran successfully).
   if (!isHermesSourceRoot(ACTIVE_HERMES_ROOT)) {
     throw new Error(
-      `BISEO install at ${ACTIVE_HERMES_ROOT} is missing or incomplete. ` +
+      `Daat install at ${ACTIVE_HERMES_ROOT} is missing or incomplete. ` +
         'Reinstall via the desktop installer or scripts/install.ps1.'
     )
   }
 
-  // On Windows, preflight Git Bash. BISEO' terminal tool calls bash.exe
+  // On Windows, preflight Git Bash. Daat' terminal tool calls bash.exe
   // directly (tools/environments/local.py); without it the agent can't run
   // terminal commands. install.ps1's Stage-Git puts PortableGit at
   // %LOCALAPPDATA%\hermes\git\, which findGitBash() picks up, so for any
@@ -4035,10 +4035,10 @@ async function ensureRuntime(backend) {
   // here via an external `hermes` on PATH, this check still helps.
   if (IS_WINDOWS && !findGitBash()) {
     throw new Error(
-      'Git for Windows is required for BISEO on Windows (provides Git Bash, ' +
+      'Git for Windows is required for Daat on Windows (provides Git Bash, ' +
         "which the agent's terminal tool uses). Install it from " +
         'https://git-scm.com/download/win or run `winget install -e --id Git.Git`, ' +
-        'then relaunch BISEO.'
+        'then relaunch Daat.'
     )
   }
 
@@ -4053,15 +4053,15 @@ async function ensureRuntime(backend) {
     // If we hit this, the user (or a deleted venv) broke the invariant; tell
     // them to re-run the install.
     throw new Error(
-      `BISEO venv missing at ${VENV_ROOT}. Re-run the desktop installer or ` + '`scripts/install.ps1` to rebuild it.'
+      `Daat venv missing at ${VENV_ROOT}. Re-run the desktop installer or ` + '`scripts/install.ps1` to rebuild it.'
     )
   }
 
   backend.command = getVenvPython(VENV_ROOT)
-  backend.label = `BISEO at ${ACTIVE_HERMES_ROOT} (venv: ${VENV_ROOT})`
+  backend.label = `Daat at ${ACTIVE_HERMES_ROOT} (venv: ${VENV_ROOT})`
   updateBootProgress({
     phase: 'runtime.ready',
-    message: 'BISEO runtime is ready',
+    message: 'Daat runtime is ready',
     progress: 82,
     running: true,
     error: null
@@ -4104,7 +4104,7 @@ function fetchJson(url, token, options: any = {}) {
     const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported BISEO backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Daat backend URL protocol: ${parsed.protocol}`))
 
       return
     }
@@ -4155,7 +4155,7 @@ function fetchJson(url, token, options: any = {}) {
             reject(
               new Error(
                 `Expected JSON from ${url} but got HTML (status ${res.statusCode}). ` +
-                  'The endpoint is likely missing on the BISEO backend.'
+                  'The endpoint is likely missing on the Daat backend.'
               )
             )
 
@@ -4173,7 +4173,7 @@ function fetchJson(url, token, options: any = {}) {
 
     req.on('error', reject)
     req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`Timed out connecting to BISEO backend after ${timeoutMs}ms`))
+      req.destroy(new Error(`Timed out connecting to Daat backend after ${timeoutMs}ms`))
     })
 
     if (body) {
@@ -4206,7 +4206,7 @@ function fetchPublicJson(url, options: any = {}) {
     const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported BISEO backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Daat backend URL protocol: ${parsed.protocol}`))
 
       return
     }
@@ -4245,7 +4245,7 @@ function fetchPublicJson(url, options: any = {}) {
             reject(
               new Error(
                 `Expected JSON from ${url} but got HTML (status ${res.statusCode}). ` +
-                  'The endpoint is likely missing on the BISEO backend.'
+                  'The endpoint is likely missing on the Daat backend.'
               )
             )
 
@@ -4263,7 +4263,7 @@ function fetchPublicJson(url, options: any = {}) {
 
     req.on('error', reject)
     req.setTimeout(timeoutMs, () => {
-      req.destroy(new Error(`Timed out connecting to BISEO backend after ${timeoutMs}ms`))
+      req.destroy(new Error(`Timed out connecting to Daat backend after ${timeoutMs}ms`))
     })
 
     if (body) {
@@ -5039,7 +5039,7 @@ function sendClosePreviewRequested() {
 
 // Tell the renderer the machine just woke. Sleep silently drops the
 // renderer's WebSocket to the local backend; the renderer reconnects on this
-// signal so the chat composer doesn't stay stuck on "Starting BISEO...".
+// signal so the chat composer doesn't stay stuck on "Starting Daat...".
 function sendPowerResume() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
@@ -5586,7 +5586,7 @@ function installMediaPermissions() {
 // ---------------------------------------------------------------------------
 // OAuth remote-gateway auth.
 //
-// Hosted BISEO gateways gate the dashboard behind an OAuth provider (e.g.
+// Hosted Daat gateways gate the dashboard behind an OAuth provider (e.g.
 // Nous Research) instead of a static session token. The auth model is
 // fundamentally different from the token path:
 //
@@ -5630,7 +5630,7 @@ function getOauthSession() {
 // hydrating from disk and return an empty array — even though the user is
 // signed in. That false-negative used to make hasLiveOauthSession() report
 // "not signed in", which on the initial boot path (startHermes → the renderer's
-// single-shot boot() with no retry) surfaced as the "BISEO couldn't start"
+// single-shot boot() with no retry) surfaced as the "Daat couldn't start"
 // OAuth overlay that vanishes the instant the user clicks Retry.
 //
 // We force the store to hydrate once, up front: flushStorageData() then a
@@ -5737,7 +5737,7 @@ async function hasLiveOauthSession(baseUrl) {
 
   // Cold-start false-negative guard. A `persist:` partition's cookie store
   // loads lazily, so the FIRST read on a fresh boot can come back empty even
-  // for a signed-in user — the exact race that produced the transient "BISEO
+  // for a signed-in user — the exact race that produced the transient "Daat
   // couldn't start / not signed in" overlay that Retry always cleared. Before
   // trusting a negative, force the store to hydrate and re-read a couple of
   // times with a short backoff. A genuinely signed-out user still resolves
@@ -5860,7 +5860,7 @@ function openOauthLoginWindow(baseUrl, { silent = false } = {}) {
       win = new BrowserWindow({
         width: 520,
         height: 720,
-        title: silent ? 'Connecting to BISEO Cloud agent…' : 'Sign in to BISEO gateway',
+        title: silent ? 'Connecting to Daat Cloud agent…' : 'Sign in to Daat gateway',
         autoHideMenuBar: true,
         // Silent cascade: start HIDDEN. The auto-SSO 302 chain completes in
         // well under a second, so the window normally never needs to show. We
@@ -5951,7 +5951,7 @@ function fetchJsonViaOauthSession(url, options: any = {}) {
     }
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      reject(new Error(`Unsupported BISEO backend URL protocol: ${parsed.protocol}`))
+      reject(new Error(`Unsupported Daat backend URL protocol: ${parsed.protocol}`))
 
       return
     }
@@ -5980,7 +5980,7 @@ function fetchJsonViaOauthSession(url, options: any = {}) {
         // already finished
       }
 
-      reject(new Error(`Timed out connecting to BISEO backend after ${timeoutMs}ms`))
+      reject(new Error(`Timed out connecting to Daat backend after ${timeoutMs}ms`))
     }, timeoutMs)
 
     request.on('response', res => {
@@ -6263,7 +6263,7 @@ async function freshGatewayWsUrl(profile) {
   return connection.wsUrl
 }
 
-// --- BISEO Cloud discovery + silent per-agent sign-in (cloud-auto-discovery
+// --- Daat Cloud discovery + silent per-agent sign-in (cloud-auto-discovery
 // Phase 3) ---------------------------------------------------------------
 //
 // The "cloud" connection mode lets a user sign in to the Nous portal ONCE in
@@ -6279,7 +6279,7 @@ async function freshGatewayWsUrl(profile) {
 
 // Canonical Nous portal base URL, overridable for staging/dev. Mirrors the CLI
 // convention (hermes_cli/auth.py DEFAULT_NOUS_PORTAL_URL + the same env names)
-// so a single override flips every BISEO surface to the same portal.
+// so a single override flips every Daat surface to the same portal.
 const DEFAULT_NOUS_PORTAL_URL = 'https://portal.nousresearch.com'
 
 function resolvePortalBaseUrl() {
@@ -6290,7 +6290,7 @@ function resolvePortalBaseUrl() {
 
 // Whether the OAuth partition currently holds a live Nous portal session — the
 // credential that powers both discovery and the silent cascade. The portal
-// authenticates via PRIVY, not the BISEO gateway session cookies, so this
+// authenticates via PRIVY, not the Daat gateway session cookies, so this
 // checks for the `privy-token` cookie on the portal host (NOT
 // hasLiveOauthSession, which looks for hermes_session_at/rt that the portal
 // never sets). See connection-config.ts cookiesHavePrivySession.
@@ -6329,7 +6329,7 @@ function openPortalLoginWindow() {
 
   return new Promise((resolve, reject) => {
     if (!app.isReady()) {
-      reject(new Error('Desktop is not ready to start a BISEO Cloud sign-in.'))
+      reject(new Error('Desktop is not ready to start a Daat Cloud sign-in.'))
 
       return
     }
@@ -6387,7 +6387,7 @@ function openPortalLoginWindow() {
       win = new BrowserWindow({
         width: 520,
         height: 720,
-        title: 'Sign in to BISEO Cloud',
+        title: 'Sign in to Daat Cloud',
         autoHideMenuBar: true,
         webPreferences: {
           contextIsolation: true,
@@ -6422,7 +6422,7 @@ function openPortalLoginWindow() {
   })
 }
 
-// Discover the hosted (BISEO Cloud) agents the signed-in user can see. Calls
+// Discover the hosted (Daat Cloud) agents the signed-in user can see. Calls
 // the NAS trimmed-summary endpoint over the partition-bound net, so the portal
 // session cookie is attached automatically (no bearer needed — NAS accepts the
 // cookie). Returns { agents } on success, or { needsOrgSelection: true, orgs }
@@ -6435,7 +6435,7 @@ async function discoverCloudAgents(org?: string) {
 
   if (!(await hasLivePortalSession())) {
     const err = new Error(
-      'You are not signed in to BISEO Cloud. Open Settings → Gateway, choose BISEO Cloud, and sign in.'
+      'You are not signed in to Daat Cloud. Open Settings → Gateway, choose Daat Cloud, and sign in.'
     ) as any
 
     err.needsCloudLogin = true
@@ -6454,7 +6454,7 @@ async function discoverCloudAgents(org?: string) {
     // A 401 means the portal session lapsed between the liveness check and the
     // call — surface it as a re-login, not a generic failure.
     if (error && error.statusCode === 401) {
-      const err = new Error('Your BISEO Cloud session has expired. Open Settings → Gateway and sign in again.') as any
+      const err = new Error('Your Daat Cloud session has expired. Open Settings → Gateway and sign in again.') as any
       err.needsCloudLogin = true
       err.cause = error
       throw err
@@ -6559,7 +6559,7 @@ async function cloudAgentSilentSignIn(dashboardUrl) {
   // interactive prompt rather than a silent cascade. Discovery already gates on
   // this, but a selection can arrive after the session lapsed.
   if (!(await hasLivePortalSession())) {
-    const err = new Error('Your BISEO Cloud session has expired. Sign in to BISEO Cloud again.') as any
+    const err = new Error('Your Daat Cloud session has expired. Sign in to Daat Cloud again.') as any
     err.needsCloudLogin = true
     throw err
   }
@@ -6659,7 +6659,7 @@ function sanitizeConnectionProfiles(raw: Record<string, any>) {
       cleaned.token = entry.token
     }
 
-    // Preserve the BISEO Cloud org tag on cloud-mode entries so Settings can
+    // Preserve the Daat Cloud org tag on cloud-mode entries so Settings can
     // reopen into the same org for a per-profile cloud connection.
     if (cleaned.mode === 'cloud') {
       const org = String(entry.org || '').trim()
@@ -6804,7 +6804,7 @@ async function sanitizeDesktopConnectionConfig(config = readDesktopConnectionCon
     remoteAuthMode: authMode,
     remoteOauthConnected,
     remoteUrl,
-    // The persisted BISEO Cloud org (slug/id) for a cloud connection, or '' for
+    // The persisted Daat Cloud org (slug/id) for a cloud connection, or '' for
     // remote/local. Lets Settings → Gateway reopen into the same org.
     cloudOrg: mode === 'cloud' ? String(block.org || '') : '',
     remoteTokenPreview: tokenPreview(remoteToken),
@@ -6823,7 +6823,7 @@ async function sanitizeDesktopConnectionConfig(config = readDesktopConnectionCon
 // Build + validate a `{ url, authMode, token }` remote block. OAuth gateways
 // authenticate via the login-window session cookie (verified at connect time in
 // resolveRemoteBackend), so only token-auth remotes require a saved token.
-// `org` (optional) is the BISEO Cloud org slug/id the instance was discovered
+// `org` (optional) is the Daat Cloud org slug/id the instance was discovered
 // under — persisted so Settings can reopen into the same org; omitted from the
 // block when empty so plain remote connections stay unchanged.
 function buildRemoteBlock(remoteUrl, authMode, token, org?: string) {
@@ -6858,7 +6858,7 @@ function coerceDesktopConnectionConfig(input: any = {}, existing = readDesktopCo
   // The block being edited: a per-profile entry or the global remote block.
   const rawExistingBlock = key ? existing.profiles?.[key] || {} : existing.remote || {}
   // Leaving a CLOUD connection unselects it: a cloud block's url/org/token
-  // describe a discovered BISEO Cloud instance, NOT a user-owned remote gateway,
+  // describe a discovered Daat Cloud instance, NOT a user-owned remote gateway,
   // so switching to local or remote must NOT inherit them (otherwise the stale
   // cloud URL lingers and re-selecting Cloud looks "already connected"). When the
   // saved block was cloud and the new mode is not cloud, start from an empty
@@ -7003,7 +7003,7 @@ async function buildRemoteConnection(
       oauthGuardMayHardFail(await gatewayAuthProviders(baseUrl))
     ) {
       const err = new Error(
-        'Remote BISEO gateway uses OAuth, but you are not signed in. ' +
+        'Remote Daat gateway uses OAuth, but you are not signed in. ' +
           'Open Settings → Gateway and click "Sign in", or switch back to Local.'
       ) as any
 
@@ -7019,7 +7019,7 @@ async function buildRemoteConnection(
       throw gatewayTicketFailure(
         error,
         'Your remote gateway session has expired. Open Settings → Gateway and click "Sign in" again.',
-        'Could not reach the remote BISEO gateway while refreshing its WebSocket ticket. Try reconnecting.'
+        'Could not reach the remote Daat gateway while refreshing its WebSocket ticket. Try reconnecting.'
       )
     }
 
@@ -7039,7 +7039,7 @@ async function buildRemoteConnection(
 
   if (!token) {
     throw new Error(
-      'Remote BISEO gateway is selected, but no session token is saved. ' +
+      'Remote Daat gateway is selected, but no session token is saved. ' +
         'Open Settings → Gateway and save a token, or switch back to Local.'
     )
   }
@@ -7375,7 +7375,7 @@ async function resolveRemoteBackend(profile) {
     if (!rawEnvToken) {
       throw new Error(
         'HERMES_DESKTOP_REMOTE_URL is set but HERMES_DESKTOP_REMOTE_TOKEN is not. ' +
-          'Both must be provided to connect to a remote BISEO backend.'
+          'Both must be provided to connect to a remote Daat backend.'
       )
     }
 
@@ -7479,7 +7479,7 @@ async function requestJsonForProfile(profile: string, path: string, method: stri
 
 async function probeRemoteAuthMode(rawUrl) {
   // Determine how a remote gateway expects callers to authenticate, WITHOUT
-  // sending any credentials. ``/api/status`` is public on every BISEO
+  // sending any credentials. ``/api/status`` is public on every Daat
   // gateway (it backs the portal liveness probe) and reports:
   //   auth_required: true  → OAuth gate is engaged (cookie + ws-ticket auth)
   //   auth_required: false → loopback/--insecure: legacy session-token auth
@@ -7594,7 +7594,7 @@ async function testDesktopConnectionConfig(input: any = {}) {
             return {
               reachable: false,
               sshError: 'update-required',
-              error: 'Update BISEO on the remote host before connecting with Desktop SSH.'
+              error: 'Update Daat on the remote host before connecting with Desktop SSH.'
             }
           }
 
@@ -7667,7 +7667,7 @@ async function testDesktopConnectionConfig(input: any = {}) {
   // connects — a separate transport with separate server-side guards (Host/
   // Origin, ws-ticket/token auth). Validating only the HTTP side produced a
   // false-positive "reachable" while the real boot still failed with "Could not
-  // connect to BISEO gateway". Mirror the renderer's connect here so the test
+  // connect to Daat gateway". Mirror the renderer's connect here so the test
   // reflects the full path the app actually uses.
   const wsUrl = await resolveTestWsUrl(baseUrl, authMode, token, { mintTicket: mintGatewayWsTicket })
 
@@ -7963,7 +7963,7 @@ async function spawnPoolBackend(profile, entry) {
   const webDist = resolveWebDist()
   const readyFile = backend.readyFile ? makeDashboardReadyFile() : null
 
-  rememberLog(`Starting BISEO backend for profile "${profile}" via ${backend.label}`)
+  rememberLog(`Starting Daat backend for profile "${profile}" via ${backend.label}`)
 
   const child = spawn(
     backend.command,
@@ -8004,17 +8004,17 @@ async function spawnPoolBackend(profile, entry) {
   })
 
   child.once('error', error => {
-    rememberLog(`BISEO backend for profile "${profile}" failed to start: ${error.message}`)
+    rememberLog(`Daat backend for profile "${profile}" failed to start: ${error.message}`)
     backendPool.delete(profile)
     rejectStart?.(error)
   })
   child.once('exit', (code, signal) => {
-    rememberLog(`BISEO backend for profile "${profile}" exited (${signal || code})`)
+    rememberLog(`Daat backend for profile "${profile}" exited (${signal || code})`)
     backendPool.delete(profile)
 
     if (!ready) {
       rejectStart?.(
-        new Error(`BISEO backend for profile "${profile}" exited before it became ready (${signal || code}).`)
+        new Error(`Daat backend for profile "${profile}" exited before it became ready (${signal || code}).`)
       )
     }
   })
@@ -8034,7 +8034,7 @@ async function spawnPoolBackend(profile, entry) {
 
   const authToken = await adoptServedDashboardToken(baseUrl, token, {
     childAlive: () => child.exitCode === null && !child.killed,
-    label: `BISEO backend for profile "${profile}"`,
+    label: `Daat backend for profile "${profile}"`,
     rememberLog
   })
 
@@ -8143,7 +8143,7 @@ async function startHermes() {
   // E2E: simulate a boot failure without breaking the real backend. The boot
   // progresses a few steps, then fails with the given error message.
   if (BOOT_FAKE_ERROR) {
-    await advanceBootProgress('backend.resolve', 'Resolving BISEO backend', 8)
+    await advanceBootProgress('backend.resolve', 'Resolving Daat backend', 8)
     const error = new Error(BOOT_FAKE_ERROR) as any
     error.isBootstrapFailure = true
     bootstrapFailure = error
@@ -8165,11 +8165,11 @@ async function startHermes() {
 
   const connectionPromise = (async () => {
     const connectRemote = async remote => {
-      await advanceBootProgress('backend.remote', `Connecting to remote BISEO backend at ${remote.baseUrl}`, 24)
+      await advanceBootProgress('backend.remote', `Connecting to remote Daat backend at ${remote.baseUrl}`, 24)
       await waitForHermes(remote.baseUrl, remote.token, undefined, remote.authMode)
       updateBootProgress({
         phase: 'backend.ready',
-        message: 'Remote BISEO backend is ready',
+        message: 'Remote Daat backend is ready',
         progress: 94,
         running: true,
         error: null
@@ -8190,7 +8190,7 @@ async function startHermes() {
       }
     }
 
-    await advanceBootProgress('backend.resolve', 'Resolving BISEO backend', 8)
+    await advanceBootProgress('backend.resolve', 'Resolving Daat backend', 8)
     // Resolve for the desktop's primary profile so a per-profile remote
     // override on the active profile is honored (falls back to env / global).
     const token = crypto.randomBytes(32).toString('base64url')
@@ -8211,7 +8211,7 @@ async function startHermes() {
       connectRemote,
       ensureLocalRuntime: ensureRuntime,
       prepareLocalBackend: async () => {
-        await advanceBootProgress('backend.runtime', 'Resolving BISEO runtime', 28)
+        await advanceBootProgress('backend.runtime', 'Resolving Daat runtime', 28)
 
         return resolveHermesBackend(backendArgs)
       },
@@ -8239,8 +8239,8 @@ async function startHermes() {
     const webDist = resolveWebDist()
     const readyFile = backend.readyFile ? makeDashboardReadyFile() : null
 
-    await advanceBootProgress('backend.spawn', `Starting BISEO backend via ${backend.label}`, 84)
-    rememberLog(`Starting BISEO backend via ${backend.label}`)
+    await advanceBootProgress('backend.spawn', `Starting Daat backend via ${backend.label}`, 84)
+    rememberLog(`Starting Daat backend via ${backend.label}`)
 
     const hermesProcess = spawn(
       backend.command,
@@ -8276,7 +8276,7 @@ async function startHermes() {
 
     if (!processOwner) {
       stopBackendChild(hermesProcess)
-      throw new Error('BISEO backend start was superseded by a newer connection attempt.')
+      throw new Error('Daat backend start was superseded by a newer connection attempt.')
     }
 
     hermesProcess.stdout.on('data', rememberLog)
@@ -8290,17 +8290,17 @@ async function startHermes() {
 
     hermesProcess.once('error', error => {
       if (!backendConnectionState.clearForCurrentProcess(processOwner)) {
-        rememberLog(`Ignoring stale BISEO backend error: ${error.message}`)
-        rejectBackendStart?.(new Error('BISEO backend start was superseded by a newer connection attempt.'))
+        rememberLog(`Ignoring stale Daat backend error: ${error.message}`)
+        rejectBackendStart?.(new Error('Daat backend start was superseded by a newer connection attempt.'))
 
         return
       }
 
-      rememberLog(`BISEO backend failed to start: ${error.message}`)
+      rememberLog(`Daat backend failed to start: ${error.message}`)
       updateBootProgress(
         {
           error: error.message,
-          message: `BISEO backend failed to start: ${error.message}`,
+          message: `Daat backend failed to start: ${error.message}`,
           phase: 'backend.error',
           running: false
         },
@@ -8311,20 +8311,20 @@ async function startHermes() {
     })
     hermesProcess.once('exit', (code, signal) => {
       if (!backendConnectionState.clearForCurrentProcess(processOwner)) {
-        rememberLog(`Ignoring stale BISEO backend exit (${signal || code})`)
+        rememberLog(`Ignoring stale Daat backend exit (${signal || code})`)
 
         if (!backendReady) {
-          rejectBackendStart?.(new Error('BISEO backend start was superseded by a newer connection attempt.'))
+          rejectBackendStart?.(new Error('Daat backend start was superseded by a newer connection attempt.'))
         }
 
         return
       }
 
-      rememberLog(`BISEO backend exited (${signal || code})`)
+      rememberLog(`Daat backend exited (${signal || code})`)
       sendBackendExit({ code, signal })
 
       if (!backendReady) {
-        const message = `BISEO backend exited before it became ready (${signal || code}).`
+        const message = `Daat backend exited before it became ready (${signal || code}).`
         updateBootProgress(
           {
             error: message,
@@ -8336,13 +8336,13 @@ async function startHermes() {
         )
         rejectBackendStart?.(
           new Error(
-            `BISEO backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
+            `Daat backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
           )
         )
       }
     })
 
-    await advanceBootProgress('backend.port', 'Waiting for BISEO backend to launch', 86)
+    await advanceBootProgress('backend.port', 'Waiting for Daat backend to launch', 86)
 
     // Discover the ephemeral port the child bound to
     const port = await Promise.race([
@@ -8355,7 +8355,7 @@ async function startHermes() {
     }
 
     const baseUrl = `http://127.0.0.1:${port}`
-    await advanceBootProgress('backend.wait', 'Waiting for BISEO backend to become ready', 90)
+    await advanceBootProgress('backend.wait', 'Waiting for Daat backend to become ready', 90)
     await Promise.race([waitForHermes(baseUrl, token), backendStartFailed])
     backendReady = true
     backendStartFailure = null
@@ -8367,7 +8367,7 @@ async function startHermes() {
 
     updateBootProgress({
       phase: 'backend.ready',
-      message: 'BISEO backend is ready. Finalizing desktop startup',
+      message: 'Daat backend is ready. Finalizing desktop startup',
       progress: 94,
       running: true,
       error: null
@@ -8500,7 +8500,7 @@ function spawnSecondaryWindow({ sessionId, watch }: { sessionId?: string; watch?
     height: SESSION_WINDOW_MIN_HEIGHT,
     minWidth: SESSION_WINDOW_MIN_WIDTH,
     minHeight: SESSION_WINDOW_MIN_HEIGHT,
-    title: 'BISEO',
+    title: 'Daat',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -8585,7 +8585,7 @@ function createInstanceWindow() {
     ...nextInstanceBounds(),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'BISEO',
+    title: 'Daat',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -8627,7 +8627,7 @@ function createInstanceWindow() {
 
 // The pet overlay: a single transparent, frameless, always-on-top window that
 // hosts ONLY the floating mascot. Shift-clicking the in-window pet "pops it out"
-// here so it can leave the app's bounds and stay visible while BISEO is
+// here so it can leave the app's bounds and stay visible while Daat is
 // minimized (Codex-style task-completion glance). It carries no gateway
 // connection of its own — the main renderer is the single source of truth and
 // pushes pet state over IPC (hermes:pet-overlay:state); the overlay just renders
@@ -8659,7 +8659,7 @@ function spawnPetOverlayWindow(bounds) {
     // taskbar/alt-tab entry. On macOS, cmd-tab is app-level and this can make
     // the whole app look like it vanished when the only newly-created visible
     // window is a frameless overlay. Use NSPanel + Mission Control hiding below
-    // instead, leaving the main BISEO app as the Dock/cmd-tab anchor.
+    // instead, leaving the main Daat app as the Dock/cmd-tab anchor.
     skipTaskbar: !IS_MAC,
     hasShadow: false,
     alwaysOnTop: true,
@@ -8669,7 +8669,7 @@ function spawnPetOverlayWindow(bounds) {
     hiddenInMissionControl: IS_MAC,
     // Non-activating: the overlay must never become the app's key/main window,
     // or it (a frameless, taskbar-skipping panel) becomes the app's switcher
-    // anchor and the BISEO icon drops out of cmd/alt-tab — especially when the
+    // anchor and the Daat icon drops out of cmd/alt-tab — especially when the
     // main window is minimized. We flip this on only while the composer needs
     // the keyboard (see hermes:pet-overlay:set-focusable).
     focusable: false,
@@ -8698,7 +8698,7 @@ function spawnPetOverlayWindow(bounds) {
   try {
     // Electron docs: macOS may transform process type on each
     // setVisibleOnAllWorkspaces() call unless skipTransformProcessType=true,
-    // which briefly hides the Dock/cmd-tab presence. Keep BISEO in the normal
+    // which briefly hides the Dock/cmd-tab presence. Keep Daat in the normal
     // ForegroundApplication class so shift-clicking the pet never drops the app
     // out of app switchers.
     win.setVisibleOnAllWorkspaces(
@@ -8978,7 +8978,7 @@ function createWindow() {
     ...computeWindowOptions(savedWindowState, screen.getAllDisplays()),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'BISEO',
+    title: 'Daat',
     // Frameless title bar on every platform so the renderer can paint the
     // "hide sidebar" button (and other left-side titlebar tools) flush with
     // the top edge — matching the macOS layout where the traffic lights sit
@@ -9202,7 +9202,7 @@ ipcMain.handle('hermes:connection', async (_event, profile) => ensureBackend(pro
 // so the 'exit'/'error' handlers that would clear a dead connection promise never
 // fire — once the remote becomes unreachable across a sleep/wake the renderer
 // re-dials the same dead descriptor forever and the composer stays stuck on
-// "Starting BISEO…". Before the renderer's backoff loop reconnects, it asks us
+// "Starting Daat…". Before the renderer's backoff loop reconnects, it asks us
 // to confirm the cached PRIMARY backend is still reachable; if a remote one is
 // not, we drop the cache so the next getConnection() rebuilds it. Local backends
 // self-heal via their child 'exit' handler, so we never touch them here.
@@ -9612,7 +9612,7 @@ ipcMain.handle('hermes:connection-config:oauth-logout', async (_event, rawUrl) =
   return { ok: true, connected }
 })
 
-// --- BISEO Cloud (cloud-auto-discovery Phase 3) ---
+// --- Daat Cloud (cloud-auto-discovery Phase 3) ---
 // One portal login in the OAuth partition powers both discovery and the silent
 // per-agent cascade. See the discovery/cascade helpers above.
 ipcMain.handle('hermes:cloud:status', async () => ({
@@ -10037,7 +10037,7 @@ ipcMain.handle('hermes:notify', (_event, payload) => {
   const actions = Array.isArray(payload?.actions) ? payload.actions : []
 
   const notification = new Notification({
-    title: payload?.title || 'BISEO',
+    title: payload?.title || 'Daat',
     body: payload?.body || '',
     silent: Boolean(payload?.silent),
     actions: actions.map(action => ({ type: 'button', text: String(action?.text || '') }))
@@ -10610,7 +10610,7 @@ function terminalShellEnv() {
 
   // Strip color/theme-detection vars that ride along when Electron is launched
   // from a non-tty agent shell (Cursor's runner sets NO_COLOR/FORCE_COLOR=0
-  // /TERM=dumb; some terminals set COLORFGBG which would flip BISEO' TUI into
+  // /TERM=dumb; some terminals set COLORFGBG which would flip Daat' TUI into
   // light-mode). Our PTY is a real xterm-compat terminal — force truecolor.
   delete env.NO_COLOR
   delete env.FORCE_COLOR
@@ -10619,7 +10619,7 @@ function terminalShellEnv() {
   env.COLORTERM = 'truecolor'
   env.LC_CTYPE = env.LC_CTYPE || 'UTF-8'
   env.TERM = 'xterm-256color'
-  env.TERM_PROGRAM = 'BISEO'
+  env.TERM_PROGRAM = 'Daat'
   env.TERM_PROGRAM_VERSION = app.getVersion()
 
   // Let a hermes/--tui launched in this pane know it's embedded in the desktop
@@ -11027,9 +11027,9 @@ ipcMain.handle('hermes:updates:branch:set', async (_event, name) => {
   return { branch }
 })
 
-// Resolve the canonical BISEO version (the one `release.py` bumps in
+// Resolve the canonical Daat version (the one `release.py` bumps in
 // hermes_cli/__init__.py + pyproject.toml) so the desktop About panel shows the
-// real BISEO version instead of the Electron app's own package.json version,
+// real Daat version instead of the Electron app's own package.json version,
 // which historically drifted (stuck at 0.0.2). Falls back to app.getVersion()
 // when the source tree can't be read (e.g. a packaged build without the repo).
 function resolveHermesVersion() {
@@ -11052,7 +11052,7 @@ function resolveHermesVersion() {
   return app.getVersion()
 }
 
-// Re-resolve the live BISEO version and push it into the native About panel
+// Re-resolve the live Daat version and push it into the native About panel
 // just before showing it, so an in-place `hermes update` is reflected without
 // an app restart. macOS only — `showAboutPanel()` is a no-op elsewhere, and the
 // other platforms don't use this menu item.
@@ -11181,7 +11181,7 @@ async function runDesktopUninstall(mode) {
     return {
       ok: false,
       error: 'agent-missing',
-      message: `Can't run the uninstaller: no BISEO agent venv at ${VENV_ROOT}.`
+      message: `Can't run the uninstaller: no Daat agent venv at ${VENV_ROOT}.`
     }
   }
 
@@ -11301,7 +11301,7 @@ ipcMain.handle('hermes:vscode-theme:search', async (_event, query) => searchMark
 // running app's chat composer. Three delivery paths: macOS 'open-url',
 // Win/Linux running-app 'second-instance' (argv), Win/Linux cold-start argv.
 // ---------------------------------------------------------------------------
-const HERMES_PROTOCOL = 'biseo'
+const HERMES_PROTOCOL = 'daat'
 let _pendingDeepLink = null
 let _rendererReadyForDeepLink = false
 
@@ -11580,7 +11580,7 @@ app.on('before-quit', event => {
   closePetOverlay()
 
   // Same for the Quick Entry composer — and release its global accelerator so a
-  // quitting BISEO never keeps another app's chord hostage.
+  // quitting Daat never keeps another app's chord hostage.
   closeQuickEntryWindow()
 
   // Quitting mid-install should stop the installer, not orphan it.

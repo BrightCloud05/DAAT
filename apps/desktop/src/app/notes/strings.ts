@@ -1,10 +1,10 @@
 /**
- * Strings for BISEO's own screens (notes, home, todo, calendar, money, mail,
+ * Strings for Daat's own screens (notes, home, todo, calendar, money, mail,
  * first run).
  *
  * Deliberately separate from `src/i18n/*`: that catalogue is ~2,900 lines of
  * inherited Hermes UI, and adding a locale there means translating all of it
- * before a single BISEO screen changes language. These screens are ours, they
+ * before a single Daat screen changes language. These screens are ours, they
  * are what a buyer actually reads, and keeping them here also keeps upstream
  * merges from fighting over one enormous file.
  *
@@ -61,9 +61,9 @@ const EN = {
   noNotesYet: 'Nothing yet — ⌘N creates your first page.',
   inboxEmpty: 'Inbox is empty.',
   connect: 'Connect',
-  connectMailHint: 'Connect an account and BISEO can read, sort and draft replies.',
-  moneyHint: 'Drop a bank statement photo in Money and BISEO files the transactions.',
-  meetingsHint: 'Record a meeting and BISEO transcribes it here and writes up the action items.',
+  connectMailHint: 'Connect an account and Daat can read, sort and draft replies.',
+  moneyHint: 'Drop a bank statement photo in Money and Daat files the transactions.',
+  meetingsHint: 'Record a meeting and Daat transcribes it here and writes up the action items.',
   unreadCount: (count: number) => `${count} unread`,
   openCount: (count: number) => `${count} open`,
 
@@ -78,11 +78,11 @@ const EN = {
   conflictNotice: 'This note changed elsewhere — your edits were saved as a conflict copy.',
   invalidYaml: "This note's properties aren't valid YAML — edit the block at the top of the note to fix it.",
   notAPropertyList: "This note's frontmatter isn't a property list.",
-  saveFailed: (reason: string) => `Couldn't save this note — ${reason}. Your text is still here and BISEO keeps retrying.`,
+  saveFailed: (reason: string) => `Couldn't save this note — ${reason}. Your text is still here and Daat keeps retrying.`,
   retryNow: 'Retry now',
 
   // First run
-  onboardingQuestion: 'What will you use BISEO for?',
+  onboardingQuestion: 'What will you use Daat for?',
   onboardingSubtitle:
     'This sets up a few pages and how the assistant talks to you. You can change it any time.',
   notesLiveHere: 'Your notes live here',
@@ -117,7 +117,7 @@ const EN = {
   // Money
   dropStatement: 'Drop a bank statement here',
   dropStatementHint:
-    'A photo, a screenshot or a PDF. BISEO reads it, extracts every transaction, shows you the list, and files it into this month’s note. Duplicates are skipped, so re-importing is safe.',
+    'A photo, a screenshot or a PDF. Daat reads it, extracts every transaction, shows you the list, and files it into this month’s note. Duplicates are skipped, so re-importing is safe.',
   moneyIn: 'In',
   moneyOut: 'Out',
   moneyNet: 'Net',
@@ -133,10 +133,10 @@ const EN = {
   meetingTitlePlaceholder: 'What is this meeting? (optional)',
   recordingHint:
     'Audio is saved into your vault next to the note and transcribed on this Mac — nothing is uploaded. Tell the room you are recording.',
-  noMeetingsYet: 'No meetings yet. Record one and BISEO writes up the summary and action items.',
+  noMeetingsYet: 'No meetings yet. Record one and Daat writes up the summary and action items.',
 
   // AI setup conversation
-  settingUpTitle: 'Setting up with BISEO',
+  settingUpTitle: 'Setting up with Daat',
   imDone: "I'm done",
   setupPlaceholder: 'Type your answer…',
   dropAnything: 'You can also drop a timetable, a PDF or a photo anywhere on this window.',
@@ -196,9 +196,9 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   noNotesYet: '아직 노트가 없습니다 — ⌘N 으로 첫 페이지를 만들어 보세요.',
   inboxEmpty: '받은 편지함이 비어 있습니다.',
   connect: '연결하기',
-  connectMailHint: '계정을 연결하면 BISEO가 메일을 읽고 정리하고 답장 초안까지 써 줍니다.',
-  moneyHint: '가계부 화면에 은행 명세서 사진을 올리면 BISEO가 거래 내역을 정리합니다.',
-  meetingsHint: '회의를 녹음하면 BISEO가 텍스트로 옮기고 할 일까지 정리해 줍니다.',
+  connectMailHint: '계정을 연결하면 Daat가 메일을 읽고 정리하고 답장 초안까지 써 줍니다.',
+  moneyHint: '가계부 화면에 은행 명세서 사진을 올리면 Daat가 거래 내역을 정리합니다.',
+  meetingsHint: '회의를 녹음하면 Daat가 텍스트로 옮기고 할 일까지 정리해 줍니다.',
   unreadCount: (count: number) => `읽지 않음 ${count}개`,
   openCount: (count: number) => `${count}개 남음`,
 
@@ -216,7 +216,7 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
     `노트를 저장하지 못했습니다 — ${reason}. 입력한 내용은 그대로 있고 계속 다시 시도합니다.`,
   retryNow: '다시 시도',
 
-  onboardingQuestion: 'BISEO를 어떤 일에 사용하시나요?',
+  onboardingQuestion: 'Daat를 어떤 일에 사용하시나요?',
   onboardingSubtitle: '선택에 맞춰 몇 개의 페이지와 assistant의 말투를 설정합니다. 나중에 언제든 바꿀 수 있습니다.',
   notesLiveHere: '노트가 저장되는 곳',
   notesLiveHereSubtitle:
@@ -246,7 +246,7 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
 
   dropStatement: '은행 명세서를 여기에 올려놓으세요',
   dropStatementHint:
-    '사진, 스크린샷, PDF 모두 됩니다. BISEO가 읽어서 거래 내역을 뽑아 보여주고 이번 달 노트에 정리합니다. 중복은 건너뛰니 다시 올려도 안전합니다.',
+    '사진, 스크린샷, PDF 모두 됩니다. Daat가 읽어서 거래 내역을 뽑아 보여주고 이번 달 노트에 정리합니다. 중복은 건너뛰니 다시 올려도 안전합니다.',
   moneyIn: '수입',
   moneyOut: '지출',
   moneyNet: '합계',
@@ -261,9 +261,9 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   meetingTitlePlaceholder: '어떤 회의인가요? (선택)',
   recordingHint:
     '녹음 파일은 노트 옆 볼트에 저장되고 이 Mac에서 바로 텍스트로 변환됩니다 — 외부로 전송되지 않습니다. 참석자에게 녹음 사실을 알려 주세요.',
-  noMeetingsYet: '아직 회의록이 없습니다. 녹음하면 BISEO가 요약과 할 일을 정리해 줍니다.',
+  noMeetingsYet: '아직 회의록이 없습니다. 녹음하면 Daat가 요약과 할 일을 정리해 줍니다.',
 
-  settingUpTitle: 'BISEO와 함께 설정하기',
+  settingUpTitle: 'Daat와 함께 설정하기',
   imDone: '다 됐어요',
   setupPlaceholder: '답을 입력하세요…',
   dropAnything: '시간표, PDF, 사진을 이 창 아무 데나 끌어다 놓아도 됩니다.',

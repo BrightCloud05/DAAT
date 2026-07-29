@@ -75,10 +75,10 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
           'flex h-full max-h-[42rem] w-full max-w-[40rem] flex-col rounded-2xl border transition-colors',
           dragging ? 'border-(--dt-primary)' : 'border-(--stroke-nous)'
         )}
-        style={{ animation: 'biseo-lift 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both' }}
+        style={{ animation: 'daat-lift 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both' }}
       >
         <div className="flex shrink-0 items-center gap-2.5 border-b border-(--stroke-nous) px-5 py-3.5">
-          <BrandMark className="size-[22px] rounded-[6px]" />
+          <BrandMark className="size-[22px]" />
           <span className="text-[13px] font-semibold">{s.settingUpTitle}</span>
           <button
             className="ml-auto rounded-md px-2 py-1 text-[12.5px] opacity-45 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-90"
@@ -126,7 +126,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
             <div className="flex items-center gap-2 text-[13px] opacity-55">
               <span
                 className="size-1.5 rounded-full bg-(--dt-primary)"
-                style={{ animation: 'biseo-pulse 1.2s ease-in-out infinite' }}
+                style={{ animation: 'daat-pulse 1.2s ease-in-out infinite' }}
               />
               {setup.activity}
             </div>

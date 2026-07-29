@@ -20,7 +20,7 @@ const DESKTOP_ROOT = path.resolve(import.meta.dirname, '..')
 const realHome = process.env.PROBE_HOME
 const realVault = process.env.PROBE_VAULT
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'biseo-probe-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'daat-probe-'))
 const home = realHome || path.join(tmp, 'home')
 const vault = realVault || path.join(tmp, 'vault')
 
@@ -61,8 +61,8 @@ await page.waitForTimeout(2500)
 await page.evaluate(() => {
   localStorage.setItem('hermes-desktop-onboarded-v1', '1')
   localStorage.setItem('hermes-onboarding-skipped-v1', '1')
-  // BISEO's own first-run wizard (scripts/probe-onboarding.mjs covers it).
-  localStorage.setItem('biseo.onboarded.v1', '1')
+  // Daat's own first-run wizard (scripts/probe-onboarding.mjs covers it).
+  localStorage.setItem('daat.onboarded.v1', '1')
 })
 await page.reload()
 await page.waitForTimeout(9000)
@@ -71,7 +71,7 @@ const report = await page.evaluate(async () => {
   const out = {}
 
   out.url = location.href
-  out.uiMode = localStorage.getItem('biseo.desktop.uiMode.v1')
+  out.uiMode = localStorage.getItem('daat.desktop.uiMode.v1')
   out.hasVaultBridge = Boolean(window.hermesDesktop?.vault)
 
   try {

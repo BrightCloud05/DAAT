@@ -23,7 +23,7 @@ MAX_WALK_ENTRIES = 20_000
 
 # Folders that exist for the app, not the user. Listing or searching them
 # surfaces deleted notes and app state as if they were real content.
-SKIP_DIRS = {".trash", ".obsidian", ".biseo", ".git", ".stversions", "node_modules"}
+SKIP_DIRS = {".trash", ".obsidian", ".daat", ".git", ".stversions", "node_modules"}
 
 # Captured at import (backend start). A bridge file older than this is a
 # leftover from a previous run and must not outrank the env the desktop
@@ -32,7 +32,7 @@ _STARTED_AT = time.time()
 
 
 def _bridge_file() -> Path:
-    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".biseo")
+    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".daat")
 
     return Path(home) / "state" / "vault-context.json"
 
@@ -94,7 +94,7 @@ def _vault_root() -> Path | None:
 def _no_vault() -> str:
     return (
         "No vault is connected (VAULT_PATH unset). Ask the user to open or create "
-        "a vault in BISEO first."
+        "a vault in Daat first."
     )
 
 
@@ -125,7 +125,7 @@ def _backup_existing(target: Path, rel: str) -> str | None:
     except OSError:
         return None
 
-    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".biseo")
+    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".daat")
     folder = Path(home) / "state" / "vault-backups"
     folder.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")

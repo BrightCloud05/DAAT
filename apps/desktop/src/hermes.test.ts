@@ -31,7 +31,7 @@ const emptySessionsResponse = {
   total: 0
 }
 
-describe('BISEO REST helpers', () => {
+describe('Daat REST helpers', () => {
   let api: ReturnType<typeof vi.fn>
 
   beforeEach(() => {

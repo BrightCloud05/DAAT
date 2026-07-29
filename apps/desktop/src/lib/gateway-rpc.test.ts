@@ -10,7 +10,7 @@ describe('isMissingRpcMethod', () => {
   })
 
   it('ignores unrelated failures', () => {
-    expect(isMissingRpcMethod(new Error('BISEO gateway is not connected'))).toBe(false)
+    expect(isMissingRpcMethod(new Error('Daat gateway is not connected'))).toBe(false)
     expect(isMissingRpcMethod(new Error('no such project'))).toBe(false)
   })
 })

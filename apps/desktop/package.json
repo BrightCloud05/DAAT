@@ -1,10 +1,10 @@
 {
-  "name": "biseo",
-  "productName": "BISEO",
+  "name": "daat",
+  "productName": "Daat",
   "private": true,
   "version": "0.17.0",
-  "description": "BISEO \u2014 AI second brain with a markdown vault.",
-  "author": "BISEO",
+  "description": "Daat \u2014 AI second brain with a markdown vault.",
+  "author": "Daat",
   "type": "module",
   "main": "dist/electron-main.mjs",
   "engines": {
@@ -182,18 +182,18 @@
   },
   "build": {
     "electronVersion": "40.10.2",
-    "appId": "com.tax123.biseo",
-    "productName": "BISEO",
-    "executableName": "BISEO",
+    "appId": "com.tax123.daat",
+    "productName": "Daat",
+    "executableName": "Daat",
     "protocols": [
       {
-        "name": "BISEO Protocol",
+        "name": "Daat Protocol",
         "schemes": [
-          "biseo"
+          "daat"
         ]
       }
     ],
-    "artifactName": "BISEO-${version}-${os}-${arch}.${ext}",
+    "artifactName": "Daat-${version}-${os}-${arch}.${ext}",
     "icon": "assets/icon",
     "directories": {
       "output": "release"
@@ -231,11 +231,11 @@
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
       "extendInfo": {
-        "CFBundleDisplayName": "BISEO",
-        "CFBundleExecutable": "BISEO",
-        "CFBundleName": "BISEO",
-        "NSAudioCaptureUsageDescription": "BISEO uses audio capture for voice conversations.",
-        "NSMicrophoneUsageDescription": "BISEO records meetings you start yourself, and transcribes them on this Mac."
+        "CFBundleDisplayName": "Daat",
+        "CFBundleExecutable": "Daat",
+        "CFBundleName": "Daat",
+        "NSAudioCaptureUsageDescription": "Daat uses audio capture for voice conversations.",
+        "NSMicrophoneUsageDescription": "Daat records meetings you start yourself, and transcribes them on this Mac."
       },
       "hardenedRuntime": true,
       "target": [
@@ -244,7 +244,7 @@
       ]
     },
     "dmg": {
-      "title": "Install BISEO",
+      "title": "Install Daat",
       "backgroundColor": "#f5f5f7",
       "iconSize": 96,
       "window": {
@@ -266,7 +266,7 @@
       ]
     },
     "win": {
-      "legalTrademarks": "BISEO",
+      "legalTrademarks": "Daat",
       "target": [
         "nsis",
         "msi"
@@ -275,8 +275,8 @@
     },
     "linux": {
       "category": "Office",
-      "maintainer": "BISEO <tax123au@gmail.com>",
-      "synopsis": "BISEO desktop app.",
+      "maintainer": "Daat <tax123au@gmail.com>",
+      "synopsis": "Daat desktop app.",
       "target": [
         "AppImage",
         "deb",
@@ -287,10 +287,10 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "shortcutName": "BISEO",
-      "uninstallDisplayName": "BISEO",
+      "shortcutName": "Daat",
+      "uninstallDisplayName": "Daat",
       "warningsAsErrors": false
     },
-    "copyright": "Copyright \u00a9 2026 BISEO"
+    "copyright": "Copyright \u00a9 2026 Daat"
   }
 }

@@ -36,7 +36,7 @@ def _fmt_envelope(env: dict[str, Any]) -> str:
 def mail_accounts() -> str:
     if not himalaya.available():
         return (
-            "Email isn't connected yet. BISEO uses the Himalaya CLI; ask the user to connect an "
+            "Email isn't connected yet. Daat uses the Himalaya CLI; ask the user to connect an "
             "account in Settings → Mail."
         )
 

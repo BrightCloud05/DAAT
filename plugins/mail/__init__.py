@@ -1,8 +1,8 @@
-"""BISEO mail plugin — email through the Himalaya CLI.
+"""Daat mail plugin — email through the Himalaya CLI.
 
 Read/search/organize run directly; `mail_send` always goes through the human
 approval gate (never sends unattended). Credentials stay in Himalaya's own
-config; BISEO never sees a password.
+config; Daat never sees a password.
 """
 
 from __future__ import annotations

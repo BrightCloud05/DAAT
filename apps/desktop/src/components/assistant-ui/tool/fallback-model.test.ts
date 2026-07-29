@@ -96,16 +96,16 @@ describe('buildToolView web-search query', () => {
   it('keeps the query separate from structured search results', () => {
     const view = buildToolView(
       part({
-        args: { query: 'BISEO Agent Desktop tool calls' },
-        result: { web: [{ snippet: 'Desktop docs', title: 'BISEO docs', url: 'https://example.com/docs' }] },
+        args: { query: 'Daat Agent Desktop tool calls' },
+        result: { web: [{ snippet: 'Desktop docs', title: 'Daat docs', url: 'https://example.com/docs' }] },
         toolName: 'web_search'
       }),
       ''
     )
 
-    expect(view.searchQuery).toBe('BISEO Agent Desktop tool calls')
+    expect(view.searchQuery).toBe('Daat Agent Desktop tool calls')
     expect(view.searchHits).toEqual([
-      { snippet: 'Desktop docs', title: 'BISEO docs', url: 'https://example.com/docs' }
+      { snippet: 'Desktop docs', title: 'Daat docs', url: 'https://example.com/docs' }
     ])
   })
 })

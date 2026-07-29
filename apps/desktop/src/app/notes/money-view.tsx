@@ -1,6 +1,6 @@
 /**
  * Money screen — the ledger the agent fills in. Drop a bank statement
- * (image/PDF) anywhere on this screen and BISEO extracts the transactions
+ * (image/PDF) anywhere on this screen and Daat extracts the transactions
  * into the month's markdown table; the table stays a plain file the user
  * can edit by hand.
  */

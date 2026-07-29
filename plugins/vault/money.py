@@ -60,7 +60,7 @@ def money_add_transactions(rows_json: str, source: str = "") -> str:
     root = _vault_root()
 
     if not root:
-        return "No vault is connected — ask the user to open a vault in BISEO first."
+        return "No vault is connected — ask the user to open a vault in Daat first."
 
     try:
         rows = json.loads(rows_json) if isinstance(rows_json, str) else rows_json

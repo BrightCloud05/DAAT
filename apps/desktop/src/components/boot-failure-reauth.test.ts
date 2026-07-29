@@ -106,7 +106,7 @@ describe('isRemoteReauthError', () => {
   })
 
   it('ignores non-auth boot errors and nullish', () => {
-    expect(isRemoteReauthError('BISEO background process exited during startup.')).toBe(false)
+    expect(isRemoteReauthError('Daat background process exited during startup.')).toBe(false)
     expect(isRemoteReauthError(null)).toBe(false)
   })
 })

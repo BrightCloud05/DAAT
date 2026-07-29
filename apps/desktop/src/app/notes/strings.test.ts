@@ -22,7 +22,7 @@ test('the product follows the app language setting', () => {
 })
 
 test('locales this catalogue has no translation for stay English', () => {
-  // ja/zh/ar users get English BISEO screens rather than a broken mix.
+  // ja/zh/ar users get English Daat screens rather than a broken mix.
   for (const locale of ['ja', 'zh', 'zh-hant', 'ar'] as const) {
     syncProductLocale(locale)
     assert.equal($productLocale.get(), 'en', `${locale} must fall back to English`)

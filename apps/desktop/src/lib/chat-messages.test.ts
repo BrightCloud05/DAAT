@@ -166,7 +166,7 @@ describe('toChatMessages', () => {
     // How a turn sent to a natively-vision-capable model comes back out of the
     // session store: a backtick-quoted ref (the path has spaces) and the
     // `[screenshot]` stand-in left by flattening the parts list.
-    const ref = '@image:`/Users/me/Library/Application Support/BISEO/composer-images/a.png`'
+    const ref = '@image:`/Users/me/Library/Application Support/Daat/composer-images/a.png`'
 
     const [message] = toChatMessages([
       {

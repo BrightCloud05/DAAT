@@ -1,5 +1,5 @@
 /**
- * Home dashboard — implementation of "BISEO Home.dc.html" (design 1a).
+ * Home dashboard — implementation of "Daat Home.dc.html" (design 1a).
  *
  * Every card reads the user's real files: tasks and dates out of their
  * notes, mail from their own account, money from the month's ledger note.
@@ -266,7 +266,7 @@ export function HomeView() {
             background:
               'conic-gradient(from 210deg at 30% 20%, rgba(0,122,255,0.55), rgba(90,200,250,0.42), rgba(191,90,242,0.40), rgba(255,159,10,0.26), rgba(0,122,255,0.55))',
             boxShadow: '0 18px 40px -22px rgba(0,60,140,0.35)',
-            animation: 'biseo-lift 200ms ease-out both'
+            animation: 'daat-lift 200ms ease-out both'
           }}
         >
           <div className="flex flex-col gap-4 rounded-xl bg-(--dt-card) px-[26px] py-6">
@@ -296,7 +296,7 @@ export function HomeView() {
               )}
               <span
                 className="ml-[3px] inline-block h-[18px] w-[2px] align-[-3px]"
-                style={{ backgroundColor: 'var(--dt-primary)', animation: 'biseo-caret 1.1s steps(1) infinite' }}
+                style={{ backgroundColor: 'var(--dt-primary)', animation: 'daat-caret 1.1s steps(1) infinite' }}
               />
             </p>
             <div className="flex items-center gap-2">
@@ -312,7 +312,7 @@ export function HomeView() {
         </div>
 
         {/* Widget grid. */}
-        <div className="grid grid-cols-3 gap-4" style={{ animation: 'biseo-lift 200ms ease-out 30ms both' }}>
+        <div className="grid grid-cols-3 gap-4" style={{ animation: 'daat-lift 200ms ease-out 30ms both' }}>
           {/* Todo — real, checkboxes work. */}
           <div className={CARD}>
             <div className="flex items-baseline">

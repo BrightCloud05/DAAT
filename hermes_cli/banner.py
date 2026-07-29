@@ -120,8 +120,8 @@ _UPDATE_CHECK_CACHE_SECONDS = 6 * 3600
 # (e.g. nix-built hermes — no local git history to count against).
 UPDATE_AVAILABLE_NO_COUNT = -1
 
-_UPSTREAM_REPO_URL = "https://github.com/BrightCloud05/BISEO.git"
-_OFFICIAL_REPO_CANONICAL = "github.com/BrightCloud05/BISEO"
+_UPSTREAM_REPO_URL = "https://github.com/BrightCloud05/Daat.git"
+_OFFICIAL_REPO_CANONICAL = "github.com/BrightCloud05/Daat"
 
 
 def _canonical_github_remote(url: str | None) -> str:
@@ -422,7 +422,7 @@ def get_git_banner_state(repo_dir: Optional[Path] = None) -> Optional[dict]:
     return {"upstream": upstream, "local": local, "ahead": max(ahead, 0)}
 
 
-_RELEASE_URL_BASE = "https://github.com/BrightCloud05/BISEO/releases/tag"
+_RELEASE_URL_BASE = "https://github.com/BrightCloud05/Daat/releases/tag"
 _latest_release_cache: Optional[tuple] = None  # (tag, url) once resolved
 
 

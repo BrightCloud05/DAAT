@@ -192,7 +192,7 @@ function shouldPreserveConfiguredOnFallback(runtime: RuntimeReadinessResult, sta
 }
 
 function notifyReady(provider: string) {
-  notify({ kind: 'success', title: 'BISEO is ready', message: `${provider} connected.` })
+  notify({ kind: 'success', title: 'Daat is ready', message: `${provider} connected.` })
 }
 
 // Human-friendly labels for tools auto-routed through the Nous Tool Gateway,
@@ -361,8 +361,8 @@ function providerResolutionFailure(reason: null | string) {
   const detail = reason?.trim()
 
   return detail
-    ? `Connected, but BISEO still cannot resolve a usable provider. ${detail}`
-    : 'Connected, but BISEO still cannot resolve a usable provider.'
+    ? `Connected, but Daat still cannot resolve a usable provider. ${detail}`
+    : 'Connected, but Daat still cannot resolve a usable provider.'
 }
 
 async function refreshProviders() {
@@ -537,7 +537,7 @@ export async function refreshOnboarding(ctx: OnboardingContext) {
       kind: 'error',
       title: 'Runtime not ready',
       message:
-        'BISEO Desktop could not verify the running backend on startup. Some features may be unavailable until the gateway is reachable.'
+        'Daat Desktop could not verify the running backend on startup. Some features may be unavailable until the gateway is reachable.'
     })
 
     return false
@@ -739,7 +739,7 @@ export async function recheckExternalSignin(ctx: OnboardingContext) {
       provider,
       message:
         reason?.trim() ||
-        `BISEO still cannot reach ${provider.name}. Run \`${provider.cli_command}\` in a terminal first.`
+        `Daat still cannot reach ${provider.name}. Run \`${provider.cli_command}\` in a terminal first.`
     })
   )
 }
@@ -854,7 +854,7 @@ export async function saveOnboardingLocalEndpoint(baseUrl: string, apiKey: strin
     if (!runtime.ready) {
       const detail = (runtime.reason ?? '').trim()
 
-      return { ok: false, message: detail || `Saved, but BISEO still cannot reach ${url}.` }
+      return { ok: false, message: detail || `Saved, but Daat still cannot reach ${url}.` }
     }
 
     notifyReady('Local / custom endpoint')

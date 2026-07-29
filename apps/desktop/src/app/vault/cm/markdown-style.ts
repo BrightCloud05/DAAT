@@ -1,7 +1,7 @@
 /**
  * Markdown typography for the vault editor: a HighlightStyle over the lezer
  * markdown tags. Rides the app's design tokens (--ui-*, --dt-*) so every
- * theme — including BISEO Glass — styles the document consistently.
+ * theme — including Daat Glass — styles the document consistently.
  */
 
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'

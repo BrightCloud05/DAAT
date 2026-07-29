@@ -14,8 +14,8 @@ import { getHermesConfigRecord, saveHermesConfig, updateProfileSoul } from '@/he
 import { refreshVaultNotes } from '../vault/store'
 import { PERSONAS, personaById, type Persona, type PersonaId } from './personas'
 
-const PERSONA_KEY = 'biseo.persona.v1'
-const DONE_KEY = 'biseo.onboarded.v1'
+const PERSONA_KEY = 'daat.persona.v1'
+const DONE_KEY = 'daat.onboarded.v1'
 
 export const $persona = atom<Persona | null>(readStoredPersona())
 /** True once the user has been through (or dismissed) the first-run wizard. */
@@ -89,7 +89,7 @@ export async function applyPersona(id: PersonaId): Promise<ApplyPersonaResult> {
   let soulError: string | null = null
 
   try {
-    // "default" is HERMES_HOME itself, so this writes ~/.biseo/SOUL.md.
+    // "default" is HERMES_HOME itself, so this writes ~/.daat/SOUL.md.
     await updateProfileSoul('default', persona.soul)
   } catch (error) {
     // The Python backend may still be starting on first run. The persona is

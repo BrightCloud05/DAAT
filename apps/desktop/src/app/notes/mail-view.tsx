@@ -142,7 +142,7 @@ export function MailView({ onAskAgent }: { onAskAgent?: (prompt: string) => void
         <Codicon name="mail" className="text-3xl opacity-50" />
         <div className="text-[15px] font-semibold">Mail isn't connected yet</div>
         <p className="text-[13px] leading-relaxed opacity-65">
-          BISEO reads and sends mail through Himalaya, a small local mail client. Once it's installed and your account
+          Daat reads and sends mail through Himalaya, a small local mail client. Once it's installed and your account
           is configured, your inbox appears here — and the agent can triage, draft and (with your approval) send.
         </p>
       </div>
@@ -155,8 +155,8 @@ export function MailView({ onAskAgent }: { onAskAgent?: (prompt: string) => void
         <Codicon name="mail" className="text-3xl opacity-50" />
         <div className="text-[15px] font-semibold">No mail account connected</div>
         <p className="text-[13px] leading-relaxed opacity-65">
-          BISEO reads mail through Himalaya, a small open-source IMAP client. Install it and run its account
-          wizard once — BISEO never sees your password.
+          Daat reads mail through Himalaya, a small open-source IMAP client. Install it and run its account
+          wizard once — Daat never sees your password.
         </p>
         <code className="rounded-md bg-(--ui-control-hover-background) px-2 py-1 text-[12px]">
           brew install himalaya && himalaya account configure

@@ -68,7 +68,7 @@ export function OnboardingWizard() {
     <div className="fixed inset-0 z-(--z-onboarding) flex items-center justify-center bg-(--ui-chat-surface-background) p-6">
       <div
         className="flex w-full max-w-[46rem] flex-col"
-        style={{ animation: 'biseo-lift 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both' }}
+        style={{ animation: 'daat-lift 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both' }}
       >
         {step === 'persona' && (
           <>

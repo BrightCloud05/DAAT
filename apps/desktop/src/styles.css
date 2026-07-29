@@ -676,9 +676,9 @@
 /* Interactive list-row hover — the sessions-list interaction, shared by every
    row list (sessions, capabilities, messaging, file trees, timeline): the
    highlight lands instantly on hover-in and fades out over 100ms on leave. */
-/* BISEO Home dashboard motion (design spec 1a): cards fade in and lift 4px,
+/* Daat Home dashboard motion (design spec 1a): cards fade in and lift 4px,
    staggered; the briefing caret is the only looping motion on the screen. */
-@keyframes biseo-lift {
+@keyframes daat-lift {
   from {
     opacity: 0;
     transform: translateY(4px);
@@ -689,7 +689,7 @@
   }
 }
 
-@keyframes biseo-caret {
+@keyframes daat-caret {
   0%,
   45% {
     opacity: 1;
@@ -2039,7 +2039,7 @@ text-* variant utilities. */ .btn-arc {
 
 /* Recording indicator: a slow breath, not a blink — a fast flash reads as an
    error, and this one runs for the length of a whole meeting. */
-@keyframes biseo-pulse {
+@keyframes daat-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }

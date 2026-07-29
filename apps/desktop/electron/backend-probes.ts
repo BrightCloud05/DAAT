@@ -37,7 +37,7 @@ import { execFileSync } from 'node:child_process'
 const PROBE_TIMEOUT_MS = 5000
 
 /**
- * Return the Python snippet used to verify BISEO can import far enough to
+ * Return the Python snippet used to verify Daat can import far enough to
  * launch the CLI. Kept exported for tests so dependency regressions are
  * caught without needing a real broken venv fixture.
  *
@@ -48,7 +48,7 @@ function hermesRuntimeImportProbe() {
 }
 
 /**
- * Return true iff the BISEO runtime import probe exits 0.
+ * Return true iff the Daat runtime import probe exits 0.
  *
  * Used to gate the "fallback to system Python with hermes_cli installed"
  * rung of resolveHermesBackend. Without this, a system Python 3.11-3.13
@@ -107,7 +107,7 @@ function canImportHermesCli(pythonPath: string, opts: { env?: Record<string, str
 /**
  * An explicit desktop backend command is a deployment contract, not a PATH
  * discovery candidate. In particular, the Nix desktop wrapper points this at
- * its immutable, matching BISEO package; it must never fall through to the
+ * its immutable, matching Daat package; it must never fall through to the
  * mutable install-script bootstrap path if a best-effort probe is slow.
  */
 function shouldTrustHermesOverride(hermesOverride?: string) {

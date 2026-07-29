@@ -1,5 +1,5 @@
 /**
- * Acknowledgements — the licences BISEO is obliged to reproduce.
+ * Acknowledgements — the licences Daat is obliged to reproduce.
  *
  * MIT, BSD, ISC and Apache all require their notice to travel with binary
  * copies, and CC-BY (the icon set) requires attribution. Shipping the text in
@@ -36,7 +36,7 @@ export function Acknowledgements() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        BISEO is built on{' '}
+        Daat is built on{' '}
         <button
           className="underline underline-offset-2 hover:opacity-80"
           onClick={() =>

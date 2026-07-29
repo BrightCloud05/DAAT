@@ -4,7 +4,7 @@ Research workflow: 3 parallel web-research agents + synthesis. Source of the v2 
 
 ## Synthesis
 
-# BISEO Product Synthesis: Feature Matrix, v1 Cut, Agent UX, Positioning
+# Daat Product Synthesis: Feature Matrix, v1 Cut, Agent UX, Positioning
 
 ## 1. Merged Feature Matrix
 
@@ -67,14 +67,14 @@ Research basis: Notion AI's most-criticized surface is its Q&A/chat ("limited mo
 ## 4. Positioning + Pricing Line
 
 **Positioning sentence:**
-> **BISEO is the second Notion, built on files you own: Notion's beloved editing on plain local markdown, with an AI agent that can actually use your Mac — the one thing Notion AI can never do.**
+> **Daat is the second Notion, built on files you own: Notion's beloved editing on plain local markdown, with an AI agent that can actually use your Mac — the one thing Notion AI can never do.**
 
 (One-liner variant: "Notion's soul, Obsidian's bones, Claude Code's hands.")
 
 **Free / paid line** — given: Obsidian core is free, Copilot is free-with-BYOK ($12–15 for built-in), Notion AI costs $20+/user, Reflect $10, Capacities Pro $9.99:
 
 - **Free forever:** the entire note app — editor, blocks, properties, views (including v1.5 database views), backlinks, search, daily notes — **plus inline BYOK AI scoped to the vault** (write, summarize, Q&A). Rationale: you cannot charge for what Obsidian+Copilot gives away, and free vault-scoped AI is the acquisition hook against Notion's $20 paywall resentment.
-- **BISEO Pro — $10/mo or $96/yr, BYOK:** the computer-control agent (terminal, filesystem beyond the vault, browser), scheduled/background agents, multi-step task runs, agent memory. You're selling software capability, not tokens, so BYOK carries no margin risk and undercuts Notion Business by half while pricing at the Reflect/Capacities anchor. Add a **one-time license option (~$149/major version)** to court the anti-subscription Obsidian demographic — it's that community's stated values (indie, no VC, no rent).
+- **Daat Pro — $10/mo or $96/yr, BYOK:** the computer-control agent (terminal, filesystem beyond the vault, browser), scheduled/background agents, multi-step task runs, agent memory. You're selling software capability, not tokens, so BYOK carries no margin risk and undercuts Notion Business by half while pricing at the Reflect/Capacities anchor. Add a **one-time license option (~$149/major version)** to court the anti-subscription Obsidian demographic — it's that community's stated values (indie, no VC, no rent).
 - **Later revenue lines (v2):** E2E sync and Publish — the proven Obsidian monetization that doesn't compromise "your files, free."
 
 The paywall sits exactly on the moat: everything a competitor also offers is free; the thing nobody ships — an agent with hands — is what you pay for.

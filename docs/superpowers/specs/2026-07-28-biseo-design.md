@@ -1,21 +1,21 @@
-# BISEO Design Spec (2026-07-28)
+# Daat Design Spec (2026-07-28)
 
 Commercial macOS app: the hermes-agent (MIT, Nous Research) multi-provider AI agent
 fused with an Obsidian-style markdown vault (second brain), sold as a notarized DMG.
-Codename **BISEO** — all branding replaceable before launch.
+Codename **Daat** — all branding replaceable before launch.
 
 ## Product decisions (user-confirmed)
 
 | Decision | Value |
 |---|---|
 | Base | Fork of the full hermes-agent monorepo, pinned (no upstream tracking; quarterly security cherry-picks) |
-| Identity | appId `com.tax123.biseo`, product/executable `BISEO`, protocol `biseo://`, home `~/.biseo`, repo `biseo-app/biseo-agent` |
+| Identity | appId `com.tax123.daat`, product/executable `Daat`, protocol `daat://`, home `~/.daat`, repo `daat-app/daat-agent` |
 | Rebrand depth | App-level only; internal `hermes` CLI / `HERMES_*` env / IPC names kept for upstream mergeability |
 | v1 scope | Vault + CM6 editor + wikilinks/backlinks + agent chat with vault tools + persona onboarding + iCloud vault |
 | AI cost model | BYOK + all hermes OAuth flows exposed (subscription-OAuth ToS risk was flagged; user accepted; disclaimer copy + kill-switch flag required) |
 | Languages | English default + Korean locale |
 | Distribution | Direct notarized DMG + Lemon Squeezy license ($69 one-time, perpetual + 1yr updates); fail-soft: vault/editor stay free forever |
-| Vault | Own format (folder of .md, no `.obsidian/`); default iCloud `com~apple~CloudDocs/BISEO/Notes/`, fallback `~/Documents/BISEO/Notes/` |
+| Vault | Own format (folder of .md, no `.obsidian/`); default iCloud `com~apple~CloudDocs/Daat/Notes/`, fallback `~/Documents/Daat/Notes/` |
 
 ## Architecture
 
@@ -44,7 +44,7 @@ Codename **BISEO** — all branding replaceable before launch.
 
 ## Milestones
 
-M0 fork boots under BISEO identity (~1w) → M1 vault MVP (~2-3w) → M2 editor polish + links (~2-3w)
+M0 fork boots under Daat identity (~1w) → M1 vault MVP (~2-3w) → M2 editor polish + links (~2-3w)
 → M3 agent↔vault (~1-2w) → M4 personas + release hardening (~2w). Total ~8-11 weeks.
 
 Full implementation detail: see the approved plan (plan file `dreamy-imagining-shamir.md`) and the

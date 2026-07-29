@@ -14,7 +14,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 const DESKTOP_ROOT = path.resolve(import.meta.dirname, '..')
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'biseo-onboarding-'))
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'daat-onboarding-'))
 const home = path.join(tmp, 'home')
 const vault = path.join(tmp, 'vault')
 const userData = path.join(tmp, 'userData')
@@ -44,13 +44,13 @@ page.on('pageerror', error => {
 })
 
 // Dismiss the provider-setup overlay (not what we're probing) but leave the
-// BISEO first-run wizard alone — it keys off biseo.onboarded.v1.
+// Daat first-run wizard alone — it keys off daat.onboarded.v1.
 await page.waitForTimeout(2500)
 await page.evaluate(() => {
   localStorage.setItem('hermes-desktop-onboarded-v1', '1')
   localStorage.setItem('hermes-onboarding-skipped-v1', '1')
-  localStorage.removeItem('biseo.onboarded.v1')
-  localStorage.removeItem('biseo.persona.v1')
+  localStorage.removeItem('daat.onboarded.v1')
+  localStorage.removeItem('daat.persona.v1')
 })
 await page.reload()
 await page.waitForTimeout(8000)
@@ -65,7 +65,7 @@ const check = (label, ok, detail = '') => {
 
 console.log('--- step 1: persona ---')
 
-const heading = await page.locator('h1', { hasText: 'What will you use BISEO for' }).count()
+const heading = await page.locator('h1', { hasText: 'What will you use Daat for' }).count()
 
 check('the wizard is shown on first run', heading > 0)
 
@@ -105,7 +105,7 @@ await page.waitForTimeout(4000)
 console.log('--- step 3: the assistant takes over ---')
 
 check('the setup conversation opens', await page.evaluate(() =>
-  document.body.textContent?.includes('Setting up with BISEO') ?? false
+  document.body.textContent?.includes('Setting up with Daat') ?? false
 ))
 check('there is somewhere to answer', (await page.locator('textarea').count()) > 0)
 check('files can be handed over', await page.evaluate(() =>
@@ -129,7 +129,7 @@ check(
 await page.locator('button', { hasText: "I'm done" }).first().click()
 await page.waitForTimeout(1500)
 
-check('the wizard closes', (await page.locator('h1', { hasText: 'What will you use BISEO' }).count()) === 0)
+check('the wizard closes', (await page.locator('h1', { hasText: 'What will you use Daat' }).count()) === 0)
 check('the app is behind it', (await page.locator('aside').count()) > 0)
 
 console.log('--- on disk ---')
@@ -148,7 +148,7 @@ check('accounting starter pages were created', files.some(file => file.includes(
 check('SOUL.md was written for the persona', fs.existsSync(path.join(home, 'SOUL.md')))
 
 // Re-launching must not show the wizard again.
-const persisted = await page.evaluate(() => localStorage.getItem('biseo.onboarded.v1'))
+const persisted = await page.evaluate(() => localStorage.getItem('daat.onboarded.v1'))
 
 check('the choice is remembered', persisted === '1')
 

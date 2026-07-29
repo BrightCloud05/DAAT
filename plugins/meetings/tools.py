@@ -37,7 +37,7 @@ def meeting_transcribe(rel_path: str, language: str = "") -> str:
     root = _vault_root()
 
     if not root:
-        return "No vault is connected. Ask the user to open a vault in BISEO first."
+        return "No vault is connected. Ask the user to open a vault in Daat first."
 
     cleaned = str(rel_path).replace("\\", "/").lstrip("/")
     target = (root / cleaned).resolve()
@@ -102,7 +102,7 @@ def meeting_list_recordings() -> str:
     folder = root / "Meetings"
 
     if not folder.is_dir():
-        return "No Meetings folder yet — record one in BISEO first."
+        return "No Meetings folder yet — record one in Daat first."
 
     found: list[str] = []
 

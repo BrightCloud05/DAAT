@@ -81,7 +81,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   probeConnectionConfig: remoteUrl => ipcRenderer.invoke('hermes:connection-config:probe', remoteUrl),
   oauthLoginConnectionConfig: remoteUrl => ipcRenderer.invoke('hermes:connection-config:oauth-login', remoteUrl),
   oauthLogoutConnectionConfig: remoteUrl => ipcRenderer.invoke('hermes:connection-config:oauth-logout', remoteUrl),
-  // BISEO Cloud: one portal login powers discovery + silent per-agent sign-in
+  // Daat Cloud: one portal login powers discovery + silent per-agent sign-in
   // (cloud-auto-discovery Phase 3).
   cloud: {
     status: () => ipcRenderer.invoke('hermes:cloud:status'),
@@ -145,7 +145,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   },
   revealLogs: () => ipcRenderer.invoke('hermes:logs:reveal'),
   getRecentLogs: () => ipcRenderer.invoke('hermes:logs:recent'),
-  // Markdown vault (BISEO second brain). Paths are vault-relative POSIX
+  // Markdown vault (Daat second brain). Paths are vault-relative POSIX
   // strings; main enforces vault-root containment.
   vault: {
     info: () => ipcRenderer.invoke('hermes:vault:info'),

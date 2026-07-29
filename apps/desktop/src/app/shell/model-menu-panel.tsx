@@ -161,7 +161,7 @@ export function ModelMenuPanel({ gateway, onSelectModel, profile = 'default', re
   }
 
   // Selecting a model row restores that model's remembered preset onto the
-  // session (effort/fast), gated by capability. Unset → BISEO defaults.
+  // session (effort/fast), gated by capability. Unset → Daat defaults.
   const selectFamily = async (family: ModelFamily, provider: ModelOptionProvider) => {
     const caps = provider.capabilities?.[family.id]
     const preset = modelPresets[modelPresetKey(provider.slug, family.id)] ?? {}
@@ -281,7 +281,7 @@ export function ModelMenuPanel({ gateway, onSelectModel, profile = 'default', re
                     const caps = group.provider.capabilities?.[family.id]
 
                     // Effective settings for this row: live session state when it's
-                    // the active model, otherwise its remembered preset (BISEO
+                    // the active model, otherwise its remembered preset (Daat
                     // defaults when unset). Row label AND submenu read from these so
                     // they never disagree.
                     const preset = modelPresets[modelPresetKey(group.provider.slug, family.id)] ?? {}

@@ -104,7 +104,7 @@ export const host = {
     const gateway = $gateway.get()
 
     if (!gateway) {
-      throw new Error('BISEO gateway unavailable')
+      throw new Error('Daat gateway unavailable')
     }
 
     return gateway.request<T>(method, params)

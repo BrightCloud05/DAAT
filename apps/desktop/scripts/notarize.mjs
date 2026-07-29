@@ -78,7 +78,7 @@ export default async function notarize(context) {
   const rawApiKey = process.env.APPLE_API_KEY
   if (!rawApiKey || !keyId || !issuer) {
     // Failing loudly is the point. Skipping silently produced a DMG that
-    // looked finished and greeted every downloader with "BISEO is damaged
+    // looked finished and greeted every downloader with "Daat is damaged
     // and can't be opened" — the build must not be able to succeed here by
     // accident. Local/dev builds opt out explicitly.
     if (process.env.ALLOW_UNSIGNED === '1') {

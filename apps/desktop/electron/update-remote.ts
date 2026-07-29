@@ -12,8 +12,8 @@
  * testable without booting Electron (main.ts requires('electron') at load).
  */
 
-const OFFICIAL_REPO_HTTPS_URL = 'https://github.com/BrightCloud05/BISEO.git'
-const OFFICIAL_REPO_CANONICAL = 'github.com/brightcloud05/biseo'
+const OFFICIAL_REPO_HTTPS_URL = 'https://github.com/BrightCloud05/Daat.git'
+const OFFICIAL_REPO_CANONICAL = 'github.com/brightcloud05/daat'
 
 // Normalize common GitHub remote URL forms to `host/owner/repo` (lowercased,
 // no trailing slash, no .git suffix) so SSH and HTTPS forms of the same repo

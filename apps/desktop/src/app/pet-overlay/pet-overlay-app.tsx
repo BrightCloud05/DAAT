@@ -447,7 +447,7 @@ export function PetOverlayApp() {
               stopPropagation keeps a click from starting a window drag. */}
           {unread && (
             <button
-              aria-label="Open in BISEO"
+              aria-label="Open in Daat"
               onClick={openApp}
               onPointerDown={e => e.stopPropagation()}
               onPointerUp={e => e.stopPropagation()}
@@ -468,7 +468,7 @@ export function PetOverlayApp() {
                 top: 0,
                 width: 24
               }}
-              title="Open in BISEO"
+              title="Open in Daat"
               type="button"
             >
               <Mail style={{ height: 13, width: 13 }} />

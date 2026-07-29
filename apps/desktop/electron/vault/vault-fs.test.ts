@@ -15,7 +15,7 @@ import {
 } from './vault-fs'
 
 async function tmpVault(): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'biseo-vault-test-'))
+  return fs.mkdtemp(path.join(os.tmpdir(), 'daat-vault-test-'))
 }
 
 test('icloudPlaceholderTarget unwraps evicted placeholder names', () => {

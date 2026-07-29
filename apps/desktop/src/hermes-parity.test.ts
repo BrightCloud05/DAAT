@@ -16,7 +16,7 @@ import {
   testMcpServer
 } from './hermes'
 
-describe('BISEO REST parity helpers (hub / mcp / maintenance)', () => {
+describe('Daat REST parity helpers (hub / mcp / maintenance)', () => {
   let api: ReturnType<typeof vi.fn>
 
   beforeEach(() => {

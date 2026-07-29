@@ -1,8 +1,8 @@
 manifest_version: 1
 name: meetings
 version: 0.1.0
-description: "BISEO meeting tools: transcribe recordings stored in the vault."
-author: BISEO
+description: "Daat meeting tools: transcribe recordings stored in the vault."
+author: Daat
 kind: standalone
 provides_tools:
   - meeting_transcribe

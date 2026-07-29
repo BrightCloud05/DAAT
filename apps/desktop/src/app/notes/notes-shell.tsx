@@ -30,7 +30,7 @@ import { openDailyNote } from './templates'
 import { DocTopbar } from './topbar'
 import { $canvasView } from './view-store'
 
-const AGENT_PANEL_KEY = 'biseo.notes.agentOpen.v1'
+const AGENT_PANEL_KEY = 'daat.notes.agentOpen.v1'
 
 export function NotesShell() {
   const active = useStore($activeNote)

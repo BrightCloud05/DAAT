@@ -1,8 +1,8 @@
 manifest_version: 1
 name: vault
 version: 0.1.0
-description: "BISEO vault tools: read, write, list, search and backlinks over the user's markdown vault."
-author: BISEO
+description: "Daat vault tools: read, write, list, search and backlinks over the user's markdown vault."
+author: Daat
 kind: standalone
 provides_hooks:
   - pre_llm_call

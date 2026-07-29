@@ -131,7 +131,7 @@ export function QuickEntryApp() {
                 dispatch({ type: 'dismiss' })
               }
             }}
-            placeholder={state.connected ? 'Ask BISEO…' : 'Not connected — open BISEO to reconnect'}
+            placeholder={state.connected ? 'Ask Daat…' : 'Not connected — open Daat to reconnect'}
             ref={inputRef}
             spellCheck={false}
             style={{

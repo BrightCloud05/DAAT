@@ -73,7 +73,7 @@ import type {
 // /api/profiles runs list_profiles(), which does a recursive skill-tree walk
 // per profile — so the 15s default (DEFAULT_FETCH_TIMEOUT_MS in hardening.ts)
 // times out a backend that is alive-but-busy, surfacing as a spurious
-// "Timed out connecting to BISEO backend" that hangs the UI (#48504).
+// "Timed out connecting to Daat backend" that hangs the UI (#48504).
 //
 // Give the boot burst a generous per-call timeout instead of raising the
 // global default: interactive/runtime calls and the liveness poll (/api/status)
@@ -222,10 +222,10 @@ export type {
 export class HermesGateway extends JsonRpcGatewayClient {
   constructor() {
     super({
-      closedErrorMessage: 'BISEO gateway connection closed',
-      connectErrorMessage: 'Could not connect to BISEO gateway',
+      closedErrorMessage: 'Daat gateway connection closed',
+      connectErrorMessage: 'Could not connect to Daat gateway',
       createRequestId: nextId => nextId,
-      notConnectedErrorMessage: 'BISEO gateway is not connected',
+      notConnectedErrorMessage: 'Daat gateway is not connected',
       requestTimeoutMs: DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS
     })
   }
@@ -281,7 +281,7 @@ function pluginPathSuffix(caller: string, path: string): string {
  *  declared-capability seam; today the namespace IS the boundary. */
 export async function pluginRest<T>(pluginId: string, path: string, opts: PluginRestOptions = {}): Promise<T> {
   if (!window.hermesDesktop?.api) {
-    throw new Error('BISEO desktop bridge unavailable')
+    throw new Error('Daat desktop bridge unavailable')
   }
 
   const suffix = pluginPathSuffix('pluginRest', path)

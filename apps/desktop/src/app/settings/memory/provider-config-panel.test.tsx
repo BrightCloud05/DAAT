@@ -187,7 +187,7 @@ describe('ProviderConfigPanel', () => {
   })
 
   it('shows an inline error with retry when the load fails, then recovers', async () => {
-    getMemoryProviderConfig.mockRejectedValueOnce(new Error('Timed out connecting to BISEO backend'))
+    getMemoryProviderConfig.mockRejectedValueOnce(new Error('Timed out connecting to Daat backend'))
 
     await renderPanel()
 

@@ -14,7 +14,7 @@ import { atom } from 'nanostores'
 
 import { persistString, storedString } from '@/lib/storage'
 
-const KEY = 'biseo.desktop.uiMode.v1'
+const KEY = 'daat.desktop.uiMode.v1'
 
 export type UiMode = 'simple' | 'advanced'
 

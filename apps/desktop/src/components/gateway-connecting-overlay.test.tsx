@@ -65,7 +65,7 @@ describe('connecting overlay vs recovery surface', () => {
     // failDesktopBoot() ran: error set, gateway never opened.
     $desktopBoot.set({
       ...$desktopBoot.get(),
-      error: 'BISEO backend did not become ready',
+      error: 'Daat backend did not become ready',
       running: false,
       visible: true
     })
@@ -177,7 +177,7 @@ describe('connecting overlay vs recovery surface', () => {
     setGatewayState('error')
     $desktopBoot.set({
       ...$desktopBoot.get(),
-      error: 'Lost connection to the BISEO gateway and could not reconnect.',
+      error: 'Lost connection to the Daat gateway and could not reconnect.',
       running: false,
       visible: true
     })

@@ -106,7 +106,7 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
     localeRef.current = locale
     setRuntimeI18nLocale(locale)
     applyDocumentLocale(locale)
-    // BISEO's own screens read from their own catalogue but follow this one
+    // Daat's own screens read from their own catalogue but follow this one
     // setting, so there is never a second language switch to find.
     syncProductLocale(locale)
   }, [locale])

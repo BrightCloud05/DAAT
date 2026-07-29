@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the BISEO app icon set from the design spec (BISEO App Icon.dc.html).
+"""Generate the Daat app icon set from the design spec (Daat App Icon.dc.html).
 
 Construction — 512pt grid:
   - Squircle radius 115 (22.5%), ground #007AFF, white letterform
@@ -117,7 +117,7 @@ def main() -> None:
 
     # .icns via iconutil.
     with tempfile.TemporaryDirectory() as tmp:
-        iconset = os.path.join(tmp, 'biseo.iconset')
+        iconset = os.path.join(tmp, 'daat.iconset')
         os.makedirs(iconset)
 
         for px in (16, 32, 64, 128, 256, 512, 1024):

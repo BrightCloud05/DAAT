@@ -1,8 +1,8 @@
 manifest_version: 1
 name: mail
 version: 0.1.0
-description: "BISEO mail: read, search, organize and send email through the Himalaya CLI (IMAP/SMTP)."
-author: BISEO
+description: "Daat mail: read, search, organize and send email through the Himalaya CLI (IMAP/SMTP)."
+author: Daat
 kind: standalone
 provides_tools:
   - mail_accounts

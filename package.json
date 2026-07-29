@@ -27,13 +27,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BrightCloud05/BISEO.git"
+    "url": "git+https://github.com/BrightCloud05/Daat.git"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/BrightCloud05/BISEO/issues"
+    "url": "https://github.com/BrightCloud05/Daat/issues"
   },
-  "homepage": "https://github.com/BrightCloud05/BISEO#readme",
+  "homepage": "https://github.com/BrightCloud05/Daat#readme",
   "dependencies": {
     "@streamdown/math": "^1.0.2",
     "agent-browser": "^0.26.0"

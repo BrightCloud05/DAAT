@@ -1,6 +1,6 @@
-"""BISEO meetings plugin.
+"""Daat meetings plugin.
 
-Turns a recording the user made in BISEO into text the agent can work with.
+Turns a recording the user made in Daat into text the agent can work with.
 Transcription uses hermes's existing STT stack, whose default provider is
 faster-whisper running locally — so a meeting recording, which contains other
 people's voices, is not uploaded anywhere by default.

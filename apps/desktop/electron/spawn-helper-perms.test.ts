@@ -59,17 +59,17 @@ function fakeFs(
 
 test('rewrites an archived node-pty root to the matching unpacked tree exactly once', () => {
   assert.equal(
-    writableNodePtyRoot('/BISEO.app/Contents/Resources/app.asar/dist/node_modules/node-pty'),
-    '/BISEO.app/Contents/Resources/app.asar.unpacked/dist/node_modules/node-pty'
+    writableNodePtyRoot('/Daat.app/Contents/Resources/app.asar/dist/node_modules/node-pty'),
+    '/Daat.app/Contents/Resources/app.asar.unpacked/dist/node_modules/node-pty'
   )
   assert.equal(
-    writableNodePtyRoot('/BISEO.app/Contents/Resources/app.asar.unpacked/dist/node_modules/node-pty'),
-    '/BISEO.app/Contents/Resources/app.asar.unpacked/dist/node_modules/node-pty'
+    writableNodePtyRoot('/Daat.app/Contents/Resources/app.asar.unpacked/dist/node_modules/node-pty'),
+    '/Daat.app/Contents/Resources/app.asar.unpacked/dist/node_modules/node-pty'
   )
 })
 
 test('uses the unpacked helper when resolution reports an app.asar node-pty root', () => {
-  const archivedRoot = '/BISEO.app/Contents/Resources/app.asar/dist/node_modules/node-pty'
+  const archivedRoot = '/Daat.app/Contents/Resources/app.asar/dist/node_modules/node-pty'
   const unpackedRoot = writableNodePtyRoot(archivedRoot)
   const helper = join(unpackedRoot, 'prebuilds', 'darwin-arm64', 'spawn-helper')
   const fs = fakeFs({ [helper]: { mode: 0o644 } }, { [join(unpackedRoot, 'prebuilds')]: ['darwin-arm64'] })
