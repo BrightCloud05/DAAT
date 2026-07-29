@@ -20,15 +20,45 @@ MAX_LIST = 400
 MAX_SEARCH_RESULTS = 40
 
 
+def _bridge_file() -> Path:
+    home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".biseo")
+
+    return Path(home) / "state" / "vault-context.json"
+
+
 def _vault_root() -> Path | None:
-    raw = os.environ.get("VAULT_PATH", "").strip()
+    """Resolve the open vault.
 
-    if not raw:
-        return None
+    VAULT_PATH is set when the desktop spawns the backend — but the backend
+    starts before a vault is restored/opened, so an empty env is normal. The
+    desktop keeps the live vault root in the context bridge file; read that
+    first so tools work in the session the user opened their vault in.
+    """
+    candidates = []
 
-    root = Path(raw).expanduser()
+    try:
+        import json
 
-    return root if root.is_dir() else None
+        bridge = json.loads(_bridge_file().read_text(encoding="utf-8"))
+        vault = str(bridge.get("vault") or "").strip()
+
+        if vault:
+            candidates.append(vault)
+    except (OSError, ValueError):
+        pass
+
+    env_path = os.environ.get("VAULT_PATH", "").strip()
+
+    if env_path:
+        candidates.append(env_path)
+
+    for candidate in candidates:
+        root = Path(candidate).expanduser()
+
+        if root.is_dir():
+            return root
+
+    return None
 
 
 def _no_vault() -> str:

@@ -44,6 +44,11 @@ export function fillTemplate(content: string, title: string): string {
     .replaceAll('{{title}}', title)
 }
 
+/** True for notes under Templates/ — the editor treats them as source, not pages. */
+export function isTemplateNote(relPath: string | null | undefined): boolean {
+  return Boolean(relPath && /^templates\//i.test(relPath))
+}
+
 /** Replace the whole current document with a filled template (undoable). */
 export async function applyTemplateToActive(templatePath: string, title: string): Promise<void> {
   const view = $editorView.get()

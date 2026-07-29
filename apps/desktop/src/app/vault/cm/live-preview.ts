@@ -43,10 +43,42 @@ function selectionLines(view: EditorView): Set<number> {
   return lines
 }
 
+/**
+ * Char range of the leading `---` YAML block, or null. The properties panel
+ * renders it as Notion-style rows, so the raw block is folded out of the
+ * document (still in the file, one click from view when the cursor enters).
+ */
+function frontmatterRange(view: EditorView): { from: number; to: number } | null {
+  const doc = view.state.doc
+
+  if (doc.lines < 2 || doc.line(1).text.trim() !== '---') {
+    return null
+  }
+
+  for (let lineNo = 2; lineNo <= Math.min(doc.lines, 200); lineNo++) {
+    if (doc.line(lineNo).text.trim() === '---') {
+      const end = doc.line(lineNo)
+
+      return { from: 0, to: Math.min(end.to + 1, doc.length) }
+    }
+  }
+
+  return null
+}
+
 function buildDecorations(view: EditorView): DecorationSet {
   const decorations: Range<Decoration>[] = []
   const activeLines = selectionLines(view)
   const doc = view.state.doc
+
+  const frontmatter = frontmatterRange(view)
+  const cursorInFrontmatter =
+    frontmatter !== null &&
+    view.state.selection.ranges.some(range => range.from <= frontmatter.to && range.to >= frontmatter.from)
+
+  if (frontmatter && !cursorInFrontmatter) {
+    decorations.push(Decoration.replace({ block: true }).range(frontmatter.from, Math.max(0, frontmatter.to - 1)))
+  }
 
   for (const { from, to } of view.visibleRanges) {
     syntaxTree(view.state).iterate({
@@ -72,7 +104,10 @@ function buildDecorations(view: EditorView): DecorationSet {
     })
   }
 
-  return Decoration.set(decorations, true)
+  return Decoration.set(
+    decorations.sort((a, b) => a.from - b.from || (a.value.startSide ?? 0) - (b.value.startSide ?? 0)),
+    true
+  )
 }
 
 const livePreviewPlugin = ViewPlugin.fromClass(

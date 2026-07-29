@@ -22,13 +22,61 @@ function broadcast(channel: string, payload: VaultIndexEvent | VaultConflictEven
   }
 }
 
+/**
+ * Publish the live vault root to the context bridge file. The backend is
+ * spawned before a vault is restored, so its VAULT_PATH env can be empty —
+ * the Python plugin reads this file to find the vault the user actually has
+ * open (and the active note/selection on top).
+ */
+function writeVaultBridge(service: VaultService, extra: { activeNote?: string | null; selection?: string } = {}): void {
+  try {
+    const home = process.env.HERMES_HOME || path.join(app.getPath('home'), '.biseo')
+    const target = path.join(home, 'state', 'vault-context.json')
+
+    let previous: Record<string, unknown> = {}
+
+    try {
+      previous = JSON.parse(fs.readFileSync(target, 'utf8'))
+    } catch {
+      previous = {}
+    }
+
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.writeFileSync(
+      target,
+      JSON.stringify(
+        {
+          ...previous,
+          vault: service.info().root,
+          ...('activeNote' in extra ? { active_note: extra.activeNote ?? null } : {}),
+          ...('selection' in extra ? { selection: extra.selection ?? '' } : {}),
+          updated_at: Date.now()
+        },
+        null,
+        2
+      ),
+      'utf8'
+    )
+  } catch {
+    // Best-effort: without the bridge the agent simply reports no vault.
+  }
+}
+
 export function initVaultIpc(): VaultService {
   const service = new VaultService({
-    onIndexEvent: event => broadcast('hermes:vault:index-event', event),
+    onIndexEvent: event => {
+      broadcast('hermes:vault:index-event', event)
+
+      // A completed index means a vault is (still) open — keep the bridge
+      // current so a backend spawned before the vault can still find it.
+      if (event.type === 'index-complete' || event.type === 'vault-changed') {
+        writeVaultBridge(service)
+      }
+    },
     onConflict: event => broadcast('hermes:vault:conflict', event)
   })
 
-  void service.restore()
+  void service.restore().then(() => writeVaultBridge(service))
 
   ipcMain.handle('hermes:vault:info', () => service.info())
 
@@ -37,7 +85,13 @@ export function initVaultIpc(): VaultService {
     local: defaultLocalVaultDir()
   }))
 
-  ipcMain.handle('hermes:vault:create', (_event, baseDir?: string) => service.create(baseDir))
+  ipcMain.handle('hermes:vault:create', async (_event, baseDir?: string) => {
+    const info = await service.create(baseDir)
+
+    writeVaultBridge(service)
+
+    return info
+  })
 
   ipcMain.handle('hermes:vault:choose', async event => {
     const window = BrowserWindow.fromWebContents(event.sender) ?? undefined
@@ -50,10 +104,20 @@ export function initVaultIpc(): VaultService {
       return null
     }
 
-    return service.open(result.filePaths[0])
+    const info = await service.open(result.filePaths[0])
+
+    writeVaultBridge(service)
+
+    return info
   })
 
-  ipcMain.handle('hermes:vault:open', (_event, root: string) => service.open(root))
+  ipcMain.handle('hermes:vault:open', async (_event, root: string) => {
+    const info = await service.open(root)
+
+    writeVaultBridge(service)
+
+    return info
+  })
   ipcMain.handle('hermes:vault:reindex', () => service.reindex())
   ipcMain.handle('hermes:vault:list', () => service.list())
   ipcMain.handle('hermes:vault:listDir', (_event, subdir?: string) => service.listDir(subdir))
@@ -78,28 +142,7 @@ export function initVaultIpc(): VaultService {
   // always knows the active note. Written under HERMES_HOME (never inside
   // the vault — no sync junk in the user's notes).
   ipcMain.on('hermes:vault:context', (_event, payload: { activeNote?: string; selection?: string }) => {
-    try {
-      const home = process.env.HERMES_HOME || path.join(app.getPath('home'), '.biseo')
-      const target = path.join(home, 'state', 'vault-context.json')
-
-      fs.mkdirSync(path.dirname(target), { recursive: true })
-      fs.writeFileSync(
-        target,
-        JSON.stringify(
-          {
-            vault: service.info().root,
-            active_note: payload?.activeNote ?? null,
-            selection: payload?.selection ?? '',
-            updated_at: Date.now()
-          },
-          null,
-          2
-        ),
-        'utf8'
-      )
-    } catch {
-      // Best-effort: a missing bridge just means no extra context this turn.
-    }
+    writeVaultBridge(service, { activeNote: payload?.activeNote ?? null, selection: payload?.selection ?? '' })
   })
 
   ipcMain.handle('hermes:vault:noteNames', () => service.noteNames())

@@ -59,7 +59,15 @@ function ValueEditor({ propKey, value }: { propKey: string; value: unknown }) {
     )
   }
 
-  const display = Array.isArray(value) ? value.join(', ') : value === null || value === undefined ? '' : String(value)
+  // Nested YAML (or an unsubstituted `{{template}}` placeholder, which YAML
+  // reads as a map) must never render as "[object Object]" — show the source.
+  const display = Array.isArray(value)
+    ? value.map(item => (item && typeof item === 'object' ? JSON.stringify(item) : String(item))).join(', ')
+    : value === null || value === undefined
+      ? ''
+      : typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value)
 
   return (
     <input
