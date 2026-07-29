@@ -6,6 +6,7 @@ import { TRANSLATIONS } from './catalog'
 import { DEFAULT_LOCALE, localeConfigValue, normalizeLocale } from './languages'
 import { setRuntimeI18nLocale } from './runtime'
 import type { Locale, Translations } from './types'
+import { syncProductLocale } from '@/app/notes/strings'
 
 export { LOCALE_META } from './languages'
 
@@ -105,6 +106,9 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
     localeRef.current = locale
     setRuntimeI18nLocale(locale)
     applyDocumentLocale(locale)
+    // BISEO's own screens read from their own catalogue but follow this one
+    // setting, so there is never a second language switch to find.
+    syncProductLocale(locale)
   }, [locale])
 
   useEffect(() => {

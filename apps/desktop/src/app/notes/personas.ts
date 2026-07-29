@@ -2,9 +2,14 @@
  * Persona presets — what a first-run choice actually changes.
  *
  * A persona is a small, honest bundle: the assistant's voice (SOUL.md), the
- * starter notes/templates seeded into the vault, and which modules the
- * sidebar leads with. Everything stays editable afterwards; nothing here is
- * a lock-in.
+ * agent toolsets it turns on, the starter notes and templates seeded into the
+ * vault, and which extra cards the dashboard shows. Everything stays editable
+ * afterwards; nothing here is a lock-in.
+ *
+ * The dashboard cards are lenses over the templates seeded alongside them —
+ * a Student gets a Courses card because they also get a Course template that
+ * produces the notes it reads. A card with no matching notes says so rather
+ * than showing a fake number.
  */
 
 export type PersonaId = 'student' | 'accounting' | 'office' | 'programming' | 'secretary' | 'general'
@@ -18,9 +23,20 @@ export interface Persona {
   ko: { name: string; promise: string }
   /** Assistant identity written to SOUL.md. */
   soul: string
+  /**
+   * Agent toolsets to enable for this persona, on top of the defaults.
+   * A student has no business being handed a terminal by default; a
+   * programmer wants one on day one.
+   */
+  toolsets: string[]
   /** Starter notes: path → markdown. */
   starters: Record<string, string>
+  /** Extra dashboard cards, rendered after the shared ones. */
+  widgets: PersonaWidgetId[]
 }
+
+/** Dashboard cards a persona can switch on. */
+export type PersonaWidgetId = 'courses' | 'assessments' | 'clients' | 'projects' | 'waitingOn'
 
 const COMMON_SOUL =
   'You are BISEO, the user\'s AI second brain. Their notes are plain markdown files they own; ' +
@@ -38,14 +54,24 @@ export const PERSONAS: Persona[] = [
       `${COMMON_SOUL}\n\nYou are helping a student. Turn lecture material into clean structured notes with ` +
       'headings and key-term callouts, generate practice questions when asked, cite the source note, and keep a ' +
       'running list of what is still unclear. Never invent facts a source did not state.',
+    toolsets: ['vault', 'meetings'],
+    widgets: ['courses', 'assessments'],
     starters: {
-      'Courses/README.md': '# Courses\n\nOne page per subject. Link lecture notes from here with [[wikilinks]].\n',
+      'Courses/README.md':
+        '# Courses\n\nOne page per subject, made from the Course template — the Home dashboard reads them.\n' +
+        'Link lecture notes from each course page with [[wikilinks]].\n',
+      'Templates/Course.md':
+        '---\ntype: course\ncode: \nterm: \nteacher: \nroom: \n# Days you have this class, e.g. [Mon, Wed]\ndays: []\ntime: \n---\n\n# {{title}}\n\n## Lectures\n\n## Assessments\n\n## Notes to review\n\n- [ ] \n',
+      'Templates/Assessment.md':
+        '---\ntype: assessment\ncourse: \ndue: \nweight: \nstatus: not started\n---\n\n# {{title}}\n\n## What is being asked\n\n## Plan\n\n- [ ] \n\n## Sources\n\n',
       'Templates/Lecture.md':
-        '---\ncourse: \ndate: {{date}}\ntopic: \n---\n\n## Key points\n\n- \n\n## Questions\n\n> [!question] Unclear\n> \n\n## To review\n\n- [ ] \n'
+        '---\ntype: lecture\ncourse: \ndate: {{date}}\ntopic: \n---\n\n## Key points\n\n- \n\n## Questions\n\n> [!question] Unclear\n> \n\n## To review\n\n- [ ] \n'
     }
   },
   {
     id: 'accounting',
+    toolsets: ['vault'],
+    widgets: ['clients'] as PersonaWidgetId[],
     ko: { name: '회계', promise: '스스로 검산하는 조서.' },
     emoji: '🧾',
     name: 'Accounting',
@@ -62,6 +88,8 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'office',
+    toolsets: ['vault', 'mail', 'meetings'],
+    widgets: ['waitingOn'] as PersonaWidgetId[],
     ko: { name: '사무 행정', promise: '받은 메일을 처리 목록으로.' },
     emoji: '🗂️',
     name: 'Office admin',
@@ -77,6 +105,8 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'programming',
+    toolsets: ['vault', 'hermes-cli'],
+    widgets: ['projects'] as PersonaWidgetId[],
     ko: { name: '개발', promise: '내 저장소에서 함께 일하는 손.' },
     emoji: '⌨️',
     name: 'Programming',
@@ -93,6 +123,8 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'secretary',
+    toolsets: ['vault', 'mail', 'meetings'],
+    widgets: ['waitingOn'] as PersonaWidgetId[],
     ko: { name: '비서', promise: '하루를 미리 정리해 둡니다.' },
     emoji: '📇',
     name: 'Secretary',
@@ -108,6 +140,8 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'general',
+    toolsets: ['vault'],
+    widgets: [] as PersonaWidgetId[],
     ko: { name: '이것저것', promise: '단순하게 시작해서 넓혀가기.' },
     emoji: '🗒️',
     name: 'A bit of everything',

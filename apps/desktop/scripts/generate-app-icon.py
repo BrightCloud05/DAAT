@@ -30,9 +30,25 @@ BLUE = (0, 122, 255, 255)
 WHITE = (255, 255, 255, 255)
 
 
-def draw_icon(px: int, small: bool = False, light: bool = False) -> Image.Image:
-    """Render the icon at px x px. Geometry is authored on the 512 grid and
-    drawn at 4x supersampling, then downscaled for clean edges."""
+# macOS icons do not fill their canvas. Apple's grid puts a rounded-rect app
+# icon in an 824x824 area of a 1024x1024 image, and the Dock sizes every icon
+# by that canvas — so a full-bleed icon renders visibly larger than its
+# neighbours. Windows .ico has no such convention and stays full-bleed.
+MACOS_BODY_RATIO = 824 / 1024
+
+
+def draw_icon(px: int, small: bool = False, light: bool = False, inset: bool = True) -> Image.Image:
+    """Render the icon at px x px, inside the macOS safe area by default."""
+    if inset:
+        body = max(1, round(px * MACOS_BODY_RATIO))
+        art = draw_icon(body, small=small, light=light, inset=False)
+        canvas = Image.new('RGBA', (px, px), (0, 0, 0, 0))
+        offset = (px - body) // 2
+
+        canvas.paste(art, (offset, offset), art)
+
+        return canvas
+
     ss = 4
     size = px * ss
     scale = size / 512
@@ -92,7 +108,7 @@ def main() -> None:
     primary_1024.save(os.path.join(public, 'hermes.png'))
 
     # .ico — small sizes use the thickened variant.
-    ico_frames = [draw_icon(px, small=px <= 32) for px in (16, 32, 48, 64, 128, 256)]
+    ico_frames = [draw_icon(px, small=px <= 32, inset=False) for px in (16, 32, 48, 64, 128, 256)]
     ico_frames[-1].save(
         os.path.join(assets, 'icon.ico'),
         sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],

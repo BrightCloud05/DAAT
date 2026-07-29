@@ -15,6 +15,7 @@ import { activeGateway } from '@/store/gateway'
 import { $vaultInfo, $vaultNotes, $vaultRevision, openNote } from '../vault/store'
 import { collectEntries, type TableLikeRow } from './calendar'
 import { formatAmount, MONEY_DIR, type MoneySummary, parseMonthNote, summarize } from './money'
+import { PersonaWidgets } from './persona-widgets'
 import { openDailyNote, todayStamp } from './templates'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView, openCalendarView, openMailView, openMeetingsView, openMoneyView } from './view-store'
@@ -390,6 +391,9 @@ export function HomeView() {
             )}
           </div>
 
+          {/* Persona-specific cards first: for a student, today's classes and
+              what's due beat a generic "up next". */}
+          <PersonaWidgets />
           <UpNextCard />
           <InboxCard />
           <MoneyCard />

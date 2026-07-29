@@ -112,6 +112,8 @@ export interface TableLikeRow {
   path: string
   title: string
   props: Record<string, unknown>
+  /** Present on rows from propertiesTable(); absent in hand-built test rows. */
+  mtimeMs?: number
 }
 
 export interface TodoLike {

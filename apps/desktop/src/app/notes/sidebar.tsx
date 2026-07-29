@@ -10,6 +10,7 @@ import { $productLocale, productStrings } from './strings'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { BrandMark } from '@/components/brand-mark'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
@@ -158,16 +159,11 @@ export function NotesSidebar() {
 
   return (
     <div className="flex h-full flex-col px-2 pt-2">
-      {/* Workspace header — design 2a identity row: gradient B + subtitle. */}
+      {/* Workspace header — the real mark, not a letter in a gradient box. */}
       <div className={cn(ROW, 'group mb-1')}>
-        <span
-          className="grid size-[26px] shrink-0 place-items-center rounded-[7px] text-[14px] font-semibold text-white shadow-[0_2px_6px_-1px_rgba(0,122,255,0.45)]"
-          style={{ background: 'linear-gradient(160deg,#007AFF,#5AC8FA)' }}
-        >
-          B
-        </span>
+        <BrandMark className="size-[26px] rounded-[7px] shadow-[0_2px_6px_-1px_rgba(0,122,255,0.45)]" />
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
-          <span className="truncate text-[13px] font-semibold">Biseo</span>
+          <span className="truncate text-[13px] font-semibold">BISEO</span>
           <span className="truncate text-[11px] opacity-50">{info.name ?? 'Vault'} · {info.noteCount}</span>
         </span>
         <button

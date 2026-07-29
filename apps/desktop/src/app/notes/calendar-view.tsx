@@ -113,6 +113,7 @@ export function CalendarView() {
             </button>
             <button
               className="rounded-md px-2 py-1 text-[12.5px] opacity-70 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100"
+              title="Jump to today"
               onClick={() => {
                 const now = new Date()
 

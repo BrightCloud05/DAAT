@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 import { $vaultInfo, chooseVault } from '../vault/store'
 import { PERSONAS } from './personas'
 import { applyPersona, finishOnboarding } from './persona-store'
-import { $productLocale, productStrings, setProductLocale } from './strings'
+import { $productLocale, productStrings } from './strings'
 import { openDailyNote } from './templates'
 import type { PersonaId } from './personas'
 
@@ -70,27 +70,6 @@ export function OnboardingWizard() {
       >
         {step === 'persona' && (
           <>
-            {/* Language sits on the first screen because that is the only
-                moment it matters: the OS language is a good guess, not a
-                certainty, and a Korean user on an English Mac shouldn't have
-                to read English to find this. */}
-            <div className="mb-3 flex justify-end gap-1">
-              {(['en', 'ko'] as const).map(option => (
-                <button
-                  key={option}
-                  onClick={() => setProductLocale(option)}
-                  className={cn(
-                    'rounded-md px-2 py-1 text-[12px] transition-colors',
-                    locale === option
-                      ? 'bg-(--ui-control-hover-background) font-medium'
-                      : 'opacity-50 hover:opacity-90'
-                  )}
-                >
-                  {option === 'en' ? 'English' : '한국어'}
-                </button>
-              ))}
-            </div>
-
             <Heading
               title={s.onboardingQuestion}
               subtitle={s.onboardingSubtitle}

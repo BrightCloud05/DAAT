@@ -8,36 +8,28 @@
  * are what a buyer actually reads, and keeping them here also keeps upstream
  * merges from fighting over one enormous file.
  *
- * The language follows the OS by default, so a Korean user gets a Korean app
- * without finding a setting first. Anything missing falls back to English
- * rather than rendering a key.
+ * The language is the app's one language setting (Settings → Appearance →
+ * Language), not a second switch to find. English is the default; anything
+ * untranslated falls back to English rather than rendering a key.
  */
 
 import { atom } from 'nanostores'
 
-import { persistString, storedString } from '@/lib/storage'
+import type { Locale } from '@/i18n/types'
 
 export type ProductLocale = 'en' | 'ko'
 
-const KEY = 'biseo.locale.v1'
+/**
+ * Mirrors the app locale, narrowed to what this catalogue has.
+ *
+ * Kept as its own atom rather than reading the I18nProvider directly so
+ * non-React callers (the recorder, stores) can read it too. `syncProductLocale`
+ * is called by the provider whenever the user changes language.
+ */
+export const $productLocale = atom<ProductLocale>('en')
 
-function detect(): ProductLocale {
-  const stored = storedString(KEY)
-
-  if (stored === 'en' || stored === 'ko') {
-    return stored
-  }
-
-  const languages = typeof navigator === 'undefined' ? [] : [navigator.language, ...(navigator.languages ?? [])]
-
-  return languages.some(tag => tag?.toLowerCase().startsWith('ko')) ? 'ko' : 'en'
-}
-
-export const $productLocale = atom<ProductLocale>(typeof window === 'undefined' ? 'en' : detect())
-
-export function setProductLocale(locale: ProductLocale): void {
-  persistString(KEY, locale)
-  $productLocale.set(locale)
+export function syncProductLocale(locale: Locale): void {
+  $productLocale.set(locale === 'ko' ? 'ko' : 'en')
 }
 
 const EN = {
@@ -143,6 +135,23 @@ const EN = {
     'Audio is saved into your vault next to the note and transcribed on this Mac — nothing is uploaded. Tell the room you are recording.',
   noMeetingsYet: 'No meetings yet. Record one and BISEO writes up the summary and action items.',
 
+  // Persona dashboards
+  courses: 'Courses',
+  assessments: 'Assessments',
+  clients: 'Clients',
+  projects: 'Projects',
+  waitingOn: 'Waiting on',
+  courseCount: (count: number) => `${count} enrolled`,
+  noCoursesYet: 'No courses yet — make one from the Course template and today\u2019s classes show up here.',
+  noClassesToday: 'No classes today.',
+  noAssessmentsYet: 'Nothing due — add an Assessment note with a due date and it lands here.',
+  noClientsYet: 'No clients yet — make one from the Client template.',
+  noProjectsYet: 'No projects yet — make one from the Project template.',
+  nothingWaiting: 'Nothing pending on anyone else.',
+  dueToday: 'due today',
+  inDays: (days: number) => `${days} day${days === 1 ? '' : 's'}`,
+  daysLate: (days: number) => `${days} day${days === 1 ? '' : 's'} late`,
+
   // Mail
   noMailAccount: 'No mail account connected',
   loading: 'Loading…'
@@ -243,6 +252,22 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   recordingHint:
     '녹음 파일은 노트 옆 볼트에 저장되고 이 Mac에서 바로 텍스트로 변환됩니다 — 외부로 전송되지 않습니다. 참석자에게 녹음 사실을 알려 주세요.',
   noMeetingsYet: '아직 회의록이 없습니다. 녹음하면 BISEO가 요약과 할 일을 정리해 줍니다.',
+
+  courses: '수업',
+  assessments: '과제·시험',
+  clients: '고객',
+  projects: '프로젝트',
+  waitingOn: '대기 중',
+  courseCount: (count: number) => `${count}과목`,
+  noCoursesYet: '아직 수업이 없습니다 — Course 템플릿으로 만들면 오늘 수업이 여기 표시됩니다.',
+  noClassesToday: '오늘은 수업이 없습니다.',
+  noAssessmentsYet: '마감이 없습니다 — Assessment 노트에 마감일을 넣으면 여기 표시됩니다.',
+  noClientsYet: '아직 고객이 없습니다 — Client 템플릿으로 만들어 보세요.',
+  noProjectsYet: '아직 프로젝트가 없습니다 — Project 템플릿으로 만들어 보세요.',
+  nothingWaiting: '다른 사람에게 기다리는 일이 없습니다.',
+  dueToday: '오늘 마감',
+  inDays: (days: number) => `${days}일 남음`,
+  daysLate: (days: number) => `${days}일 지남`,
 
   noMailAccount: '연결된 메일 계정이 없습니다',
   loading: '불러오는 중…'

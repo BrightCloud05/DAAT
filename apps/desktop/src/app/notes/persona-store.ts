@@ -9,7 +9,7 @@
 
 import { atom } from 'nanostores'
 
-import { updateProfileSoul } from '@/hermes'
+import { getHermesConfigRecord, saveHermesConfig, updateProfileSoul } from '@/hermes'
 
 import { refreshVaultNotes } from '../vault/store'
 import { PERSONAS, personaById, type Persona, type PersonaId } from './personas'
@@ -47,6 +47,29 @@ function persist(key: string, value: string): void {
   }
 }
 
+/**
+ * Turn on the toolsets a persona needs, without turning anything off.
+ *
+ * Additive on purpose: the user may have enabled something themselves before
+ * (or after) picking a persona, and a first-run choice has no business
+ * revoking it. A student simply isn't handed a terminal by default.
+ */
+async function applyToolsets(wanted: string[]): Promise<void> {
+  if (!wanted.length) {
+    return
+  }
+
+  const config = await getHermesConfigRecord()
+  const current = Array.isArray(config.toolsets) ? config.toolsets.map(String) : []
+  const merged = [...new Set([...current, ...wanted])]
+
+  if (merged.length === current.length) {
+    return
+  }
+
+  await saveHermesConfig({ ...config, toolsets: merged })
+}
+
 export interface ApplyPersonaResult {
   notesCreated: number
   /** Set when the assistant's voice couldn't be written (backend still booting). */
@@ -72,6 +95,13 @@ export async function applyPersona(id: PersonaId): Promise<ApplyPersonaResult> {
     // The Python backend may still be starting on first run. The persona is
     // remembered either way; Settings can re-apply it.
     soulError = error instanceof Error ? error.message : String(error)
+  }
+
+  try {
+    await applyToolsets(persona.toolsets)
+  } catch {
+    // Same story — the vault tools work regardless, and Settings → Toolsets
+    // is the place this can be corrected by hand.
   }
 
   let notesCreated = 0

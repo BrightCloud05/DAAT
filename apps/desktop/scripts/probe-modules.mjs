@@ -42,6 +42,31 @@ fs.writeFileSync(
   `---\ndue: ${soon}\nstatus: draft\n---\n\n# Launch\n\n- [ ] write the release notes 📅 ${soon}\n`,
   'utf8'
 )
+// Student data, so the persona dashboard has real notes to read.
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+fs.mkdirSync(path.join(vault, 'Courses'), { recursive: true })
+fs.writeFileSync(
+  path.join(vault, 'Courses', 'Linear Algebra.md'),
+  `---\ntype: course\ncode: MATH2001\nterm: S2\nroom: Carslaw 350\ndays: [${WEEKDAYS[now.getDay()]}]\ntime: "09:00"\n---\n\n# Linear Algebra\n`,
+  'utf8'
+)
+fs.writeFileSync(
+  path.join(vault, 'Courses', 'Never Today.md'),
+  `---\ntype: course\ncode: HIST1001\ndays: [${WEEKDAYS[(now.getDay() + 3) % 7]}]\ntime: "14:00"\n---\n\n# Never Today\n`,
+  'utf8'
+)
+fs.writeFileSync(
+  path.join(vault, 'Courses', 'Assignment 2.md'),
+  `---\ntype: assessment\ncourse: MATH2001\ndue: ${soon}\nweight: 30%\nstatus: not started\n---\n\n# Assignment 2\n`,
+  'utf8'
+)
+fs.writeFileSync(
+  path.join(vault, 'Courses', 'Already Marked.md'),
+  `---\ntype: assessment\ncourse: MATH2001\ndue: ${today}\nstatus: done\n---\n\n# Already Marked\n`,
+  'utf8'
+)
+
 fs.writeFileSync(path.join(userData, 'vault.json'), JSON.stringify({ root: vault }), 'utf8')
 
 const app = await electron.launch({
@@ -66,11 +91,9 @@ await page.waitForTimeout(2500)
 await page.evaluate(() => {
   localStorage.setItem('hermes-desktop-onboarded-v1', '1')
   localStorage.setItem('hermes-onboarding-skipped-v1', '1')
-  // Pin the product language: it otherwise follows the OS, and this machine
-  // reports Korean — which is the feature working, but it makes assertions
-  // on English copy fail for the wrong reason.
-  localStorage.setItem('biseo.locale.v1', 'en')
   localStorage.setItem('biseo.onboarded.v1', '1')
+  // Pretend the user picked Student at first run.
+  localStorage.setItem('biseo.persona.v1', 'student')
 })
 await page.reload()
 await page.waitForTimeout(9000)
@@ -102,7 +125,7 @@ check("today's task appears on the grid", await bodyHas('call the bank'))
 check('a note dated by frontmatter appears', await bodyHas('Launch'))
 
 // Selecting a day must show its detail list.
-await page.locator('button', { hasText: 'Today' }).first().click()
+await page.locator('button[title="Jump to today"]').first().click()
 await page.waitForTimeout(600)
 check('selecting a day shows its entries', await bodyHas("Open this day's note"))
 
@@ -120,6 +143,33 @@ check('the import zone explains itself', await bodyHas('Drop a bank statement he
 console.log('--- Mail ---')
 await openModule('Mail')
 check('mail reports its real state', (await bodyHas('Mail')) && !(await bodyHas('undefined')))
+
+console.log('--- Student dashboard (persona-specific cards) ---')
+await page.locator('aside button', { hasText: 'Home' }).first().click()
+await page.waitForTimeout(2000)
+
+// Scope to the canvas: the sidebar lists every note title, so a whole-page
+// check can never prove a card FILTERED something out.
+const canvas = () => page.evaluate(() => document.querySelector('main')?.textContent ?? '')
+const dashboard = await canvas()
+
+check('the Courses card is shown for a student', dashboard.includes('Courses'))
+check("today's class is listed", dashboard.includes('Linear Algebra'))
+check('a class on another day is filtered out', !dashboard.includes('Never Today'))
+check('the room is shown', dashboard.includes('Carslaw 350'))
+check('the Assessments card is shown', dashboard.includes('Assessments'))
+check('an upcoming assessment is listed', dashboard.includes('Assignment 2'))
+// Narrower still: "Recent notes" legitimately lists it, so only the
+// Assessments card itself can prove the status filter works.
+const assessmentsCard = await page.evaluate(() => {
+  const heading = [...document.querySelectorAll('main span')].find(node => node.textContent?.trim() === 'Assessments')
+
+  return heading?.closest('div.rounded-xl')?.textContent ?? ''
+})
+
+check('a finished assessment is filtered out', assessmentsCard.length > 0 && !assessmentsCard.includes('Already Marked'))
+check('the assessment card names its course', assessmentsCard.includes('MATH2001'))
+check('the countdown is in days', dashboard.includes('2 days'))
 
 console.log('--- Meetings ---')
 await openModule('Meetings')
