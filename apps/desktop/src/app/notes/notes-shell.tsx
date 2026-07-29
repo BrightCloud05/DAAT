@@ -18,6 +18,7 @@ import { $activeNote, $vaultNotes, createNote } from '../vault/store'
 import { HomeView } from './home-view'
 import { NotesSidebar } from './sidebar'
 import { TableView } from './table-view'
+import { TodoView } from './todo-view'
 import { openDailyNote } from './templates'
 import { DocTopbar } from './topbar'
 import { $canvasView } from './view-store'
@@ -87,7 +88,15 @@ export function NotesShell() {
       <main className="relative flex min-w-0 flex-1 flex-col bg-(--ui-bg-editor)">
         <DocTopbar agentOpen={agentOpen} onToggleAgent={() => setAgentOpen(open => !open)} />
         <div className="min-h-0 flex-1">
-          {canvasView === 'home' ? <HomeView /> : canvasView === 'table' ? <TableView /> : <VaultEditorPane />}
+          {canvasView === 'home' ? (
+            <HomeView />
+          ) : canvasView === 'table' ? (
+            <TableView />
+          ) : canvasView === 'todo' ? (
+            <TodoView />
+          ) : (
+            <VaultEditorPane />
+          )}
         </div>
       </main>
 

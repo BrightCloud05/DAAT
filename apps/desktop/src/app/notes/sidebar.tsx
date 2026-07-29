@@ -27,7 +27,7 @@ import {
 } from '../vault/store'
 import { openDailyNote } from './templates'
 import { $vaultTodos, initTodosStore } from './todos-store'
-import { $canvasView, closeTableView, openHomeView, openTableView } from './view-store'
+import { $canvasView, closeTableView, openHomeView, openTableView, openTodoView } from './view-store'
 
 // Opening a page always returns the canvas to the note view.
 async function openNote(relPath: string): Promise<void> {
@@ -266,8 +266,11 @@ export function NotesSidebar() {
       {/* Module rows (design 2a): real counts where the data exists,
           quiet "soon" rows for modules not wired yet. */}
       <div className="border-t border-(--stroke-nous) pt-1.5">
-        <button className={ROW} onClick={() => void openDailyNote()} title="Today's daily note (⌘D)">
-          <Codicon name="checklist" className="shrink-0 text-[13px] opacity-55" />
+        <button
+          className={cn(ROW, view === 'todo' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          onClick={openTodoView}
+        >
+          <Codicon name="checklist" className="shrink-0 text-[13px] opacity-70" />
           <span>Todo</span>
           <span className="ml-auto text-[11px] opacity-40">{openTodoCount || ''}</span>
         </button>
