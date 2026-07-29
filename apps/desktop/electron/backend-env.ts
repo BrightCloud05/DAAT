@@ -96,13 +96,29 @@ function buildDesktopBackendEnv({
   venvRoot,
   currentEnv = process.env,
   platform = process.platform,
-  pathModule = pathModuleForPlatform(platform)
+  pathModule = pathModuleForPlatform(platform),
+  // The open vault + its index, so the Python `vault` plugin's tools operate
+  // on exactly the folder the user has open in the app. Omitted keys simply
+  // leave the plugin reporting "no vault connected".
+  vaultPath,
+  vaultIndexDb
 }: any = {}) {
   const delimiter = delimiterForPlatform(platform)
   const currentPythonPath = currentEnv?.PYTHONPATH || ''
   const key = pathEnvKey(currentEnv, platform)
 
+  const vaultEnv: Record<string, string> = {}
+
+  if (vaultPath) {
+    vaultEnv.VAULT_PATH = vaultPath
+  }
+
+  if (vaultIndexDb) {
+    vaultEnv.VAULT_INDEX_DB = vaultIndexDb
+  }
+
   return {
+    ...vaultEnv,
     PYTHONPATH: appendUniquePathEntries([...pythonPathEntries, currentPythonPath], { delimiter }),
     // Force PEP 540 UTF-8 mode in the spawned Python backend so its stdio and
     // subprocess defaults are UTF-8 even on non-UTF-8 Windows locales (GBK,

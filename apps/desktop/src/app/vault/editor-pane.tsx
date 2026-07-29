@@ -185,6 +185,17 @@ export function VaultEditorPane() {
               noteEdited(update.state.doc.toString())
               bumpDocEpoch()
             }
+
+            // Keep the agent's current-note context fresh: the active note and
+            // any selection, throttled to selection/doc changes only.
+            if (update.selectionSet || update.docChanged) {
+              const { from, to } = update.state.selection.main
+
+              window.hermesDesktop.vault.reportContext({
+                activeNote: pathRef.current,
+                selection: from === to ? '' : update.state.doc.sliceString(from, to)
+              })
+            }
           })
         ]
       })

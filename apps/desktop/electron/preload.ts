@@ -169,6 +169,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     noteNames: () => ipcRenderer.invoke('hermes:vault:noteNames'),
     propertiesTable: () => ipcRenderer.invoke('hermes:vault:propertiesTable'),
     todos: limit => ipcRenderer.invoke('hermes:vault:todos', limit),
+    reportContext: payload => ipcRenderer.send('hermes:vault:context', payload),
     toggleTodo: (relPath, line) => ipcRenderer.invoke('hermes:vault:toggleTodo', relPath, line),
     onIndexEvent: callback => {
       const listener = (_event, payload) => callback(payload)

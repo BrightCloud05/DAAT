@@ -33,6 +33,7 @@ import nodePty from 'node-pty'
 
 import { classifyActiveRuntime } from './active-runtime-state'
 import { initVaultIpc } from './vault/vault-ipc'
+import type { VaultService } from './vault/vault-service'
 import { stopBackendChild as stopBackendChildImpl } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -3677,7 +3678,8 @@ function createPythonBackend(root, label, backendArgs, options: any = {}) {
     env: buildDesktopBackendEnv({
       hermesHome: HERMES_HOME,
       pythonPathEntries: [root, ...getVenvSitePackagesEntries(venvRoot)],
-      venvRoot
+      venvRoot,
+      ...vaultBackendEnv()
     }),
     root,
     bootstrap: Boolean(options.bootstrap),
@@ -3701,7 +3703,8 @@ function createActiveBackend(backendArgs) {
     env: buildDesktopBackendEnv({
       hermesHome: HERMES_HOME,
       pythonPathEntries: [ACTIVE_HERMES_ROOT, ...getVenvSitePackagesEntries(VENV_ROOT)],
-      venvRoot: VENV_ROOT
+      venvRoot: VENV_ROOT,
+      ...vaultBackendEnv()
     }),
     root: ACTIVE_HERMES_ROOT,
     bootstrap: true,
@@ -5057,6 +5060,23 @@ function registerPowerResumeListeners() {
 
 function getAppIconPath() {
   return APP_ICON_PATHS.find(fileExists)
+}
+
+// The vault service (owner of the open vault + its index). Backends spawned
+// after a vault opens carry VAULT_PATH/VAULT_INDEX_DB so the Python `vault`
+// plugin's tools act on exactly the folder the user has open.
+let vaultService: VaultService | null = null
+
+function vaultBackendEnv(): { VAULT_PATH?: string; VAULT_INDEX_DB?: string } {
+  const root = vaultService?.info().root
+
+  if (!root) {
+    return {}
+  }
+
+  const indexDb = vaultService?.indexDbPath()
+
+  return { vaultPath: root, ...(indexDb ? { vaultIndexDb: indexDb } : {}) } as never
 }
 
 function sendOpenUpdatesRequested() {
@@ -11383,7 +11403,7 @@ app.whenReady().then(() => {
   registerMediaProtocol()
   installEmbedReferer()
   registerDeepLinkProtocol()
-  initVaultIpc()
+  vaultService = initVaultIpc()
   ensureWslWindowsFonts()
   configureSpellChecker()
   registerPowerResumeListeners()

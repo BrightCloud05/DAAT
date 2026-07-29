@@ -7,7 +7,9 @@
  * `window.hermesDesktop.vault.*` in preload.ts.
  */
 
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain } from 'electron'
+import fs from 'node:fs'
+import path from 'node:path'
 
 import { VaultService, defaultICloudVaultDir, defaultLocalVaultDir } from './vault-service'
 import type { VaultConflictEvent, VaultIndexEvent } from './vault-types'
@@ -71,6 +73,35 @@ export function initVaultIpc(): VaultService {
   ipcMain.handle('hermes:vault:backlinks', (_event, relPath: string) => service.backlinks(relPath))
   ipcMain.handle('hermes:vault:linksFrom', (_event, relPath: string) => service.linksFrom(relPath))
   ipcMain.handle('hermes:vault:resolveWikilink', (_event, targetRaw: string) => service.resolveWikilink(targetRaw))
+  // Current-note bridge: the renderer reports what the user is looking at;
+  // the Python `vault` plugin reads this file in pre_llm_call so the agent
+  // always knows the active note. Written under HERMES_HOME (never inside
+  // the vault — no sync junk in the user's notes).
+  ipcMain.on('hermes:vault:context', (_event, payload: { activeNote?: string; selection?: string }) => {
+    try {
+      const home = process.env.HERMES_HOME || path.join(app.getPath('home'), '.biseo')
+      const target = path.join(home, 'state', 'vault-context.json')
+
+      fs.mkdirSync(path.dirname(target), { recursive: true })
+      fs.writeFileSync(
+        target,
+        JSON.stringify(
+          {
+            vault: service.info().root,
+            active_note: payload?.activeNote ?? null,
+            selection: payload?.selection ?? '',
+            updated_at: Date.now()
+          },
+          null,
+          2
+        ),
+        'utf8'
+      )
+    } catch {
+      // Best-effort: a missing bridge just means no extra context this turn.
+    }
+  })
+
   ipcMain.handle('hermes:vault:noteNames', () => service.noteNames())
   ipcMain.handle('hermes:vault:propertiesTable', () => service.propertiesTable())
   ipcMain.handle('hermes:vault:todos', (_event, limit?: number) => service.todos(limit))
