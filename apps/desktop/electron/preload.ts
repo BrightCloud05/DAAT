@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       ipcRenderer.invoke('hermes:vault:write', relPath, content, expectedMtimeMs, expectedContent),
     createNote: relPath => ipcRenderer.invoke('hermes:vault:createNote', relPath),
     createDir: relPath => ipcRenderer.invoke('hermes:vault:createDir', relPath),
+    writeBinary: (relPath, data) => ipcRenderer.invoke('hermes:vault:writeBinary', relPath, data),
     rename: (fromRel, toRel) => ipcRenderer.invoke('hermes:vault:rename', fromRel, toRel),
     trash: relPath => ipcRenderer.invoke('hermes:vault:trash', relPath),
     search: query => ipcRenderer.invoke('hermes:vault:search', query),

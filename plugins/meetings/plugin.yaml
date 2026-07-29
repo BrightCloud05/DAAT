@@ -1,0 +1,9 @@
+manifest_version: 1
+name: meetings
+version: 0.1.0
+description: "BISEO meeting tools: transcribe recordings stored in the vault."
+author: BISEO
+kind: standalone
+provides_tools:
+  - meeting_transcribe
+  - meeting_list_recordings

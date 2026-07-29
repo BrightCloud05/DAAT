@@ -121,6 +121,25 @@ console.log('--- Mail ---')
 await openModule('Mail')
 check('mail reports its real state', (await bodyHas('Mail')) && !(await bodyHas('undefined')))
 
+console.log('--- Meetings ---')
+await openModule('Meetings')
+check('the recorder is offered', await bodyHas('Record'))
+check('recording privacy is stated up front', await bodyHas('nothing is uploaded'))
+check('the empty state explains the payoff', await bodyHas('summary and action items'))
+
+// Starting a recording in a headless run has no microphone; the failure must
+// be a readable message, not an unhandled rejection.
+await page.locator('button', { hasText: 'Record' }).last().click()
+await page.waitForTimeout(2500)
+check(
+  'a missing microphone reports cleanly',
+  await page.evaluate(() => {
+    const text = document.body.textContent ?? ''
+
+    return text.includes('microphone') || text.includes('Recording…') || text.includes('Stop & summarize')
+  })
+)
+
 console.log('--- Command palette (developer surfaces stay hidden) ---')
 await page.keyboard.press('Meta+k')
 await page.waitForTimeout(1200)

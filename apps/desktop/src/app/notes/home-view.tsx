@@ -17,7 +17,7 @@ import { collectEntries, type TableLikeRow } from './calendar'
 import { formatAmount, MONEY_DIR, type MoneySummary, parseMonthNote, summarize } from './money'
 import { openDailyNote, todayStamp } from './templates'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
-import { closeTableView, openCalendarView, openMailView, openMoneyView } from './view-store'
+import { closeTableView, openCalendarView, openMailView, openMeetingsView, openMoneyView } from './view-store'
 import { $productLocale, productStrings } from './strings'
 
 const CARD =
@@ -394,11 +394,12 @@ export function HomeView() {
           <InboxCard />
           <MoneyCard />
 
-          {/* Still honest about what isn't built. */}
-          <div className={`${CARD} opacity-75`}>
+          <div className={CARD}>
             <div className="flex items-baseline">
               <span className={CARD_TITLE}>{s.meetings}</span>
-              <span className={`ml-auto ${MUTED}`}>soon</span>
+              <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openMeetingsView}>
+                {s.startRecording}
+              </button>
             </div>
             <span className={MUTED}>{s.meetingsHint}</span>
           </div>

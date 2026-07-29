@@ -130,6 +130,10 @@ export function initVaultIpc(): VaultService {
   )
 
   ipcMain.handle('hermes:vault:createNote', (_event, relPath: string) => service.createNote(relPath))
+  ipcMain.handle('hermes:vault:writeBinary', (_event, relPath: string, data: Uint8Array) =>
+    service.writeBinary(relPath, data)
+  )
+
   ipcMain.handle('hermes:vault:createDir', (_event, relPath: string) => service.createDir(relPath))
   ipcMain.handle('hermes:vault:rename', (_event, fromRel: string, toRel: string) => service.rename(fromRel, toRel))
   ipcMain.handle('hermes:vault:trash', (_event, relPath: string) => service.trash(relPath))

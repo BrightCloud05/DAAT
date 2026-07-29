@@ -34,6 +34,7 @@ import {
   openCalendarView,
   openHomeView,
   openMailView,
+  openMeetingsView,
   openMoneyView,
   openTableView,
   openTodoView
@@ -306,10 +307,13 @@ export function NotesSidebar() {
           <Codicon name="calendar" className="shrink-0 text-[13px] opacity-70" />
           <span>{s.calendar}</span>
         </button>
-        <div className={cn(ROW, 'cursor-default opacity-45')} title={s.comingSoon}>
-          <Codicon name="organization" className="shrink-0 text-[13px]" />
+        <button
+          className={cn(ROW, view === 'meetings' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          onClick={openMeetingsView}
+        >
+          <Codicon name="record" className="shrink-0 text-[13px] opacity-70" />
           <span>{s.meetings}</span>
-        </div>
+        </button>
       </div>
 
       {/* Bottom-anchored actions — Notion's New / Settings grammar. */}

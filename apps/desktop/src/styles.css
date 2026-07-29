@@ -2036,3 +2036,10 @@ text-* variant utilities. */ .btn-arc {
     opacity: 0.4;
   }
 }
+
+/* Recording indicator: a slow breath, not a blink — a fast flash reads as an
+   error, and this one runs for the length of a whole meeting. */
+@keyframes biseo-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}

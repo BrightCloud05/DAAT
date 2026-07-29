@@ -71,7 +71,7 @@ const EN = {
   connect: 'Connect',
   connectMailHint: 'Connect an account and BISEO can read, sort and draft replies.',
   moneyHint: 'Drop a bank statement photo in Money and BISEO files the transactions.',
-  meetingsHint: 'Record → transcript → summary — coming soon.',
+  meetingsHint: 'Record a meeting and BISEO transcribes it here and writes up the action items.',
   unreadCount: (count: number) => `${count} unread`,
   openCount: (count: number) => `${count} open`,
 
@@ -133,6 +133,16 @@ const EN = {
   noTransactions: 'No transactions yet for this month.',
   openTheNote: 'Open the note',
 
+  // Meetings
+  startRecording: 'Record',
+  stopAndSummarize: 'Stop & summarize',
+  discard: 'Discard',
+  recording: 'Recording…',
+  meetingTitlePlaceholder: 'What is this meeting? (optional)',
+  recordingHint:
+    'Audio is saved into your vault next to the note and transcribed on this Mac — nothing is uploaded. Tell the room you are recording.',
+  noMeetingsYet: 'No meetings yet. Record one and BISEO writes up the summary and action items.',
+
   // Mail
   noMailAccount: 'No mail account connected',
   loading: 'Loading…'
@@ -169,7 +179,7 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   connect: '연결하기',
   connectMailHint: '계정을 연결하면 BISEO가 메일을 읽고 정리하고 답장 초안까지 써 줍니다.',
   moneyHint: '가계부 화면에 은행 명세서 사진을 올리면 BISEO가 거래 내역을 정리합니다.',
-  meetingsHint: '녹음 → 전사 → 요약 — 준비 중입니다.',
+  meetingsHint: '회의를 녹음하면 BISEO가 텍스트로 옮기고 할 일까지 정리해 줍니다.',
   unreadCount: (count: number) => `읽지 않음 ${count}개`,
   openCount: (count: number) => `${count}개 남음`,
 
@@ -224,6 +234,15 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   byCategory: '분류별',
   noTransactions: '이번 달 거래 내역이 없습니다.',
   openTheNote: '노트 열기',
+
+  startRecording: '녹음 시작',
+  stopAndSummarize: '중지하고 요약',
+  discard: '삭제',
+  recording: '녹음 중…',
+  meetingTitlePlaceholder: '어떤 회의인가요? (선택)',
+  recordingHint:
+    '녹음 파일은 노트 옆 볼트에 저장되고 이 Mac에서 바로 텍스트로 변환됩니다 — 외부로 전송되지 않습니다. 참석자에게 녹음 사실을 알려 주세요.',
+  noMeetingsYet: '아직 회의록이 없습니다. 녹음하면 BISEO가 요약과 할 일을 정리해 줍니다.',
 
   noMailAccount: '연결된 메일 계정이 없습니다',
   loading: '불러오는 중…'

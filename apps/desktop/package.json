@@ -235,7 +235,7 @@
         "CFBundleExecutable": "BISEO",
         "CFBundleName": "BISEO",
         "NSAudioCaptureUsageDescription": "BISEO uses audio capture for voice conversations.",
-        "NSMicrophoneUsageDescription": "BISEO uses the microphone for voice input and voice conversations."
+        "NSMicrophoneUsageDescription": "BISEO records meetings you start yourself, and transcribes them on this Mac."
       },
       "hardenedRuntime": true,
       "target": [

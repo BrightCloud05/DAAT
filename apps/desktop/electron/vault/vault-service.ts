@@ -556,6 +556,23 @@ export class VaultService {
     return { ...(await this.read(withExt)), created }
   }
 
+  /**
+   * Write raw bytes into the vault (meeting recordings).
+   *
+   * Separate from write(): that path is markdown-only — it round-trips through
+   * a string, compares content and can divert to a conflict copy, none of
+   * which is meaningful for an opaque audio blob.
+   */
+  async writeBinary(relPath: string, data: Uint8Array): Promise<{ path: string; bytes: number }> {
+    const { root } = this.requireOpen()
+    const absolute = resolveInVault(root, relPath)
+
+    await fsp.mkdir(path.dirname(absolute), { recursive: true })
+    await fsp.writeFile(absolute, data)
+
+    return { path: relPath, bytes: data.byteLength }
+  }
+
   async createDir(relPath: string): Promise<void> {
     const { root } = this.requireOpen()
 

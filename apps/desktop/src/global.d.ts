@@ -102,6 +102,7 @@ declare global {
         ) => Promise<VaultWriteResult>
         createNote: (relPath: string) => Promise<VaultReadResult & { created: boolean }>
         createDir: (relPath: string) => Promise<void>
+        writeBinary: (relPath: string, data: Uint8Array) => Promise<{ path: string; bytes: number }>
         rename: (fromRel: string, toRel: string) => Promise<void>
         trash: (relPath: string) => Promise<void>
         search: (query: string) => Promise<VaultSearchHit[]>
