@@ -38,9 +38,11 @@ let startedAt = 0
 /** `Meetings/2026-07-29 1432 Standup` — sortable, and readable in Finder. */
 export function meetingFolder(title: string, now: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0')
+
   const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(
     now.getMinutes()
   )}`
+
   // Keep it a valid single path segment on every filesystem.
   const safe = title
     .replace(/[/\\:*?"<>|]/g, ' ')
@@ -96,6 +98,7 @@ export async function startRecording(title: string): Promise<boolean> {
 
   chunks = []
   recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+
   recorder.ondataavailable = event => {
     if (event.data.size > 0) {
       chunks.push(event.data)

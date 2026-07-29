@@ -15,13 +15,15 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
 import { $vaultInfo, chooseVault } from '../vault/store'
-import { PERSONAS } from './personas'
-import { applyPersona, finishOnboarding } from './persona-store'
-import { $productLocale, productStrings } from './strings'
-import { openDailyNote } from './templates'
-import type { PersonaId } from './personas'
 
-type Step = 'persona' | 'place' | 'ready'
+import { applyPersona, finishOnboarding } from './persona-store'
+import { PERSONAS } from './personas'
+import type { PersonaId } from './personas'
+import { endSetup } from './setup-agent'
+import { SetupChat } from './setup-chat'
+import { $productLocale, productStrings } from './strings'
+
+type Step = 'persona' | 'place' | 'setup'
 
 export function OnboardingWizard() {
   const info = useStore($vaultInfo)
@@ -59,7 +61,7 @@ export function OnboardingWizard() {
 
     setSeeded(result.notesCreated)
     setApplying(false)
-    setStep('ready')
+    setStep('setup')
   }
 
   return (
@@ -71,8 +73,8 @@ export function OnboardingWizard() {
         {step === 'persona' && (
           <>
             <Heading
-              title={s.onboardingQuestion}
               subtitle={s.onboardingSubtitle}
+              title={s.onboardingQuestion}
             />
 
             <div className="grid grid-cols-3 gap-3">
@@ -81,9 +83,6 @@ export function OnboardingWizard() {
 
                 return (
                   <button
-                    key={entry.id}
-                    onClick={() => setChosen(entry.id)}
-                    onDoubleClick={() => void confirmPersona()}
                     className={cn(
                       'flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-all duration-150',
                       'hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgba(0,0,0,0.35)]',
@@ -91,6 +90,9 @@ export function OnboardingWizard() {
                         ? 'border-(--dt-primary) bg-[color-mix(in_srgb,var(--dt-primary)_7%,transparent)]'
                         : 'border-(--stroke-nous)'
                     )}
+                    key={entry.id}
+                    onClick={() => setChosen(entry.id)}
+                    onDoubleClick={() => void confirmPersona()}
                   >
                     <span className="text-[22px] leading-none">{entry.emoji}</span>
                     <span className="mt-1 text-[13.5px] font-semibold">
@@ -118,15 +120,15 @@ export function OnboardingWizard() {
         {step === 'place' && (
           <>
             <Heading
-              title={s.notesLiveHere}
               subtitle={s.notesLiveHereSubtitle}
+              title={s.notesLiveHere}
             />
 
             <div className="rounded-xl border border-(--stroke-nous) p-4">
               <div className="flex items-center gap-2.5">
                 <Codicon
-                  name={info?.location === 'icloud' ? 'cloud' : 'folder'}
                   className="text-[18px] text-(--dt-primary)"
+                  name={info?.location === 'icloud' ? 'cloud' : 'folder'}
                 />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13.5px] font-medium">{info?.root ?? s.noFolderYet}</div>
@@ -157,41 +159,17 @@ export function OnboardingWizard() {
           </>
         )}
 
-        {step === 'ready' && (
-          <>
-            <Heading
-              title={`${s.ready}${persona ? ` · ${locale === 'ko' ? persona.ko.name : persona.name}` : ''}`}
-              subtitle={s.readySubtitle(seeded)}
-            />
-
-            <div className="flex flex-col gap-2">
-              {[
-                { key: '⌘N', text: s.newPage },
-                { key: '⌘D', text: s.todaysDailyNote },
-                { key: '/', text: s.insertBlock },
-                { key: '⌘J', text: s.askTheAssistant }
-              ].map(row => (
-                <div key={row.key} className="flex items-center gap-3 text-[13px]">
-                  <kbd className="min-w-[2.4rem] rounded-md bg-(--ui-control-hover-background) px-1.5 py-0.5 text-center text-[12px] opacity-80">
-                    {row.key}
-                  </kbd>
-                  <span className="opacity-70">{row.text}</span>
-                </div>
-              ))}
-            </div>
-
-            <Actions
-              primary={{
-                label: s.startTodaysPlan,
-                onClick: () => {
-                  finishOnboarding()
-                  void openDailyNote()
-                }
-              }}
-              secondary={{ label: s.justLookAround, onClick: finishOnboarding }}
-            />
-          </>
-        )}
+        {/* The assistant takes it from here: it opens the conversation and
+            builds the user's pages as they answer. */}
+        {step === 'setup' && persona ? (
+          <SetupChat
+            onDone={() => {
+              void endSetup()
+              finishOnboarding()
+            }}
+            persona={persona}
+          />
+        ) : null}
       </div>
     </div>
   )

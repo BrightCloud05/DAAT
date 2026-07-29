@@ -14,8 +14,9 @@ import { useMemo, useState } from 'react'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
-import { $vaultNotes, createNote, openNote } from '../vault/store'
 import { $editorView } from '../vault/editor-bridge'
+import { $vaultNotes, createNote, openNote } from '../vault/store'
+
 import { $recorder, cancelRecording, formatElapsed, startRecording, stopRecording } from './recorder'
 import { $productLocale, productStrings } from './strings'
 import { closeTableView } from './view-store'
@@ -120,14 +121,14 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
             <div className="flex items-center gap-3">
               <input
                 className="min-w-0 flex-1 rounded-lg bg-(--ui-control-hover-background) px-3 py-2 text-[13.5px] outline-none placeholder:opacity-45"
-                placeholder={s.meetingTitlePlaceholder}
-                value={title}
                 onChange={event => setTitle(event.target.value)}
                 onKeyDown={event => {
                   if (event.key === 'Enter') {
                     void begin()
                   }
                 }}
+                placeholder={s.meetingTitlePlaceholder}
+                value={title}
               />
               <button
                 className="flex shrink-0 items-center gap-2 rounded-lg bg-(--dt-primary) px-3.5 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
@@ -144,7 +145,7 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
 
           {recorder.error ? (
             <div className="flex items-start gap-2 rounded-lg bg-[rgba(255,59,48,0.10)] px-3 py-2 text-[12.5px]">
-              <Codicon name="warning" className="mt-0.5 shrink-0" />
+              <Codicon className="mt-0.5 shrink-0" name="warning" />
               <span>{recorder.error}</span>
             </div>
           ) : null}
@@ -155,14 +156,14 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
           <div className="flex flex-col">
             {meetings.map(note => (
               <button
-                key={note.path}
                 className="flex items-center gap-3 border-b border-(--stroke-nous) py-2.5 text-left last:border-b-0"
+                key={note.path}
                 onClick={() => {
                   closeTableView()
                   void openNote(note.path)
                 }}
               >
-                <Codicon name="record" className="shrink-0 text-[13px] opacity-45" />
+                <Codicon className="shrink-0 text-[13px] opacity-45" name="record" />
                 <span className="min-w-0 flex-1 truncate text-[13.5px]">{note.title || note.path}</span>
                 <span className="shrink-0 text-[11.5px] opacity-40">
                   {new Date(note.mtimeMs).toLocaleDateString()}

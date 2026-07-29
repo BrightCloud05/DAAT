@@ -13,15 +13,17 @@ import { useEffect, useMemo, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 import { $vaultRevision, openNote } from '../vault/store'
+
 import { dateFromValue, stampOf, type TableLikeRow } from './calendar'
-import type { PersonaWidgetId } from './personas'
 import { $persona } from './persona-store'
+import type { PersonaWidgetId } from './personas'
 import { $productLocale, productStrings } from './strings'
 import { $vaultTodos } from './todos-store'
 import { closeTableView } from './view-store'
 
 const CARD =
   'rounded-xl border border-(--stroke-nous) bg-(--dt-card) p-[18px] flex flex-col gap-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_10px_24px_-18px_rgba(0,0,0,0.22)]'
+
 const CARD_TITLE = 'text-[13px] font-semibold'
 const MUTED = 'text-xs opacity-50'
 
@@ -76,6 +78,7 @@ function CoursesCard() {
   const courses = useMemo(() => ofType(rows, 'course'), [rows])
 
   const todayKey = WEEKDAY_KEYS[new Date().getDay()]
+
   const todays = courses
     .filter(course => {
       const days = course.props.days
@@ -88,12 +91,12 @@ function CoursesCard() {
     .sort((a, b) => String(a.props.time ?? '').localeCompare(String(b.props.time ?? '')))
 
   return (
-    <Card title={s.courses} action={<span className={MUTED}>{s.courseCount(courses.length)}</span>}>
+    <Card action={<span className={MUTED}>{s.courseCount(courses.length)}</span>} title={s.courses}>
       {!courses.length ? (
         <span className={MUTED}>{s.noCoursesYet}</span>
       ) : todays.length ? (
         todays.map(course => (
-          <button key={course.path} className="flex items-baseline gap-2 text-left" onClick={() => open(course.path)}>
+          <button className="flex items-baseline gap-2 text-left" key={course.path} onClick={() => open(course.path)}>
             <span className="shrink-0 text-[11.5px] tabular-nums opacity-45">
               {String(course.props.time ?? '').trim() || '—'}
             </span>
@@ -135,9 +138,11 @@ function AssessmentsCard() {
   const distance = (due: string): { text: string; tone?: string } => {
     const days = Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86_400_000)
 
-    if (days < 0) return { text: s.daysLate(Math.abs(days)), tone: '#C0392B' }
-    if (days === 0) return { text: s.dueToday, tone: '#C0392B' }
-    if (days <= 7) return { text: s.inDays(days), tone: '#B26A00' }
+    if (days < 0) {return { text: s.daysLate(Math.abs(days)), tone: '#C0392B' }}
+
+    if (days === 0) {return { text: s.dueToday, tone: '#C0392B' }}
+
+    if (days <= 7) {return { text: s.inDays(days), tone: '#B26A00' }}
 
     return { text: s.inDays(days) }
   }
@@ -145,13 +150,13 @@ function AssessmentsCard() {
   const unfinished = todos.filter(todo => !todo.done).length
 
   return (
-    <Card title={s.assessments} action={<span className={MUTED}>{s.openCount(unfinished)}</span>}>
+    <Card action={<span className={MUTED}>{s.openCount(unfinished)}</span>} title={s.assessments}>
       {items.length ? (
         items.map(item => {
           const badge = item.due ? distance(item.due) : null
 
           return (
-            <button key={item.path} className="flex items-baseline gap-2 text-left" onClick={() => open(item.path)}>
+            <button className="flex items-baseline gap-2 text-left" key={item.path} onClick={() => open(item.path)}>
               <span className="min-w-0 flex-1 truncate text-[13px]">{item.title}</span>
               {item.course ? <span className="shrink-0 text-[11.5px] opacity-40">{item.course}</span> : null}
               {badge ? (
@@ -175,6 +180,7 @@ function AssessmentsCard() {
 /** Generic "notes of this type, most recent first" card. */
 function TypeCard({ type, title, empty }: { type: string; title: string; empty: string }) {
   const rows = useTable()
+
   const items = useMemo(() => ofType(rows, type)
         .sort((a, b) => (b.mtimeMs ?? 0) - (a.mtimeMs ?? 0))
         .slice(0, 4), [rows, type])
@@ -183,7 +189,7 @@ function TypeCard({ type, title, empty }: { type: string; title: string; empty: 
     <Card title={title}>
       {items.length ? (
         items.map(item => (
-          <button key={item.path} className="flex items-baseline gap-2 text-left" onClick={() => open(item.path)}>
+          <button className="flex items-baseline gap-2 text-left" key={item.path} onClick={() => open(item.path)}>
             <span className="min-w-0 flex-1 truncate text-[13px]">{item.title || item.path}</span>
             {item.props.status ? (
               <span className="shrink-0 text-[11.5px] opacity-40">{String(item.props.status)}</span>
@@ -208,8 +214,8 @@ function WaitingOnCard() {
       {waiting.length ? (
         waiting.map(todo => (
           <button
-            key={`${todo.path}:${todo.line}`}
             className="truncate text-left text-[13px]"
+            key={`${todo.path}:${todo.line}`}
             onClick={() => open(todo.path)}
           >
             {todo.text}
@@ -234,14 +240,19 @@ export function PersonaWidgets() {
     switch (id) {
       case 'courses':
         return <CoursesCard key={id} />
+
       case 'assessments':
         return <AssessmentsCard key={id} />
+
       case 'clients':
-        return <TypeCard key={id} type="client" title={s.clients} empty={s.noClientsYet} />
+        return <TypeCard empty={s.noClientsYet} key={id} title={s.clients} type="client" />
+
       case 'projects':
-        return <TypeCard key={id} type="project" title={s.projects} empty={s.noProjectsYet} />
+        return <TypeCard empty={s.noProjectsYet} key={id} title={s.projects} type="project" />
+
       case 'waitingOn':
         return <WaitingOnCard key={id} />
+
       default:
         return null
     }

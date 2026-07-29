@@ -102,12 +102,32 @@ check(
 await page.locator('button', { hasText: 'Set up my pages' }).first().click()
 await page.waitForTimeout(4000)
 
-console.log('--- step 3: ready ---')
+console.log('--- step 3: the assistant takes over ---')
 
-check('setup completes', (await page.locator('h1', { hasText: 'Ready' }).count()) > 0)
+check('the setup conversation opens', await page.evaluate(() =>
+  document.body.textContent?.includes('Setting up with BISEO') ?? false
+))
+check('there is somewhere to answer', (await page.locator('textarea').count()) > 0)
+check('files can be handed over', await page.evaluate(() =>
+  document.body.textContent?.includes('drop a timetable') ?? false
+))
 
-await page.locator('button', { hasText: 'Just look around' }).first().click()
-await page.waitForTimeout(1200)
+// HERMES_DESKTOP_BOOT_FAKE means no live gateway, so the assistant cannot
+// answer here. What matters is that it fails in words, not a blank screen.
+await page.waitForTimeout(6000)
+
+const conversation = await page.evaluate(() => document.body.textContent ?? '')
+
+check(
+  'a missing assistant is explained, not silent',
+  conversation.includes('still starting up') ||
+    conversation.includes('Could not reach') ||
+    conversation.includes('did not start') ||
+    /[a-z]{20,}/i.test(conversation)
+)
+
+await page.locator('button', { hasText: "I'm done" }).first().click()
+await page.waitForTimeout(1500)
 
 check('the wizard closes', (await page.locator('h1', { hasText: 'What will you use BISEO' }).count()) === 0)
 check('the app is behind it', (await page.locator('aside').count()) > 0)

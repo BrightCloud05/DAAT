@@ -135,6 +135,16 @@ const EN = {
     'Audio is saved into your vault next to the note and transcribed on this Mac — nothing is uploaded. Tell the room you are recording.',
   noMeetingsYet: 'No meetings yet. Record one and BISEO writes up the summary and action items.',
 
+  // AI setup conversation
+  settingUpTitle: 'Setting up with BISEO',
+  imDone: "I'm done",
+  setupPlaceholder: 'Type your answer…',
+  dropAnything: 'You can also drop a timetable, a PDF or a photo anywhere on this window.',
+  send: 'Send',
+  undo: 'Undo',
+  undone: 'Removed those pages.',
+  madePages: (count: number) => `Made ${count} page${count === 1 ? '' : 's'}`,
+
   // Persona dashboards
   courses: 'Courses',
   assessments: 'Assessments',
@@ -252,6 +262,15 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   recordingHint:
     '녹음 파일은 노트 옆 볼트에 저장되고 이 Mac에서 바로 텍스트로 변환됩니다 — 외부로 전송되지 않습니다. 참석자에게 녹음 사실을 알려 주세요.',
   noMeetingsYet: '아직 회의록이 없습니다. 녹음하면 BISEO가 요약과 할 일을 정리해 줍니다.',
+
+  settingUpTitle: 'BISEO와 함께 설정하기',
+  imDone: '다 됐어요',
+  setupPlaceholder: '답을 입력하세요…',
+  dropAnything: '시간표, PDF, 사진을 이 창 아무 데나 끌어다 놓아도 됩니다.',
+  send: '보내기',
+  undo: '되돌리기',
+  undone: '만든 페이지를 지웠습니다.',
+  madePages: (count: number) => `페이지 ${count}개를 만들었어요`,
 
   courses: '수업',
   assessments: '과제·시험',
