@@ -76,6 +76,7 @@ declare global {
 
   interface Window {
     hermesDesktop: {
+      appNotices: () => Promise<{ license: string; thirdParty: string }>
       mail: {
         status: () => Promise<{ installed: boolean; accounts: Array<{ name: string; default: boolean }> }>
         list: (opts?: { account?: string; folder?: string; limit?: number }) => Promise<MailEnvelope[]>

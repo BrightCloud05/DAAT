@@ -135,6 +135,21 @@ export function MaintenancePanel() {
   )
 
   const shareDebug = useCallback(async () => {
+    // This uploads log files to a PUBLIC paste service. Those logs contain
+    // conversation content, tool output and file paths — i.e. the user's own
+    // notes — and redaction only covers secrets. Publishing someone's writing
+    // must be their decision, taken knowingly.
+    const consented = window.confirm(
+      'Upload diagnostic logs to a public paste site?\n\n' +
+        'The logs can include your note contents, conversation text, file paths ' +
+        'and tool output. Anyone with the link can read them, and they cannot be ' +
+        'unpublished.\n\nOnly do this if someone helping you asked for it.'
+    )
+
+    if (!consented) {
+      return
+    }
+
     setSharing(true)
     setShare(null)
     setError('')

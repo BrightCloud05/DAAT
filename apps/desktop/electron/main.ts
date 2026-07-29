@@ -10352,6 +10352,27 @@ ipcMain.on('hermes:quick-entry:state', (_event, payload) => {
 
 ipcMain.on('hermes:quick-entry:dismiss', () => hideQuickEntryWindow())
 
+/**
+ * The licences we are obliged to reproduce, read from inside the app bundle.
+ *
+ * MIT and friends require the notice to travel with binary copies, so
+ * THIRD_PARTY_NOTICES.txt and LICENSE are listed in build.files and land in
+ * the asar next to the code.
+ */
+ipcMain.handle('hermes:app:notices', async () => {
+  const read = async (name: string) => {
+    try {
+      return await fs.promises.readFile(path.join(app.getAppPath(), name), 'utf8')
+    } catch {
+      return ''
+    }
+  }
+
+  const [license, thirdParty] = await Promise.all([read('LICENSE'), read('THIRD_PARTY_NOTICES.txt')])
+
+  return { license, thirdParty }
+})
+
 ipcMain.handle('hermes:openExternal', (_event, url) => {
   if (!openExternalUrl(url)) {
     throw new Error('Invalid external URL')

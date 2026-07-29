@@ -117,6 +117,15 @@ console.log('--- Mail ---')
 await openModule('Mail')
 check('mail reports its real state', (await bodyHas('Mail')) && !(await bodyHas('undefined')))
 
+console.log('--- Acknowledgements (licence compliance) ---')
+// The notices are read over IPC from inside the bundle; a broken path here
+// means we ship binaries with no attribution.
+const notices = await page.evaluate(() => window.hermesDesktop?.appNotices?.())
+
+check('the app can read its own licence file', Boolean(notices?.license?.includes('MIT')))
+check('third-party notices are bundled', (notices?.thirdParty?.length ?? 0) > 10_000)
+check('upstream copyright is preserved', Boolean(notices?.license?.includes('Nous Research')))
+
 console.log('--- Home ---')
 await page.locator('aside button', { hasText: 'Home' }).first().click()
 await page.waitForTimeout(1200)

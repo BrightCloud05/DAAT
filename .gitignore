@@ -192,3 +192,5 @@ infographics/
 infograficos/
 infografico/
 native/fts5_cjk/*.so
+apps/desktop/THIRD_PARTY_NOTICES.txt
+apps/desktop/LICENSE
