@@ -198,6 +198,17 @@ export class VaultService {
       throw new Error(`Not a directory: ${resolved}`)
     }
 
+    // Vaults created before templates shipped get the starters on open —
+    // skip-existing, and only when the folder is absent entirely so a user
+    // who deleted it stays deleted... (folder present = user's call).
+    try {
+      await fsp.access(path.join(resolved, 'Templates'))
+    } catch {
+      for (const [name, content] of Object.entries(STARTER_TEMPLATES)) {
+        await writeNote(path.join(resolved, 'Templates', name), content, null).catch(() => undefined)
+      }
+    }
+
     const home = app.getPath('home')
     const forbidden = [app.getPath('userData'), path.join(home, '.biseo'), path.join(home, '.hermes')]
 
@@ -416,7 +427,16 @@ export class VaultService {
   async listDir(subdir = ''): Promise<VaultEntry[]> {
     const { root } = this.requireOpen()
     const absolute = resolveInVault(root, subdir || '.')
-    const entries = await fsp.readdir(absolute, { withFileTypes: true })
+
+    let entries: fs.Dirent[]
+
+    try {
+      entries = await fsp.readdir(absolute, { withFileTypes: true })
+    } catch {
+      // Missing subfolder (e.g. Templates before it exists) is an empty
+      // listing, not an error worth surfacing.
+      return []
+    }
     const results: VaultEntry[] = []
     const seen = new Set<string>()
 

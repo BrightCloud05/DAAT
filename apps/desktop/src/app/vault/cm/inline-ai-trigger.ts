@@ -11,7 +11,9 @@ import { openInlineAiAt } from '../../notes/inline-ai-store'
 export function inlineAiTrigger(): Extension {
   return keymap.of([
     {
-      key: 'Space',
+      // NB: the literal ' ' — CM keymaps match KeyboardEvent.key, and the
+      // space bar's key value is a space character, not the string "Space".
+      key: ' ',
       run: view => {
         const { head, empty } = view.state.selection.main
 
