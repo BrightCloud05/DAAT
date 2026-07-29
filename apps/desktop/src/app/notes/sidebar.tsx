@@ -27,7 +27,16 @@ import {
 } from '../vault/store'
 import { openDailyNote } from './templates'
 import { $vaultTodos, initTodosStore } from './todos-store'
-import { $canvasView, closeTableView, openHomeView, openMailView, openMoneyView, openTableView, openTodoView } from './view-store'
+import {
+  $canvasView,
+  closeTableView,
+  openCalendarView,
+  openHomeView,
+  openMailView,
+  openMoneyView,
+  openTableView,
+  openTodoView
+} from './view-store'
 
 // Opening a page always returns the canvas to the note view.
 async function openNote(relPath: string): Promise<void> {
@@ -288,15 +297,17 @@ export function NotesSidebar() {
           <Codicon name="symbol-currency" className="shrink-0 text-[13px] opacity-70" />
           <span>Money</span>
         </button>
-        {[
-          { icon: 'calendar', label: 'Calendar' },
-          { icon: 'organization', label: 'Meetings' }
-        ].map(module => (
-          <div key={module.label} className={cn(ROW, 'cursor-default opacity-45')} title="Coming soon">
-            <Codicon name={module.icon} className="shrink-0 text-[13px]" />
-            <span>{module.label}</span>
-          </div>
-        ))}
+        <button
+          className={cn(ROW, view === 'calendar' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          onClick={openCalendarView}
+        >
+          <Codicon name="calendar" className="shrink-0 text-[13px] opacity-70" />
+          <span>Calendar</span>
+        </button>
+        <div className={cn(ROW, 'cursor-default opacity-45')} title="Coming soon">
+          <Codicon name="organization" className="shrink-0 text-[13px]" />
+          <span>Meetings</span>
+        </div>
       </div>
 
       {/* Bottom-anchored actions — Notion's New / Settings grammar. */}

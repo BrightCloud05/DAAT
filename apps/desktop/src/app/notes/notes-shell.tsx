@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils'
 
 import { VaultEditorPane } from '../vault/editor-pane'
 import { $activeNote, $vaultNotes, createNote } from '../vault/store'
+import { CalendarView } from './calendar-view'
 import { HomeView } from './home-view'
 import { OnboardingWizard } from './onboarding-wizard'
 import { $onboarded } from './persona-store'
@@ -119,6 +120,8 @@ export function NotesShell() {
             <MailView onAskAgent={askAgent} />
           ) : canvasView === 'money' ? (
             <MoneyView onAskAgent={askAgent} />
+          ) : canvasView === 'calendar' ? (
+            <CalendarView />
           ) : (
             <VaultEditorPane />
           )}
