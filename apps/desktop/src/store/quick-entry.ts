@@ -260,6 +260,22 @@ export function setQuickEntrySubmitHandler(fn: ((payload: QuickEntrySubmitPayloa
   submitHandler = fn
 }
 
+/**
+ * Send text to the agent from anywhere in the app (module screens' "ask the
+ * agent" actions) through the SAME submit pipeline Quick Entry uses — one
+ * path for every programmatic prompt, no bespoke RPC. Returns false when the
+ * primary window hasn't registered a handler yet (secondary windows, boot).
+ */
+export function submitAgentPrompt(text: string, target: string = QUICK_TARGET_CURRENT): boolean {
+  if (!submitHandler || !text.trim()) {
+    return false
+  }
+
+  submitHandler({ target, text })
+
+  return true
+}
+
 function normalizeSubmitPayload(raw: unknown): null | QuickEntrySubmitPayload {
   // Tolerate the v1 bare-string wire shape (an older quick window after a
   // partial update) by treating it as "send to the current chat".

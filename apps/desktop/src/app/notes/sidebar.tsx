@@ -27,7 +27,7 @@ import {
 } from '../vault/store'
 import { openDailyNote } from './templates'
 import { $vaultTodos, initTodosStore } from './todos-store'
-import { $canvasView, closeTableView, openHomeView, openTableView, openTodoView } from './view-store'
+import { $canvasView, closeTableView, openHomeView, openMailView, openTableView, openTodoView } from './view-store'
 
 // Opening a page always returns the canvas to the note view.
 async function openNote(relPath: string): Promise<void> {
@@ -274,9 +274,15 @@ export function NotesSidebar() {
           <span>Todo</span>
           <span className="ml-auto text-[11px] opacity-40">{openTodoCount || ''}</span>
         </button>
+        <button
+          className={cn(ROW, view === 'mail' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          onClick={openMailView}
+        >
+          <Codicon name="mail" className="shrink-0 text-[13px] opacity-70" />
+          <span>Mail</span>
+        </button>
         {[
           { icon: 'calendar', label: 'Calendar' },
-          { icon: 'mail', label: 'Mail' },
           { icon: 'symbol-currency', label: 'Money' },
           { icon: 'organization', label: 'Meetings' }
         ].map(module => (

@@ -184,6 +184,14 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       return () => ipcRenderer.removeListener('hermes:vault:conflict', listener)
     }
   },
+  // Mail (read/organize only — composing and sending go through the agent
+  // so they keep the human approval gate).
+  mail: {
+    status: () => ipcRenderer.invoke('hermes:mail:status'),
+    list: opts => ipcRenderer.invoke('hermes:mail:list', opts),
+    read: opts => ipcRenderer.invoke('hermes:mail:read', opts),
+    folders: opts => ipcRenderer.invoke('hermes:mail:folders', opts)
+  },
   readDir: dirPath => ipcRenderer.invoke('hermes:fs:readDir', dirPath),
   gitRoot: startPath => ipcRenderer.invoke('hermes:fs:gitRoot', startPath),
   revealPath: targetPath => ipcRenderer.invoke('hermes:fs:reveal', targetPath),

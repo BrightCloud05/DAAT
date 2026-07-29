@@ -9,6 +9,7 @@ import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 
 import { WiredPane } from '@/app/contrib/context'
+import { submitAgentPrompt } from '@/store/quick-entry'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
@@ -19,6 +20,7 @@ import { HomeView } from './home-view'
 import { NotesSidebar } from './sidebar'
 import { TableView } from './table-view'
 import { TodoView } from './todo-view'
+import { MailView } from './mail-view'
 import { openDailyNote } from './templates'
 import { DocTopbar } from './topbar'
 import { $canvasView } from './view-store'
@@ -35,6 +37,18 @@ export function NotesShell() {
       return false
     }
   })
+
+  // Module screens hand work to the agent through the app's one submit
+  // pipeline, opening the panel so the user sees it happen.
+  const askAgent = (prompt: string) => {
+    setAgentOpen(true)
+    // Let the panel mount before the prompt lands in it.
+    setTimeout(() => {
+      if (!submitAgentPrompt(prompt)) {
+        setTimeout(() => submitAgentPrompt(prompt), 400)
+      }
+    }, 120)
+  }
 
   useEffect(() => {
     try {
@@ -94,6 +108,8 @@ export function NotesShell() {
             <TableView />
           ) : canvasView === 'todo' ? (
             <TodoView />
+          ) : canvasView === 'mail' ? (
+            <MailView onAskAgent={askAgent} />
           ) : (
             <VaultEditorPane />
           )}

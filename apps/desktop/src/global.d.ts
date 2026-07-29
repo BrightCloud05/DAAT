@@ -64,8 +64,24 @@ declare global {
     conflictPath: string
   }
 
+  interface MailEnvelope {
+    id: string
+    subject: string
+    fromName: string
+    fromAddr: string
+    date: string
+    seen: boolean
+    hasAttachment: boolean
+  }
+
   interface Window {
     hermesDesktop: {
+      mail: {
+        status: () => Promise<{ installed: boolean; accounts: Array<{ name: string; default: boolean }> }>
+        list: (opts?: { account?: string; folder?: string; limit?: number }) => Promise<MailEnvelope[]>
+        read: (opts: { id: string; account?: string; folder?: string }) => Promise<string>
+        folders: (opts?: { account?: string }) => Promise<string[]>
+      }
       // Markdown vault (BISEO second brain). All paths vault-relative POSIX.
       vault: {
         info: () => Promise<VaultInfo>

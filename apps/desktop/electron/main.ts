@@ -32,6 +32,7 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime } from './active-runtime-state'
+import { initMailIpc } from './mail/mail-ipc'
 import { initVaultIpc } from './vault/vault-ipc'
 import type { VaultService } from './vault/vault-service'
 import { stopBackendChild as stopBackendChildImpl } from './backend-child'
@@ -11404,6 +11405,7 @@ app.whenReady().then(() => {
   installEmbedReferer()
   registerDeepLinkProtocol()
   vaultService = initVaultIpc()
+  initMailIpc()
   ensureWslWindowsFonts()
   configureSpellChecker()
   registerPowerResumeListeners()
