@@ -168,6 +168,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     resolveWikilink: targetRaw => ipcRenderer.invoke('hermes:vault:resolveWikilink', targetRaw),
     noteNames: () => ipcRenderer.invoke('hermes:vault:noteNames'),
     propertiesTable: () => ipcRenderer.invoke('hermes:vault:propertiesTable'),
+    todos: limit => ipcRenderer.invoke('hermes:vault:todos', limit),
+    toggleTodo: (relPath, line) => ipcRenderer.invoke('hermes:vault:toggleTodo', relPath, line),
     onIndexEvent: callback => {
       const listener = (_event, payload) => callback(payload)
       ipcRenderer.on('hermes:vault:index-event', listener)

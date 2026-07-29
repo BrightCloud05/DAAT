@@ -571,6 +571,77 @@ export class VaultService {
     return this.requireOpen().index.propertiesTable()
   }
 
+  /**
+   * Checkbox tasks across the vault (`- [ ]` / `- [x]`), most-recent notes
+   * first, capped for dashboard use. Line scan over real files — the FTS
+   * index strips markers, and honest data beats a fast lie.
+   */
+  async todos(limit = 100): Promise<Array<{ path: string; line: number; text: string; done: boolean }>> {
+    const { root, index } = this.requireOpen()
+    const results: Array<{ path: string; line: number; text: string; done: boolean }> = []
+    const notes = index.listNotes().sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 300)
+
+    for (const note of notes) {
+      if (results.length >= limit) {
+        break
+      }
+
+      const { content, dataless } = await readNote(resolveInVault(root, note.path))
+
+      if (dataless) {
+        continue
+      }
+
+      const lines = content.split('\n')
+
+      for (let i = 0; i < lines.length && results.length < limit; i++) {
+        const match = /^\s*[-*]\s+\[([ xX])\]\s+(.+)$/.exec(lines[i])
+
+        if (match) {
+          results.push({ path: note.path, line: i + 1, text: match[2].trim(), done: match[1] !== ' ' })
+        }
+      }
+    }
+
+    return results
+  }
+
+  /** Flip a checkbox task found by todos() — safe line edit via write(). */
+  async toggleTodo(relPath: string, lineNo: number): Promise<boolean> {
+    const { root } = this.requireOpen()
+    const absolute = resolveInVault(root, relPath)
+    const { content, mtimeMs, dataless } = await readNote(absolute)
+
+    if (dataless) {
+      return false
+    }
+
+    const lines = content.split('\n')
+    const line = lines[lineNo - 1]
+
+    if (!line) {
+      return false
+    }
+
+    const toggled = line.replace(/^(\s*[-*]\s+\[)([ xX])(\])/, (_all, pre, mark, post) =>
+      `${pre}${mark === ' ' ? 'x' : ' '}${post}`
+    )
+
+    if (toggled === line) {
+      return false
+    }
+
+    lines[lineNo - 1] = toggled
+
+    const result = await writeNote(absolute, lines.join('\n'), mtimeMs)
+
+    if (result.ok) {
+      void this.indexOne(relPath)
+    }
+
+    return result.ok
+  }
+
   indexDbPath(): string | null {
     return this.root
       ? path.join(app.getPath('userData'), 'vault-index', `${vaultId(this.root)}.db`)

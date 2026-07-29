@@ -26,7 +26,7 @@ import {
   runVaultSearch
 } from '../vault/store'
 import { openDailyNote } from './templates'
-import { closeTableView, openTableView } from './view-store'
+import { closeTableView, openHomeView, openTableView } from './view-store'
 
 // Opening a page always returns the canvas to the note view.
 async function openNote(relPath: string): Promise<void> {
@@ -176,7 +176,11 @@ export function NotesSidebar() {
         </div>
       ) : null}
 
-      {/* Views. */}
+      {/* Views (design 1a nav order). */}
+      <button className={ROW} onClick={openHomeView}>
+        <Codicon name="home" className="shrink-0 text-[13px] opacity-55" />
+        <span>Home</span>
+      </button>
       <button className={ROW} onClick={() => void openDailyNote()}>
         <Codicon name="calendar" className="shrink-0 text-[13px] opacity-55" />
         <span>Today</span>

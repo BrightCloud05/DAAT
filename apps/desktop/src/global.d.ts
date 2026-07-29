@@ -88,6 +88,8 @@ declare global {
         resolveWikilink: (targetRaw: string) => Promise<string | null>
         noteNames: () => Promise<Array<{ path: string; title: string; name: string }>>
         propertiesTable: () => Promise<Array<{ path: string; title: string; mtimeMs: number; props: Record<string, unknown> }>>
+        todos: (limit?: number) => Promise<Array<{ path: string; line: number; text: string; done: boolean }>>
+        toggleTodo: (relPath: string, line: number) => Promise<boolean>
         onIndexEvent: (callback: (event: VaultIndexEvent) => void) => () => void
         onConflict: (callback: (event: VaultConflictEvent) => void) => () => void
       }

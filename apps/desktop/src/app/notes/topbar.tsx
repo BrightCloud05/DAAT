@@ -11,6 +11,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
 import { $activeNote, openNote } from '../vault/store'
+import { $canvasView } from './view-store'
 
 function editedAgo(mtimeMs: number, now: number): string {
   const minutes = Math.max(0, Math.round((now - mtimeMs) / 60_000))
@@ -27,6 +28,7 @@ function editedAgo(mtimeMs: number, now: number): string {
 
 export function DocTopbar({ agentOpen, onToggleAgent }: { agentOpen: boolean; onToggleAgent: () => void }) {
   const active = useStore($activeNote)
+  const view = useStore($canvasView)
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -35,7 +37,9 @@ export function DocTopbar({ agentOpen, onToggleAgent }: { agentOpen: boolean; on
     return () => clearInterval(timer)
   }, [])
 
-  const segments = active ? active.path.replace(/\.(md|markdown)$/i, '').split('/') : []
+  // Breadcrumb + edited-time describe the open NOTE; Home and the table
+  // carry their own headers, so the topbar goes quiet there.
+  const segments = view === 'note' && active ? active.path.replace(/\.(md|markdown)$/i, '').split('/') : []
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-1 px-3">
@@ -57,7 +61,9 @@ export function DocTopbar({ agentOpen, onToggleAgent }: { agentOpen: boolean; on
         ))}
       </div>
 
-      {active ? <span className="mr-1 shrink-0 text-xs opacity-45">{editedAgo(active.mtimeMs, now)}</span> : null}
+      {view === 'note' && active ? (
+        <span className="mr-1 shrink-0 text-xs opacity-45">{editedAgo(active.mtimeMs, now)}</span>
+      ) : null}
 
       <button
         className={cn(

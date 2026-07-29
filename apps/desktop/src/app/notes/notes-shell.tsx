@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 
 import { VaultEditorPane } from '../vault/editor-pane'
 import { $activeNote, $vaultNotes, createNote } from '../vault/store'
+import { HomeView } from './home-view'
 import { NotesSidebar } from './sidebar'
 import { TableView } from './table-view'
 import { openDailyNote } from './templates'
@@ -85,7 +86,9 @@ export function NotesShell() {
       {/* Document canvas — the product. */}
       <main className="relative flex min-w-0 flex-1 flex-col bg-(--ui-bg-editor)">
         <DocTopbar agentOpen={agentOpen} onToggleAgent={() => setAgentOpen(open => !open)} />
-        <div className="min-h-0 flex-1">{canvasView === 'table' ? <TableView /> : <VaultEditorPane />}</div>
+        <div className="min-h-0 flex-1">
+          {canvasView === 'home' ? <HomeView /> : canvasView === 'table' ? <TableView /> : <VaultEditorPane />}
+        </div>
       </main>
 
       {/* Agent slide-over: the full chat surface, summoned — not resident. */}

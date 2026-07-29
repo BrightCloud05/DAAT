@@ -73,6 +73,10 @@ export function initVaultIpc(): VaultService {
   ipcMain.handle('hermes:vault:resolveWikilink', (_event, targetRaw: string) => service.resolveWikilink(targetRaw))
   ipcMain.handle('hermes:vault:noteNames', () => service.noteNames())
   ipcMain.handle('hermes:vault:propertiesTable', () => service.propertiesTable())
+  ipcMain.handle('hermes:vault:todos', (_event, limit?: number) => service.todos(limit))
+  ipcMain.handle('hermes:vault:toggleTodo', (_event, relPath: string, line: number) =>
+    service.toggleTodo(relPath, line)
+  )
 
   return service
 }

@@ -676,6 +676,30 @@
 /* Interactive list-row hover — the sessions-list interaction, shared by every
    row list (sessions, capabilities, messaging, file trees, timeline): the
    highlight lands instantly on hover-in and fades out over 100ms on leave. */
+/* BISEO Home dashboard motion (design spec 1a): cards fade in and lift 4px,
+   staggered; the briefing caret is the only looping motion on the screen. */
+@keyframes biseo-lift {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes biseo-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
 @utility row-hover {
   cursor: pointer;
   border-radius: var(--radius-md);
