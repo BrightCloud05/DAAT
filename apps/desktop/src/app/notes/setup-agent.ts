@@ -49,6 +49,32 @@ export const $setup = atom<SetupState>(EMPTY)
 let sessionId: string | null = null
 let unsubscribe: (() => void) | null = null
 let counter = 0
+/** Text accumulated from deltas this turn, to compare against the final text. */
+let streamed = ''
+
+/** Append to the open assistant message, or start one. */
+function appendAssistantText(text: string): void {
+  const state = $setup.get()
+  const last = state.messages.at(-1)
+
+  if (last?.role === 'assistant' && state.status === 'thinking') {
+    update({ activity: null, messages: [...state.messages.slice(0, -1), { ...last, text: last.text + text }] })
+  } else {
+    update({ activity: null, messages: [...state.messages, { id: nextId(), role: 'assistant', text, created: [] }] })
+  }
+}
+
+/** Overwrite the open assistant message with the authoritative full text. */
+function replaceAssistantText(text: string): void {
+  const state = $setup.get()
+  const last = state.messages.at(-1)
+
+  if (last?.role === 'assistant' && state.status === 'thinking') {
+    update({ activity: null, messages: [...state.messages.slice(0, -1), { ...last, text }] })
+  } else {
+    update({ activity: null, messages: [...state.messages, { id: nextId(), role: 'assistant', text, created: [] }] })
+  }
+}
 
 function nextId(): string {
   counter += 1
@@ -137,21 +163,23 @@ async function ensureSession(persona: Persona): Promise<boolean> {
         return
       }
 
-      const state = $setup.get()
-      const last = state.messages.at(-1)
+      streamed += text
+      appendAssistantText(text)
+    }
 
-      // Stream into the open assistant message, or start one.
-      if (last?.role === 'assistant' && state.status === 'thinking') {
-        update({
-          activity: null,
-          messages: [...state.messages.slice(0, -1), { ...last, text: last.text + text }]
-        })
-      } else {
-        update({
-          activity: null,
-          messages: [...state.messages, { id: nextId(), role: 'assistant', text, created: [] }]
-        })
+    // Not every provider streams. The Codex backend sends one
+    // message.complete carrying the whole reply and no deltas at all — which
+    // is how a 185-character greeting rendered as a single "?" on screen.
+    // Trust complete's text whenever it is longer than what we streamed.
+    if (event.type === 'message.complete') {
+      const payload = event.payload as { text?: unknown } | undefined
+      const full = typeof payload?.text === 'string' ? payload.text : ''
+
+      if (full && full.length > streamed.length) {
+        replaceAssistantText(full)
       }
+
+      streamed = ''
     }
   })
 
@@ -188,6 +216,8 @@ async function send(persona: Persona, prompt: string, visible: string | null): P
   }
 
   const before = currentPaths()
+
+  streamed = ''
 
   update({
     status: 'thinking',

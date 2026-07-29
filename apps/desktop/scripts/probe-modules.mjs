@@ -163,7 +163,18 @@ const dashboard = await canvas()
 
 check('the Courses card is shown for a student', dashboard.includes('Courses'))
 check("today's class is listed", dashboard.includes('Linear Algebra'))
-check('a class on another day is filtered out', !dashboard.includes('Never Today'))
+// Scope to the card: "Recent notes" legitimately lists every note, so only
+// the Courses card itself can prove the weekday filter works.
+const coursesCard = await page.evaluate(() => {
+  const heading = [...document.querySelectorAll('main span')].find(node => node.textContent?.trim() === 'Courses')
+
+  return heading?.closest('div.rounded-xl')?.textContent ?? ''
+})
+
+check(
+  'a class on another day is filtered out',
+  coursesCard.length > 0 && !coursesCard.includes('Never Today')
+)
 check('the room is shown', dashboard.includes('Carslaw 350'))
 check('the Assessments card is shown', dashboard.includes('Assessments'))
 check('an upcoming assessment is listed', dashboard.includes('Assignment 2'))

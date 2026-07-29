@@ -52,7 +52,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
 
   return (
     <div
-      className="fixed inset-0 z-(--z-onboarding) flex items-center justify-center bg-(--ui-chat-surface-background) p-6"
+      className="fixed inset-0 z-(--z-onboarding) flex items-center justify-center bg-(--theme-neutral-chrome) backdrop-blur-xl p-6"
       onDragLeave={() => setDragging(false)}
       onDragOver={event => {
         event.preventDefault()
@@ -71,7 +71,9 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
     >
       <div
         className={cn(
-          'flex h-full max-h-[42rem] w-full max-w-[40rem] flex-col rounded-2xl border transition-colors',
+          // An opaque card: this panel sits over the dashboard, and with only
+          // a border the whole app read through it.
+          'flex h-full max-h-[42rem] w-full max-w-[40rem] flex-col rounded-2xl border bg-(--theme-neutral-card) shadow-[0_24px_60px_-24px_rgba(0,0,0,0.45)] transition-colors',
           dragging ? 'border-(--dt-primary)' : 'border-(--stroke-nous)'
         )}
         style={{ animation: 'daat-lift 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both' }}

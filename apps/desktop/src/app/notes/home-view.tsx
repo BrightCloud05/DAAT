@@ -16,7 +16,7 @@ import { $vaultInfo, $vaultNotes, $vaultRevision, openNote } from '../vault/stor
 import { collectEntries, type TableLikeRow } from './calendar'
 import { formatAmount, MONEY_DIR, type MoneySummary, parseMonthNote, summarize } from './money'
 import { PersonaWidgets } from './persona-widgets'
-import { openDailyNote, todayStamp } from './templates'
+import { isTemplateNote, openDailyNote, todayStamp } from './templates'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView, openCalendarView, openMailView, openMeetingsView, openMoneyView } from './view-store'
 import { $productLocale, productStrings } from './strings'
@@ -234,7 +234,12 @@ export function HomeView() {
   }, [])
 
   const open = todos.filter(todo => !todo.done)
-  const recent = [...notes].sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 3)
+  // Templates are source, not pages — and their unsubstituted "{{title}}"
+  // heading is what the indexer reads as a title.
+  const recent = [...notes]
+    .filter(note => !isTemplateNote(note.path))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, 3)
   const hasDaily = notes.some(note => note.path === `Daily/${todayStamp()}.md`)
   const dateLabel = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
 
