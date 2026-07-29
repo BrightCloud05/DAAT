@@ -111,9 +111,12 @@ export async function openDailyNote(): Promise<void> {
   // already exist" has to come from the filesystem, not the $vaultNotes cache
   // — that cache is stale during the initial index and whenever the agent or
   // another device created today's note, and a wrong answer wipes real work.
+  //
+  // It also can't be inferred from the content: a newly created note is seeded
+  // with "# Title\n\n", so a blank-content test never fires.
   const opened = await createNote(relPath)
 
-  if (!opened || opened.content.trim()) {
+  if (!opened?.created) {
     return
   }
 

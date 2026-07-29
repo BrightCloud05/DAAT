@@ -6,7 +6,7 @@
 import { atom } from 'nanostores'
 
 import { $editorView } from '../vault/editor-bridge'
-import { $activeNote, $vaultNotes } from '../vault/store'
+import { $activeNote, $vaultNotes, flushActiveNote } from '../vault/store'
 
 export interface VaultTodo {
   path: string
@@ -97,6 +97,11 @@ export async function toggleTodo(todo: VaultTodo): Promise<void> {
   if ($activeNote.get()?.path === todo.path && toggleInEditor(todo)) {
     return
   }
+
+  // The note may be open with unsaved edits that the editor has not flushed.
+  // Rewriting the file from disk underneath them bumps the mtime and diverts
+  // the user's next autosave into a conflict copy.
+  await flushActiveNote()
 
   const ok = await window.hermesDesktop.vault.toggleTodo(todo.path, todo.line, todo.text)
 

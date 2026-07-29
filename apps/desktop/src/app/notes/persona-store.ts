@@ -81,7 +81,10 @@ export async function applyPersona(id: PersonaId): Promise<ApplyPersonaResult> {
       const existing = await window.hermesDesktop.vault.read(relPath).catch(() => null)
 
       // Never overwrite something the user already has under that name.
-      if (existing && existing.content.trim()) {
+      // `dataless` matters: an iCloud-evicted file reads back as empty rather
+      // than failing, so without this a second Mac would replace the user's
+      // customised template with the starter.
+      if (existing && (existing.dataless || existing.content.trim())) {
         continue
       }
 

@@ -119,22 +119,27 @@ export async function readNote(absolutePath: string): Promise<ReadNoteResult> {
 
   try {
     return await withTimeout(attempt(), DATALESS_READ_TIMEOUT_MS, `read ${path.basename(absolutePath)}`)
-  } catch {
+  } catch (error) {
+    // A file that isn't there is not "waiting on iCloud". Reporting it as
+    // dataless made callers treat a missing note as one whose contents they
+    // must not touch — which is how "create this starter page if it doesn't
+    // exist" silently created nothing.
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      return { content: '', mtimeMs: 0, dataless: false }
+    }
+
     await requestICloudDownload(absolutePath)
 
     try {
       return await withTimeout(attempt(), BRCTL_DOWNLOAD_TIMEOUT_MS, `download ${path.basename(absolutePath)}`)
     } catch {
-      let mtimeMs = 0
-
       try {
-        mtimeMs = (await fsp.stat(absolutePath)).mtimeMs
+        // Exists but unreadable: genuinely dataless, still syncing down.
+        return { content: '', mtimeMs: (await fsp.stat(absolutePath)).mtimeMs, dataless: true }
       } catch {
-        // stat also failing means the file is gone — report as dataless anyway;
-        // the watcher will remove it from the index if it was deleted.
+        // Gone. The watcher will drop it from the index.
+        return { content: '', mtimeMs: 0, dataless: false }
       }
-
-      return { content: '', mtimeMs, dataless: true }
     }
   }
 }
@@ -212,7 +217,12 @@ export async function writeNote(
   }
 
   if (existing) {
-    const current = await fsp.readFile(absolutePath, 'utf8').catch(() => null)
+    // Timed: every other read here is, because open() blocks indefinitely on
+    // an iCloud-evicted file. This one runs inside the write IPC on every
+    // autosave, so an untimed version would wedge the whole main process.
+    const current = await withTimeout(fsp.readFile(absolutePath, 'utf8'), DATALESS_READ_TIMEOUT_MS, 'compare').catch(
+      () => null
+    )
 
     // Unchanged content: never rewrite (see the doc comment).
     if (current !== null && current === content) {

@@ -1,10 +1,10 @@
 {
-  "name": "hermes",
+  "name": "biseo",
   "productName": "BISEO",
   "private": true,
   "version": "0.17.0",
-  "description": "BISEO — AI second brain with a markdown vault.",
-  "author": "Nous Research",
+  "description": "BISEO \u2014 AI second brain with a markdown vault.",
+  "author": "BISEO",
   "type": "module",
   "main": "dist/electron-main.mjs",
   "engines": {
@@ -202,7 +202,9 @@
       "dist/**",
       "assets/**",
       "public/**",
-      "package.json"
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.txt"
     ],
     "beforeBuild": "scripts/before-build.mjs",
     "beforePack": "scripts/before-pack.mjs",
@@ -225,7 +227,7 @@
       "dist/**"
     ],
     "mac": {
-      "category": "public.app-category.developer-tools",
+      "category": "public.app-category.productivity",
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
       "extendInfo": {
@@ -235,7 +237,6 @@
         "NSAudioCaptureUsageDescription": "BISEO uses audio capture for voice conversations.",
         "NSMicrophoneUsageDescription": "BISEO uses the microphone for voice input and voice conversations."
       },
-      "gatekeeperAssess": false,
       "hardenedRuntime": true,
       "target": [
         "dmg",
@@ -273,7 +274,7 @@
       "signAndEditExecutable": false
     },
     "linux": {
-      "category": "Development",
+      "category": "Office",
       "maintainer": "BISEO <tax123au@gmail.com>",
       "synopsis": "BISEO desktop app.",
       "target": [
@@ -289,6 +290,7 @@
       "shortcutName": "BISEO",
       "uninstallDisplayName": "BISEO",
       "warningsAsErrors": false
-    }
+    },
+    "copyright": "Copyright \u00a9 2026 BISEO"
   }
 }

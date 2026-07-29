@@ -64,6 +64,28 @@ test('multi-line values are replaced whole, not line-by-line', () => {
   assert.ok(result.includes('status: draft'))
 })
 
+test('comments and blank lines between keys are not swallowed by the edit', () => {
+  // Everything after a key up to the next one used to count as part of that
+  // key's value, so editing `status` deleted the comment written above `tags`.
+  const withComment = '---\nstatus: draft\n# why this matters\ntags: [a, b]\n---\nbody'
+
+  assert.equal(
+    apply(withComment, propertyEdit(withComment, 'status', 'done')),
+    '---\nstatus: done\n# why this matters\ntags: [a, b]\n---\nbody'
+  )
+
+  const trailing = '---\ntitle: A\nstatus: draft\n# trailing note\n---\nbody'
+
+  assert.equal(
+    apply(trailing, propertyEdit(trailing, 'status', 'done')),
+    '---\ntitle: A\nstatus: done\n# trailing note\n---\nbody'
+  )
+
+  const spaced = '---\ntitle: A\n\ntags: [a]\n---\nbody'
+
+  assert.equal(apply(spaced, propertyEdit(spaced, 'title', 'B')), '---\ntitle: B\n\ntags: [a]\n---\nbody')
+})
+
 test('a malformed block is never rewritten', () => {
   // Rewriting prepends a second --- block above the broken one, and the panel
   // shows "no properties" — so the user can neither see nor repair it.

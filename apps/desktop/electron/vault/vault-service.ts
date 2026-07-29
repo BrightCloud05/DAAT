@@ -536,10 +536,12 @@ export class VaultService {
     return { ok: true, mtimeMs: result.mtimeMs }
   }
 
-  async createNote(relPath: string): Promise<VaultReadResult> {
+  async createNote(relPath: string): Promise<VaultReadResult & { created: boolean }> {
     const { root } = this.requireOpen()
     const withExt = isMarkdownFile(relPath) ? relPath : `${relPath}.md`
     const absolute = resolveInVault(root, withExt)
+
+    let created = false
 
     try {
       await fsp.access(absolute)
@@ -548,9 +550,10 @@ export class VaultService {
 
       await writeNote(absolute, `# ${title}\n\n`, null)
       await this.indexOne(withExt)
+      created = true
     }
 
-    return this.read(withExt)
+    return { ...(await this.read(withExt)), created }
   }
 
   async createDir(relPath: string): Promise<void> {
@@ -669,7 +672,19 @@ export class VaultService {
     const textOf = (value: string | undefined) => /^\s*[-*]\s+\[[ xX]\]\s+(.+)$/.exec(value ?? '')?.[1]?.trim()
 
     if (expectedText && textOf(lines[lineNo - 1]) !== expectedText) {
-      const found = lines.findIndex(candidate => textOf(candidate) === expectedText)
+      // Search outward from where the caller thought it was. Taking the first
+      // match in the file would flip a different task with the same wording
+      // ("Follow up" appears in every meeting note).
+      let found = -1
+
+      for (let offset = 1; offset < lines.length && found === -1; offset++) {
+        for (const candidate of [lineNo - 1 - offset, lineNo - 1 + offset]) {
+          if (candidate >= 0 && candidate < lines.length && textOf(lines[candidate]) === expectedText) {
+            found = candidate
+            break
+          }
+        }
+      }
 
       if (found === -1) {
         return false

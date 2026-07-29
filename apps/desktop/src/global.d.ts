@@ -99,7 +99,7 @@ declare global {
           expectedMtimeMs: number | null,
           expectedContent?: string
         ) => Promise<VaultWriteResult>
-        createNote: (relPath: string) => Promise<VaultReadResult>
+        createNote: (relPath: string) => Promise<VaultReadResult & { created: boolean }>
         createDir: (relPath: string) => Promise<void>
         rename: (fromRel: string, toRel: string) => Promise<void>
         trash: (relPath: string) => Promise<void>

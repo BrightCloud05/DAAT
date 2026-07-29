@@ -62,14 +62,16 @@ async function stampExeIdentity(exe, desktopRoot = resolve(import.meta.dirname, 
   await rcedit(exe, {
     icon,
     'version-string': {
-      ProductName: 'Hermes',
-      FileDescription: 'Hermes',
-      CompanyName: 'Nous Research',
-      LegalCopyright: 'Copyright (c) 2026 Nous Research'
+      ProductName: 'BISEO',
+      FileDescription: 'BISEO',
+      CompanyName: 'BISEO',
+      // Our own build of an MIT-licensed base; upstream's copyright lives in
+      // LICENSE and THIRD_PARTY_NOTICES, not in this product's identity.
+      LegalCopyright: 'Copyright (c) 2026 BISEO'
     }
   })
 
-  console.log('[set-exe-identity] done — Hermes icon + identity stamped')
+  console.log('[set-exe-identity] done — BISEO icon + identity stamped')
 }
 
 export { stampExeIdentity }

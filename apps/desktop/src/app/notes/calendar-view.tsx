@@ -81,7 +81,8 @@ export function CalendarView() {
 
     const opened = await createNote(relPath)
 
-    if (!opened || opened.content.trim()) {
+    // `created`, not blank content — a new note is seeded with a "# Title".
+    if (!opened?.created) {
       return
     }
 

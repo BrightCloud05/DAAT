@@ -2385,6 +2385,21 @@ async function checkUpdates() {
   let { branch } = readDesktopUpdateConfig()
   const gitDir = path.join(updateRoot, '.git')
 
+  // In-place self-update rebuilds the app from source and swaps the bundle,
+  // then strips the quarantine bit. On a signed, notarized install that
+  // replaces a trusted app with an unsigned one and hides the fact — so it is
+  // only ever allowed for an explicitly opted-in developer build.
+  if (app.isPackaged && process.env.BISEO_ALLOW_SOURCE_UPDATE !== '1') {
+    return {
+      supported: false,
+      reason: 'packaged-build',
+      message:
+        'This is a released build — update by downloading the latest signed BISEO from the releases page.',
+      hermesRoot: updateRoot,
+      branch
+    }
+  }
+
   if (!directoryExists(gitDir)) {
     return {
       supported: false,

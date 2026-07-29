@@ -156,6 +156,11 @@ const afterOpen = await page.evaluate(() => ({
 console.log('--- after opening the note ---')
 console.log(JSON.stringify(afterOpen, null, 2))
 
+// Snapshot before typing, so we can tell "frontmatter preserved" from
+// "this note never had any".
+const notePathForProbe = path.join(vault, process.env.PROBE_NOTE || 'Probe.md')
+const before = fs.existsSync(notePathForProbe) ? fs.readFileSync(notePathForProbe, 'utf8') : ''
+
 const content = page.locator('.cm-content').first()
 
 if (await content.count()) {
@@ -178,14 +183,19 @@ if (await content.count()) {
   const notePath = path.join(vault, process.env.PROBE_NOTE || 'Probe.md')
   const onDisk = fs.readFileSync(notePath, 'utf8')
 
+
   console.log('--- file on disk ---')
   console.log(JSON.stringify(onDisk))
   console.log(onDisk.includes('TYPED') ? 'RESULT: SAVE WORKS' : 'RESULT: SAVE LOST THE EDIT')
-  console.log(
-    onDisk.startsWith('---\n') && onDisk.includes('date:')
-      ? 'RESULT: FRONTMATTER PRESERVED'
-      : 'RESULT: FRONTMATTER DESTROYED'
-  )
+  // Only meaningful for a note that HAD frontmatter — otherwise this reported
+  // a failure for every plain note.
+  if (before.startsWith('---\n')) {
+    const head = before.slice(0, before.indexOf('\n---', 4) + 4)
+
+    console.log(onDisk.startsWith(head) ? 'RESULT: FRONTMATTER PRESERVED' : 'RESULT: FRONTMATTER DESTROYED')
+  } else {
+    console.log('RESULT: (note had no frontmatter — nothing to preserve)')
+  }
 } else {
   console.log('RESULT: no .cm-content in the DOM — the editor never mounted')
 }

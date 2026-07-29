@@ -55,6 +55,49 @@ let openToken = 0
 let flushInFlight: Promise<void> | null = null
 let saveFailures = 0
 
+function clearSaveTimer(): void {
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+}
+
+/**
+ * Flush until nothing is pending.
+ *
+ * A single `flushActiveNote()` can return the promise of a write that started
+ * BEFORE the newest keystrokes, so awaiting it once and concluding "saved"
+ * dropped whatever arrived in between. Bounded, because a genuinely failing
+ * write (read-only volume, offline iCloud) would otherwise spin forever; the
+ * retry timer keeps trying in the background either way.
+ */
+/**
+ * Drop every buffered edit and stop the retry loop.
+ *
+ * Used when switching vaults — a pending edit must never follow the user into
+ * a different vault — and to give tests a clean slate. It discards text on
+ * purpose, so callers that could still save should flush first.
+ */
+export function resetSaveState(): void {
+  clearSaveTimer()
+  pendingContent = null
+  flushInFlight = null
+  saveFailures = 0
+  openToken++
+  $activeDirty.set(false)
+  $vaultSaveError.set(null)
+}
+
+async function drainPendingWrites(attempts = 4): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    await flushActiveNote()
+
+    if (pendingContent === null) {
+      return
+    }
+  }
+}
+
 export async function refreshVaultInfo(): Promise<void> {
   try {
     $vaultInfo.set(await vault().info())
@@ -80,6 +123,9 @@ export async function refreshVaultNotes(): Promise<void> {
 }
 
 export async function createVault(baseDir?: string): Promise<void> {
+  await drainPendingWrites()
+  resetSaveState()
+  $activeNote.set(null)
   $vaultInfo.set(await vault().create(baseDir))
   await refreshVaultNotes()
 }
@@ -88,39 +134,64 @@ export async function chooseVault(): Promise<void> {
   const info = await vault().choose()
 
   if (info) {
+    // Save into the OLD vault before the root changes, then drop anything
+    // still buffered — a pending edit must not follow the user across vaults.
+    await drainPendingWrites()
+    resetSaveState()
+    $activeNote.set(null)
     $vaultInfo.set(info)
     await refreshVaultNotes()
   }
 }
 
-export async function openNote(relPath: string): Promise<void> {
-  await flushActiveNote()
-
-  const token = ++openToken
-  const result = await vault().read(relPath)
-
+/**
+ * Hand the active note over to a different one.
+ *
+ * Order matters and is not cosmetic: `$activeNote.set()` notifies subscribers
+ * SYNCHRONOUSLY, and one of them (inline AI) calls back into flushActiveNote.
+ * If `pendingContent` still held the OLD note's text at that moment, that text
+ * was written into the NEW note's file — with the new note's mtime and
+ * content as the conflict guard, so every safety check passed and the write
+ * succeeded. Clear the pending state BEFORE publishing the new note.
+ */
+function adoptNote(result: VaultReadResult, token: number): void {
   if (token !== openToken) {
     return
   }
 
-  $activeNote.set(result)
-  $activeDirty.set(false)
+  clearSaveTimer()
   pendingContent = null
+  $activeDirty.set(false)
+  $activeNote.set(result)
 }
 
-export async function createNote(relPath: string): Promise<VaultReadResult | null> {
-  await flushActiveNote()
+export async function openNote(relPath: string): Promise<void> {
+  await drainPendingWrites()
 
   const token = ++openToken
+
+  // Nothing from the previous note may survive into the read below.
+  clearSaveTimer()
+  pendingContent = null
+
+  adoptNote(await vault().read(relPath), token)
+}
+
+export async function createNote(relPath: string): Promise<(VaultReadResult & { created: boolean }) | null> {
+  await drainPendingWrites()
+
+  const token = ++openToken
+
+  clearSaveTimer()
+  pendingContent = null
+
   const result = await vault().createNote(relPath)
 
   if (token !== openToken) {
     return null
   }
 
-  $activeNote.set(result)
-  $activeDirty.set(false)
-  pendingContent = null
+  adoptNote(result, token)
   await refreshVaultNotes()
 
   return result
@@ -157,10 +228,10 @@ export function flushActiveNote(): Promise<void> {
     return flushInFlight
   }
 
-  if (saveTimer) {
-    clearTimeout(saveTimer)
-    saveTimer = null
-  }
+  // Before the early return above, not after: a debounce that fired during an
+  // in-flight write left a stale handle here, and the re-arm below checks
+  // `!saveTimer` — so autosave silently stopped until the next keystroke.
+  clearSaveTimer()
 
   const active = $activeNote.get()
   const content = pendingContent
@@ -196,22 +267,28 @@ export function flushActiveNote(): Promise<void> {
     }
 
     if (result.ok) {
-      $activeNote.set({ ...active, content, mtimeMs: result.mtimeMs })
-
-      // Keystrokes that landed during the write are still unsaved.
+      // Record what is now on disk (the next write compares against it), but
+      // leave `$activeDirty` set when newer keystrokes arrived mid-write —
+      // the editor uses that flag to know its own text is ahead of the store
+      // and must not be replaced.
       if (pendingContent === content) {
         pendingContent = null
         $activeDirty.set(false)
       }
+
+      $activeNote.set({ ...active, content, mtimeMs: result.mtimeMs })
     } else {
       // Conflict: our content went to a conflict copy; reload what's on disk so
       // the editor shows disk truth, and surface the conflict for the UI.
-      const fresh = await vault().read(active.path)
+      try {
+        const fresh = await vault().read(active.path)
 
-      if (token === openToken) {
-        $activeNote.set(fresh)
-        pendingContent = null
-        $activeDirty.set(false)
+        adoptNote(fresh, token)
+      } catch {
+        // The note vanished under us. Keep the buffer rather than throwing out
+        // of the shared promise, which every `void flushActiveNote()` caller
+        // would surface as an unhandled rejection.
+        $vaultSaveError.set(`Could not reload ${active.path} after a conflict.`)
       }
     }
   })().finally(() => {

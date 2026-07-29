@@ -77,10 +77,21 @@ export default async function notarize(context) {
   const issuer = String(process.env.APPLE_API_ISSUER || '').trim()
   const rawApiKey = process.env.APPLE_API_KEY
   if (!rawApiKey || !keyId || !issuer) {
-    console.log(
-      'Skipping notarization: APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER are not fully configured.'
+    // Failing loudly is the point. Skipping silently produced a DMG that
+    // looked finished and greeted every downloader with "BISEO is damaged
+    // and can't be opened" — the build must not be able to succeed here by
+    // accident. Local/dev builds opt out explicitly.
+    if (process.env.ALLOW_UNSIGNED === '1') {
+      console.warn(
+        '[notarize] ALLOW_UNSIGNED=1 — producing an UNNOTARIZED build. Gatekeeper will refuse it on any other Mac.'
+      )
+      return
+    }
+
+    throw new Error(
+      'Notarization is not configured: set APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER.\n' +
+        'To build an unsigned artifact deliberately (dev only), re-run with ALLOW_UNSIGNED=1.'
     )
-    return
   }
 
   const { keyPath, cleanup } = resolveApiKeyPath(rawApiKey)

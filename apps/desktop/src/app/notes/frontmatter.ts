@@ -56,10 +56,20 @@ export function readFrontmatter(content: string): FrontmatterBlock | null {
   }
 }
 
-/** Lines of `body` that belong to top-level key `key`, or null. */
+/**
+ * Lines of `body` that belong to top-level key `key`, or null.
+ *
+ * The block runs to the next top-level key, minus any trailing blank or
+ * comment lines — those sit between two keys and belong to neither. Counting
+ * them as part of the earlier key meant editing `status` deleted the comment
+ * written above `tags`, which is exactly the corruption this module exists to
+ * prevent.
+ */
 function keyLineRange(body: string, key: string): { start: number; end: number } | null {
   const lines = body.split('\n')
+  const isDetached = (line: string) => line.trim() === '' || line.trimStart().startsWith('#')
   let start = -1
+  let end = lines.length
 
   for (let index = 0; index < lines.length; index++) {
     const match = TOP_KEY_RE.exec(lines[index])
@@ -70,7 +80,8 @@ function keyLineRange(body: string, key: string): { start: number; end: number }
 
     if (start !== -1) {
       // The next top-level key ends the previous one's block.
-      return { start, end: index }
+      end = index
+      break
     }
 
     if (match[1].trim() === key) {
@@ -78,7 +89,15 @@ function keyLineRange(body: string, key: string): { start: number; end: number }
     }
   }
 
-  return start === -1 ? null : { start, end: lines.length }
+  if (start === -1) {
+    return null
+  }
+
+  while (end > start + 1 && isDetached(lines[end - 1])) {
+    end--
+  }
+
+  return { start, end }
 }
 
 function renderPair(key: string, value: unknown): string {

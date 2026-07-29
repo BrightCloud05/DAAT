@@ -34,7 +34,17 @@ import { markdownStyling } from './cm/markdown-style'
 import { slashSource } from './cm/slash-menu'
 import { vaultCompletions } from './cm/wikilink-complete'
 import { wikiLinkExtension } from './cm/wikilink-language'
-import { $activeDirty, $activeNote, $vaultConflicts, createNote, dismissConflict, flushActiveNote, noteEdited, openNote } from './store'
+import {
+  $activeDirty,
+  $activeNote,
+  $vaultConflicts,
+  $vaultSaveError,
+  createNote,
+  dismissConflict,
+  flushActiveNote,
+  noteEdited,
+  openNote
+} from './store'
 
 async function openWikilink(target: string): Promise<void> {
   const resolved = await window.hermesDesktop.vault.resolveWikilink(target)
@@ -110,10 +120,18 @@ const editorTheme = EditorView.theme({
   }
 })
 
+/** First offset after a leading `---` block, or 0. */
+function bodyStart(content: string): number {
+  const match = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(content)
+
+  return match ? Math.min(match[0].length, content.length) : 0
+}
+
 export function VaultEditorPane() {
   const active = useStore($activeNote)
   const dirty = useStore($activeDirty)
   const conflicts = useStore($vaultConflicts)
+  const saveError = useStore($vaultSaveError)
   const viewRef = useRef<EditorView | null>(null)
   const pathRef = useRef<string | null>(null)
   const [hostReady, setHostReady] = useState(0)
@@ -168,6 +186,14 @@ export function VaultEditorPane() {
     // resets the cursor to 0 — which the user sees as the caret jumping to the
     // top of the file mid-sentence whenever a save round-trips.
     if (!isNewNote) {
+      // The editor is ahead of the store: a save that started before the last
+      // few keystrokes has just published the text it wrote. Replacing the
+      // document with it would rewind the user's sentence on screen and, via
+      // the update listener, mark it clean — losing it for good.
+      if ($activeDirty.get()) {
+        return
+      }
+
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: active.content },
         selection: { anchor: Math.min(view.state.selection.main.anchor, active.content.length) },
@@ -180,6 +206,10 @@ export function VaultEditorPane() {
     view.setState(
       EditorState.create({
         doc: active.content,
+        // Start in the body, past any frontmatter: offset 0 sits inside the
+        // YAML block, which keeps it unfolded and drops the user into
+        // metadata instead of their writing.
+        selection: { anchor: bodyStart(active.content) },
         extensions: [
           history(),
           inlineAiTrigger(),
@@ -258,6 +288,22 @@ export function VaultEditorPane() {
       <PropertiesPanel />
       <BacklinksSection />
       <TemplateSuggestions />
+
+      {/* A save that keeps failing must be visible. The text is still in the
+          editor and still being retried, but silence here is how people lose
+          an afternoon's writing to a full disk or an offline volume. */}
+      {saveError ? (
+        <div className="flex items-center gap-2 border-b border-(--stroke-nous) bg-[rgba(255,59,48,0.10)] px-4 py-1.5 text-xs">
+          <Codicon name="warning" />
+          <span className="min-w-0 flex-1 truncate">
+            Couldn't save this note — {saveError}. Your text is still here and BISEO keeps retrying.
+          </span>
+          <button className="underline opacity-80 hover:opacity-100" onClick={() => void flushActiveNote()}>
+            Retry now
+          </button>
+        </div>
+      ) : null}
+
       {conflicts.map(conflict => (
         <div
           key={conflict.conflictPath}

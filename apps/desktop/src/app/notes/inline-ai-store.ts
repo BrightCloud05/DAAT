@@ -47,6 +47,13 @@ export function openInlineAiAt(anchor: number): void {
     return
   }
 
+  // Re-triggering while a generation is streaming used to leave that run
+  // writing into the document with no overlay and no way to stop it: the
+  // keypress is preventDefault'ed, so the edit-cancellation path never fired.
+  if (activeRun) {
+    closeInlineAi()
+  }
+
   const coords = view.coordsAtPos(anchor)
   const host = view.dom.getBoundingClientRect()
 
@@ -79,6 +86,18 @@ export function closeInlineAi(): void {
  */
 $activeNote.subscribe(note => {
   if (activeRun && note?.path !== activeRun.notePath) {
+    closeInlineAi()
+  }
+})
+
+/**
+ * The editor pane unmounts when the canvas switches to Home/Todo/Calendar/…,
+ * destroying the view. Deltas then dispatch into a destroyed view, which
+ * CodeMirror silently ignores — so the whole generation was thrown away while
+ * the overlay still claimed to be running.
+ */
+$editorView.subscribe(view => {
+  if (activeRun && !view) {
     closeInlineAi()
   }
 })
