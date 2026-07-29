@@ -34,6 +34,7 @@ import { markdownStyling } from './cm/markdown-style'
 import { slashSource } from './cm/slash-menu'
 import { vaultCompletions } from './cm/wikilink-complete'
 import { wikiLinkExtension } from './cm/wikilink-language'
+import { $productLocale, productStrings } from '../notes/strings'
 import {
   $activeDirty,
   $activeNote,
@@ -128,6 +129,7 @@ function bodyStart(content: string): number {
 }
 
 export function VaultEditorPane() {
+  const s = productStrings(useStore($productLocale))
   const active = useStore($activeNote)
   const dirty = useStore($activeDirty)
   const conflicts = useStore($vaultConflicts)
@@ -227,7 +229,7 @@ export function VaultEditorPane() {
             domEventHandlers: {}
           }),
           EditorView.lineWrapping,
-          placeholder('Start writing…'),
+          placeholder(s.startWriting),
           editorTheme,
           EditorView.updateListener.of(update => {
             if (update.docChanged) {
@@ -257,7 +259,7 @@ export function VaultEditorPane() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center opacity-60">
         <Codicon name="notebook" className="text-3xl" />
-        <div className="text-sm">Select a note, or create one with the + button.</div>
+        <div className="text-sm">{s.selectANote}</div>
       </div>
     )
   }
@@ -275,13 +277,13 @@ export function VaultEditorPane() {
           <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold leading-tight tracking-tight">{title}</h1>
           {active.dataless ? (
             <span className="flex items-center gap-1 text-[10px] opacity-60">
-              <Codicon name="cloud-download" /> downloading from iCloud…
+              <Codicon name="cloud-download" /> {s.downloadingFromICloud}
             </span>
           ) : null}
           <span
             className="size-1.5 shrink-0 self-center rounded-full transition-opacity"
             style={{ backgroundColor: 'var(--ui-accent)', opacity: dirty ? 1 : 0 }}
-            title={dirty ? 'Unsaved changes' : 'Saved'}
+            title={dirty ? s.unsavedChanges : s.saved}
           />
         </div>
       </div>
@@ -296,10 +298,10 @@ export function VaultEditorPane() {
         <div className="flex items-center gap-2 border-b border-(--stroke-nous) bg-[rgba(255,59,48,0.10)] px-4 py-1.5 text-xs">
           <Codicon name="warning" />
           <span className="min-w-0 flex-1 truncate">
-            Couldn't save this note — {saveError}. Your text is still here and BISEO keeps retrying.
+            {s.saveFailed(saveError)}
           </span>
           <button className="underline opacity-80 hover:opacity-100" onClick={() => void flushActiveNote()}>
-            Retry now
+            {s.retryNow}
           </button>
         </div>
       ) : null}
@@ -311,7 +313,7 @@ export function VaultEditorPane() {
         >
           <Codicon name="warning" />
           <span className="min-w-0 flex-1 truncate">
-            This note changed elsewhere — your edits were saved as a conflict copy.
+            {s.conflictNotice}
           </span>
           <button
             className="underline opacity-80 hover:opacity-100"

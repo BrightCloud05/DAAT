@@ -18,6 +18,7 @@ import { formatAmount, MONEY_DIR, type MoneySummary, parseMonthNote, summarize }
 import { openDailyNote, todayStamp } from './templates'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView, openCalendarView, openMailView, openMoneyView } from './view-store'
+import { $productLocale, productStrings } from './strings'
 
 const CARD =
   'rounded-xl border border-(--stroke-nous) bg-(--dt-card) p-[18px] flex flex-col gap-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_10px_24px_-18px_rgba(0,0,0,0.22)]'
@@ -45,6 +46,7 @@ function editedAgo(mtimeMs: number): string {
 
 /** Next few dated things, from the same source the Calendar reads. */
 function UpNextCard() {
+  const s = productStrings(useStore($productLocale))
   const revision = useStore($vaultRevision)
   const todos = useStore($vaultTodos)
   const [rows, setRows] = useState<TableLikeRow[]>([])
@@ -75,9 +77,9 @@ function UpNextCard() {
   return (
     <div className={CARD}>
       <div className="flex items-baseline">
-        <span className={CARD_TITLE}>Up next</span>
+        <span className={CARD_TITLE}>{s.upNext}</span>
         <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openCalendarView}>
-          Calendar
+          {s.calendar}
         </button>
       </div>
       <div className="flex flex-col gap-2.5">
@@ -94,7 +96,7 @@ function UpNextCard() {
             <span className="truncate text-[13px]">{entry.label}</span>
           </button>
         ))}
-        {!upcoming.length && <span className={MUTED}>Nothing scheduled. Add a due date and it shows up here.</span>}
+        {!upcoming.length && <span className={MUTED}>{s.nothingScheduled}</span>}
       </div>
     </div>
   )
@@ -102,6 +104,7 @@ function UpNextCard() {
 
 /** Real inbox state, or an honest "not connected yet". */
 function InboxCard() {
+  const s = productStrings(useStore($productLocale))
   const [state, setState] = useState<{ connected: boolean; mail: MailEnvelope[] } | null>(null)
 
   useEffect(() => {
@@ -135,18 +138,18 @@ function InboxCard() {
   return (
     <div className={CARD}>
       <div className="flex items-baseline">
-        <span className={CARD_TITLE}>Inbox</span>
+        <span className={CARD_TITLE}>{s.inbox}</span>
         {state?.connected ? (
-          <span className={`ml-auto ${MUTED}`}>{unread.length} unread</span>
+          <span className={`ml-auto ${MUTED}`}>{s.unreadCount(unread.length)}</span>
         ) : (
           <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openMailView}>
-            Connect
+            {s.connect}
           </button>
         )}
       </div>
       <div className="flex flex-col gap-2.5">
         {state === null ? (
-          <span className={MUTED}>Checking…</span>
+          <span className={MUTED}>{s.loading}</span>
         ) : state.connected ? (
           <>
             {state.mail.slice(0, 3).map(item => (
@@ -155,10 +158,10 @@ function InboxCard() {
                 <span className={MUTED}>{item.fromName || item.fromAddr || 'unknown'}</span>
               </button>
             ))}
-            {!state.mail.length && <span className={MUTED}>Inbox is empty.</span>}
+            {!state.mail.length && <span className={MUTED}>{s.inboxEmpty}</span>}
           </>
         ) : (
-          <span className={MUTED}>Connect an account and BISEO can read, sort and draft replies.</span>
+          <span className={MUTED}>{s.connectMailHint}</span>
         )}
       </div>
     </div>
@@ -167,6 +170,7 @@ function InboxCard() {
 
 /** This month's totals, straight out of the month note. */
 function MoneyCard() {
+  const s = productStrings(useStore($productLocale))
   const revision = useStore($vaultRevision)
   const [totals, setTotals] = useState<MoneySummary | null>(null)
 
@@ -188,9 +192,9 @@ function MoneyCard() {
   return (
     <div className={CARD}>
       <div className="flex items-baseline">
-        <span className={CARD_TITLE}>Money</span>
+        <span className={CARD_TITLE}>{s.money}</span>
         <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openMoneyView}>
-          {totals ? 'Open' : 'Import'}
+          {totals ? s.openTheNote : s.dropStatement}
         </button>
       </div>
       {totals && (totals.income || totals.spend) ? (
@@ -203,13 +207,14 @@ function MoneyCard() {
           </span>
         </div>
       ) : (
-        <span className={MUTED}>Drop a bank statement photo in Money and BISEO files the transactions.</span>
+        <span className={MUTED}>{s.moneyHint}</span>
       )}
     </div>
   )
 }
 
 export function HomeView() {
+  const s = productStrings(useStore($productLocale))
   const notes = useStore($vaultNotes)
   const info = useStore($vaultInfo)
   const todos = useStore($vaultTodos)
@@ -298,7 +303,7 @@ export function HomeView() {
                 className="flex h-[30px] items-center rounded-lg bg-(--dt-primary) px-3.5 text-[13px] font-medium text-white shadow-[0_4px_10px_-4px_rgba(0,122,255,0.6)] transition-opacity hover:opacity-90"
                 onClick={() => void openDailyNote()}
               >
-                {hasDaily ? "Open today's plan" : "Start today's plan"}
+                {hasDaily ? s.openTodaysPlan : s.startTodaysPlan}
               </button>
               <span className="ml-auto text-xs opacity-50">Ask a follow-up ⌘J</span>
             </div>
@@ -310,8 +315,8 @@ export function HomeView() {
           {/* Todo — real, checkboxes work. */}
           <div className={CARD}>
             <div className="flex items-baseline">
-              <span className={CARD_TITLE}>Todo</span>
-              <span className={`ml-auto ${MUTED}`}>{open.length} open</span>
+              <span className={CARD_TITLE}>{s.todo}</span>
+              <span className={`ml-auto ${MUTED}`}>{s.openCount(open.length)}</span>
             </div>
             <div className="flex flex-col gap-2.5">
               {todos.slice(0, 5).map(todo => (
@@ -338,20 +343,20 @@ export function HomeView() {
                   <span className={`truncate text-[13px] ${todo.done ? 'line-through opacity-45' : ''}`}>{todo.text}</span>
                 </button>
               ))}
-              {!todos.length && <span className={MUTED}>No tasks yet — type “/” → To-do list in any note.</span>}
+              {!todos.length && <span className={MUTED}>{s.noTasksYet}</span>}
             </div>
           </div>
 
           {/* Recent notes — real. */}
           <div className={CARD}>
             <div className="flex items-baseline">
-              <span className={CARD_TITLE}>Recent notes</span>
+              <span className={CARD_TITLE}>{s.recentNotes}</span>
               {recent.length ? (
                 <button
                   className="ml-auto text-xs text-(--dt-primary) hover:opacity-70"
                   onClick={() => openNoteFromHome(recent[0].path)}
                 >
-                  Open latest
+                  {s.openLatest}
                 </button>
               ) : null}
             </div>
@@ -362,24 +367,24 @@ export function HomeView() {
                   <span className={MUTED}>Edited {editedAgo(note.mtimeMs)}</span>
                 </button>
               ))}
-              {!recent.length && <span className={MUTED}>Nothing yet — ⌘N creates your first page.</span>}
+              {!recent.length && <span className={MUTED}>{s.noNotesYet}</span>}
             </div>
           </div>
 
           {/* Today — daily note state. */}
           <div className={CARD}>
             <div className="flex items-baseline">
-              <span className={CARD_TITLE}>Today</span>
+              <span className={CARD_TITLE}>{s.today}</span>
               <span className={`ml-auto ${MUTED}`}>{todayStamp()}</span>
             </div>
             {hasDaily ? (
               <button className="flex flex-col gap-1 text-left" onClick={() => void openDailyNote()}>
-                <span className="text-[13px] font-medium text-(--dt-primary)">Open today's note →</span>
+                <span className="text-[13px] font-medium text-(--dt-primary)">{s.openTodaysNote}</span>
                 <span className={MUTED}>Your plan, tasks and log for the day.</span>
               </button>
             ) : (
               <button className="flex flex-col gap-1 text-left" onClick={() => void openDailyNote()}>
-                <span className="text-[13px] font-medium">Start today's note</span>
+                <span className="text-[13px] font-medium">{s.startTodaysNote}</span>
                 <span className={MUTED}>⌘D any time — the Daily template fills it in.</span>
               </button>
             )}
@@ -392,10 +397,10 @@ export function HomeView() {
           {/* Still honest about what isn't built. */}
           <div className={`${CARD} opacity-75`}>
             <div className="flex items-baseline">
-              <span className={CARD_TITLE}>Meetings</span>
+              <span className={CARD_TITLE}>{s.meetings}</span>
               <span className={`ml-auto ${MUTED}`}>soon</span>
             </div>
-            <span className={MUTED}>Record → transcript → summary — coming soon.</span>
+            <span className={MUTED}>{s.meetingsHint}</span>
           </div>
         </div>
       </div>
