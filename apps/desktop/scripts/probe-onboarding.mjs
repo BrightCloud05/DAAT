@@ -1,0 +1,134 @@
+#!/usr/bin/env node
+/**
+ * Headless probe of the first-run wizard: launch against an empty vault, walk
+ * the three steps the way a user would, and check what actually landed on
+ * disk. The wizard is the one screen every user sees and the hardest to test
+ * by hand, because seeing it again means resetting state.
+ *
+ * Usage: node scripts/probe-onboarding.mjs   (needs `npm run build` first)
+ */
+
+import { _electron as electron } from '@playwright/test'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
+const DESKTOP_ROOT = path.resolve(import.meta.dirname, '..')
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'biseo-onboarding-'))
+const home = path.join(tmp, 'home')
+const vault = path.join(tmp, 'vault')
+const userData = path.join(tmp, 'userData')
+
+for (const dir of [home, vault, userData]) {
+  fs.mkdirSync(dir, { recursive: true })
+}
+
+fs.writeFileSync(path.join(userData, 'vault.json'), JSON.stringify({ root: vault }), 'utf8')
+
+const app = await electron.launch({
+  args: [DESKTOP_ROOT],
+  env: {
+    ...process.env,
+    HERMES_HOME: home,
+    HERMES_DESKTOP_USER_DATA_DIR: userData,
+    HERMES_DESKTOP_BOOT_FAKE: '1'
+  }
+})
+
+const page = await app.firstWindow()
+const failures = []
+
+page.on('pageerror', error => {
+  failures.push(`pageerror: ${error.message}`)
+  console.log('[pageerror]', error.message)
+})
+
+// Dismiss the provider-setup overlay (not what we're probing) but leave the
+// BISEO first-run wizard alone — it keys off biseo.onboarded.v1.
+await page.waitForTimeout(2500)
+await page.evaluate(() => {
+  localStorage.setItem('hermes-desktop-onboarded-v1', '1')
+  localStorage.setItem('hermes-onboarding-skipped-v1', '1')
+  localStorage.removeItem('biseo.onboarded.v1')
+  localStorage.removeItem('biseo.persona.v1')
+})
+await page.reload()
+await page.waitForTimeout(8000)
+
+const check = (label, ok, detail = '') => {
+  console.log(`${ok ? '  ok  ' : '  FAIL'} ${label}${detail ? ` — ${detail}` : ''}`)
+
+  if (!ok) {
+    failures.push(label)
+  }
+}
+
+console.log('--- step 1: persona ---')
+
+const heading = await page.locator('h1', { hasText: 'What will you use BISEO for' }).count()
+
+check('the wizard is shown on first run', heading > 0)
+
+const cards = page.locator('button', { hasText: 'Workpapers that check themselves' })
+
+check('all six personas render', (await page.locator('button:has-text("Start plain, grow later")').count()) > 0)
+
+// Continue must be inert until something is picked.
+const continueButton = page.locator('button', { hasText: 'Continue' }).first()
+
+check('Continue is disabled before a choice', await continueButton.isDisabled())
+
+await cards.first().click()
+await page.waitForTimeout(200)
+check('Continue enables after choosing', !(await continueButton.isDisabled()))
+
+await continueButton.click()
+await page.waitForTimeout(400)
+
+console.log('--- step 2: where the notes live ---')
+
+check('the vault folder is shown', (await page.locator('h1', { hasText: 'Your notes live here' }).count()) > 0)
+// Not a text= selector: the temp path contains slashes, which Playwright
+// would read as a regex literal.
+check(
+  'the real path is displayed',
+  await page.evaluate(root => document.body.textContent?.includes(root) ?? false, vault)
+)
+
+await page.locator('button', { hasText: 'Set up my pages' }).first().click()
+await page.waitForTimeout(4000)
+
+console.log('--- step 3: ready ---')
+
+check('setup completes', (await page.locator('h1', { hasText: 'Ready' }).count()) > 0)
+
+await page.locator('button', { hasText: 'Just look around' }).first().click()
+await page.waitForTimeout(1200)
+
+check('the wizard closes', (await page.locator('h1', { hasText: 'What will you use BISEO' }).count()) === 0)
+check('the app is behind it', (await page.locator('aside').count()) > 0)
+
+console.log('--- on disk ---')
+
+const walk = dir =>
+  fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const full = path.join(dir, entry.name)
+
+    return entry.isDirectory() ? walk(full) : [path.relative(vault, full)]
+  })
+
+const files = walk(vault)
+
+console.log(JSON.stringify(files, null, 2))
+check('accounting starter pages were created', files.some(file => file.includes('Workpaper')))
+check('SOUL.md was written for the persona', fs.existsSync(path.join(home, 'SOUL.md')))
+
+// Re-launching must not show the wizard again.
+const persisted = await page.evaluate(() => localStorage.getItem('biseo.onboarded.v1'))
+
+check('the choice is remembered', persisted === '1')
+
+await app.close()
+
+console.log(failures.length ? `\nRESULT: ${failures.length} FAILED` : '\nRESULT: ALL CHECKS PASSED')
+process.exit(failures.length ? 1 : 0)

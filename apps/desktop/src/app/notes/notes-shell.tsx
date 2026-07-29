@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils'
 import { VaultEditorPane } from '../vault/editor-pane'
 import { $activeNote, $vaultNotes, createNote } from '../vault/store'
 import { HomeView } from './home-view'
+import { OnboardingWizard } from './onboarding-wizard'
+import { $onboarded } from './persona-store'
 import { NotesSidebar } from './sidebar'
 import { TableView } from './table-view'
 import { TodoView } from './todo-view'
@@ -31,6 +33,7 @@ const AGENT_PANEL_KEY = 'biseo.notes.agentOpen.v1'
 export function NotesShell() {
   const active = useStore($activeNote)
   const canvasView = useStore($canvasView)
+  const onboarded = useStore($onboarded)
   const [agentOpen, setAgentOpen] = useState(() => {
     try {
       return window.localStorage.getItem(AGENT_PANEL_KEY) === '1'
@@ -94,6 +97,9 @@ export function NotesShell() {
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      {/* First run: who are you, where do the notes go. Escape dismisses it. */}
+      {!onboarded && <OnboardingWizard />}
+
       {/* Sidebar: pages + search. Translucent — the Glass material shows. */}
       <aside className="flex w-60 shrink-0 flex-col border-r border-(--stroke-nous) bg-(--ui-bg-sidebar)">
         <NotesSidebar />
