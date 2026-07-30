@@ -33,6 +33,8 @@ export interface Persona {
   starters: Record<string, string>
   /** Extra dashboard cards, rendered after the shared ones. */
   widgets: PersonaWidgetId[]
+  /** First-run questions, asked one at a time. */
+  questions: SetupQuestion[]
   /**
    * The brief the assistant is given when first-run setup opens.
    *
@@ -42,6 +44,22 @@ export interface Persona {
    * someone who finds AI intimidating will not answer a wall of questions.
    */
   kickoff: string
+}
+
+/**
+ * One step of first-run setup.
+ *
+ * `ask` is shown verbatim and never streamed. A first-run question is the
+ * same every time, so generating it costs a slow word-by-word reveal of text
+ * nobody needed a model to write. The model earns its place on the answer:
+ * `instruction` is what it does with what the user typed.
+ */
+export interface SetupQuestion {
+  ask: string
+  askKo: string
+  hint: string
+  hintKo: string
+  instruction: string
 }
 
 /** Dashboard cards a persona can switch on. */
@@ -58,6 +76,25 @@ const COMMON_SOUL =
 export const PERSONAS: Persona[] = [
   {
     id: 'student',
+    questions: [
+      {
+        ask: 'What are you studying this term?',
+        askKo: '이번 학기에 뭘 배우세요?',
+        hint: 'Subject names are enough — “linear algebra, stats, two history units”',
+        hintKo: '과목 이름만 적어도 됩니다 — “선형대수, 통계, 역사 2과목”',
+        instruction:
+          'Create one page per subject from Templates/Course.md using vault_write, under Courses/. Fill in code, term, days, time and room only where the user actually said them; leave the rest blank. Do not invent a timetable.'
+      },
+      {
+        ask: 'Anything due soon?',
+        askKo: '곧 마감인 게 있나요?',
+        hint: 'An assignment, a test, a reading — or skip this',
+        hintKo: '과제, 시험, 읽기 — 없으면 건너뛰세요',
+        instruction:
+          'Create one page per assessment from Templates/Assessment.md using vault_write, under Courses/. Set course, due and weight only where stated. If the user gave no date, leave due blank rather than guessing.'
+      },
+    ],
+
     kickoff:
       "The user just told you they are a student and this is the very first thing they see in Daat. Greet them in two short sentences and offer to set up their semester for them. Say plainly what you can work from: a timetable screenshot, a syllabus or course outline PDF, or just the names of their subjects typed out. Then ask ONE question — what subjects they're taking this term. As they answer, create a page per subject from Templates/Course.md with vault_write (fill in code, term, days, time, room when you know them), and a page per assessment from Templates/Assessment.md with its due date. Ask for one missing detail at a time — never a list of questions. When their courses and known deadlines are in, tell them what you made and that it's all on their Home screen now." +
       COMMON_KICKOFF,
@@ -85,6 +122,25 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'accounting',
+    questions: [
+      {
+        ask: 'Which clients are you working on?',
+        askKo: '지금 어떤 고객 일을 하고 계세요?',
+        hint: 'Names are enough',
+        hintKo: '이름만 적어도 됩니다',
+        instruction:
+          'Create one page per client from Templates/Workpaper.md using vault_write, under Clients/. Never invent a figure, a period or an entity number.'
+      },
+      {
+        ask: 'Anything with a deadline?',
+        askKo: '마감이 걸린 일이 있나요?',
+        hint: 'A lodgement, a review, a year-end — or skip',
+        hintKo: '신고, 검토, 결산 — 없으면 건너뛰세요',
+        instruction:
+          'Add the deadline to the relevant client page with vault_write, or create a page for it if there is no client. Set a due date only if the user gave one.'
+      },
+    ],
+
     kickoff:
       "The user just told you they do accounting work and this is the first thing they see in Daat. Greet them in two short sentences and offer to set up their client files. Say what you can work from: a client list, an engagement letter, or just names typed out. Then ask ONE question — which clients they're working on right now. Create a page per client from Templates/Workpaper.md with vault_write as they answer, and ask for one missing detail at a time. Never estimate a figure." +
       COMMON_KICKOFF,
@@ -106,6 +162,17 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'office',
+    questions: [
+      {
+        ask: 'What are you keeping track of this week?',
+        askKo: '이번 주에 뭘 챙기고 계세요?',
+        hint: 'Meetings, people waiting on you, anything running',
+        hintKo: '회의, 답을 기다리는 사람, 진행 중인 일',
+        instruction:
+          'Create a page per topic with vault_write. Turn anything that reads as a task into a markdown checklist item with an owner where one is named.'
+      },
+    ],
+
     kickoff:
       "The user just told you they coordinate an office and this is the first thing they see in Daat. Greet them in two short sentences and offer to set up what they're tracking. Say what you can work from: a meeting agenda, an email thread, or just what's on their plate typed out. Then ask ONE question — what they're responsible for this week. Create pages with vault_write as they answer, one detail at a time." +
       COMMON_KICKOFF,
@@ -126,6 +193,17 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'programming',
+    questions: [
+      {
+        ask: 'What are you working on?',
+        askKo: '지금 뭘 만들고 계세요?',
+        hint: 'Project names, or a repo path',
+        hintKo: '프로젝트 이름이나 저장소 경로',
+        instruction:
+          'Create one page per project from Templates/Decision.md using vault_write, under Projects/. If the user gave a repo path, read its README first and summarise what the project is in two sentences.'
+      },
+    ],
+
     kickoff:
       "The user just told you they write software and this is the first thing they see in Daat. Greet them in two short sentences and offer to set up their project pages. Say what you can work from: a repo path, a README, or just project names. Then ask ONE question — what they're working on. Create a page per project with vault_write as they answer, one detail at a time." +
       COMMON_KICKOFF,
@@ -147,6 +225,17 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'secretary',
+    questions: [
+      {
+        ask: 'What do you need to stay on top of?',
+        askKo: '무엇을 놓치지 않고 챙겨야 하세요?',
+        hint: 'People, commitments, anything recurring',
+        hintKo: '사람, 약속, 반복되는 일',
+        instruction:
+          'Create a page per thing with vault_write. Anything with a date goes in the frontmatter so it reaches the calendar; anything owed by someone else becomes a checklist item saying who.'
+      },
+    ],
+
     kickoff:
       "The user just told you they want an assistant for their day, and this is the first thing they see in Daat. Greet them in two short sentences and offer to set up what they're keeping track of. Say what you can work from: a calendar screenshot, a list of people they deal with, or just what's on their plate. Then ask ONE question — what they need to stay on top of this week. Create pages with vault_write as they answer, one detail at a time." +
       COMMON_KICKOFF,
@@ -167,6 +256,17 @@ export const PERSONAS: Persona[] = [
   },
   {
     id: 'general',
+    questions: [
+      {
+        ask: 'What would you like to keep track of?',
+        askKo: '무엇을 정리해 두고 싶으세요?',
+        hint: 'Anything at all — projects, reading, a plan',
+        hintKo: '무엇이든 — 프로젝트, 읽을 것, 계획',
+        instruction:
+          'Create a page per thing with vault_write, at the top level of the vault. Keep the structure plain.'
+      },
+    ],
+
     kickoff:
       "The user just picked a general setup and this is the first thing they see in Daat. Greet them in two short sentences, say you can read documents and photos they give you and turn them into pages, and that you can also use their Mac. Then ask ONE question — what they'd like to keep track of. Create pages with vault_write as they answer, one detail at a time." +
       COMMON_KICKOFF,

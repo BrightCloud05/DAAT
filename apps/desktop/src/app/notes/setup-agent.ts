@@ -1,16 +1,17 @@
 /**
- * First-run setup, driven by the assistant.
+ * First-run setup: fixed questions, AI answers.
  *
- * The difference this app is betting on: you don't arrive at an empty
- * notebook and a blinking cursor. The assistant opens the conversation, says
- * what it can work from, asks one question at a time, and builds the pages
- * itself as you answer. By the time you touch anything, the app is already
- * yours.
+ * The questions are hard-coded and rendered instantly. They are the same
+ * every time a given persona runs setup, so having a model write them bought
+ * nothing and cost a word-by-word reveal that was genuinely unreadable at
+ * heading size. What actually needs a model is the other direction: turning
+ * "linear algebra, stats, two history units" into real pages with the right
+ * frontmatter. That is all it does here.
  *
- * Two rules make that safe enough to do without asking permission each time:
- * everything it creates is a plain markdown file in the user's own folder,
- * and every turn is undoable — we diff the vault around each turn, so "Undo"
- * removes exactly what that turn added and nothing else.
+ * Nothing the assistant says is shown. Each step reports a fact — "Made 4
+ * pages" — with an Undo, because we diff the vault around the step and can
+ * remove exactly what it added. That is what makes "just do it for me" safe
+ * to offer without a confirmation on every write.
  */
 
 import { atom } from 'nanostores'
@@ -22,76 +23,45 @@ import { $vaultInfo, $vaultNotes, refreshVaultNotes } from '../vault/store'
 
 import type { Persona } from './personas'
 
-export interface SetupMessage {
-  id: string
-  role: 'assistant' | 'user'
-  text: string
-  /** Paths this turn created, newest last. Empty for user messages. */
+export interface SetupStep {
+  /** Index into the persona's question list. */
+  question: number
+  /** What the user typed, or null when they skipped. */
+  answer: string | null
+  /** Vault paths this step created. Emptied by undo. */
   created: string[]
-  /** Set once the user has undone this turn's pages. */
   undone?: boolean
 }
 
-export type SetupStatus = 'idle' | 'thinking' | 'ready' | 'error'
+export type SetupStatus = 'asking' | 'working' | 'done' | 'error'
 
 export interface SetupState {
   status: SetupStatus
-  messages: SetupMessage[]
-  /** Short human line while the assistant works ("Making your pages…"). */
+  /** Which question is on screen. */
+  index: number
+  steps: SetupStep[]
+  /** Short human line while the assistant works. */
   activity: string | null
   error: string | null
 }
 
-const EMPTY: SetupState = { status: 'idle', messages: [], activity: null, error: null }
+const EMPTY: SetupState = { status: 'asking', index: 0, steps: [], activity: null, error: null }
 
 export const $setup = atom<SetupState>(EMPTY)
 
 let sessionId: string | null = null
 let unsubscribe: (() => void) | null = null
-let counter = 0
-/** Text accumulated from deltas this turn, to compare against the final text. */
-let streamed = ''
-
-/** Append to the open assistant message, or start one. */
-function appendAssistantText(text: string): void {
-  const state = $setup.get()
-  const last = state.messages.at(-1)
-
-  if (last?.role === 'assistant' && state.status === 'thinking') {
-    update({ activity: null, messages: [...state.messages.slice(0, -1), { ...last, text: last.text + text }] })
-  } else {
-    update({ activity: null, messages: [...state.messages, { id: nextId(), role: 'assistant', text, created: [] }] })
-  }
-}
-
-/** Overwrite the open assistant message with the authoritative full text. */
-function replaceAssistantText(text: string): void {
-  const state = $setup.get()
-  const last = state.messages.at(-1)
-
-  if (last?.role === 'assistant' && state.status === 'thinking') {
-    update({ activity: null, messages: [...state.messages.slice(0, -1), { ...last, text }] })
-  } else {
-    update({ activity: null, messages: [...state.messages, { id: nextId(), role: 'assistant', text, created: [] }] })
-  }
-}
-
-function nextId(): string {
-  counter += 1
-
-  return `m${counter}`
-}
 
 function update(patch: Partial<SetupState>): void {
   $setup.set({ ...$setup.get(), ...patch })
 }
 
 /** Tool names → one plain line. The user should never read a tool call. */
-function activityFor(tool: string): string | null {
+function activityFor(tool: string): string {
   if (tool.startsWith('vault_write') || tool.startsWith('money_add')) {return 'Making your pages…'}
 
   if (tool.startsWith('vault_read') || tool.startsWith('vault_search') || tool.startsWith('vault_list')) {
-    return 'Looking through your notes…'
+    return 'Reading what you have…'
   }
 
   if (tool.startsWith('meeting_')) {return 'Listening to the recording…'}
@@ -113,7 +83,7 @@ async function ensureSession(persona: Persona): Promise<boolean> {
   const gateway = activeGateway()
 
   if (!gateway) {
-    update({ status: 'error', error: 'The assistant is still starting up. Give it a moment, or skip for now.' })
+    update({ status: 'error', error: 'The assistant is still starting up. Give it a moment, or skip setup.' })
 
     return false
   }
@@ -127,10 +97,7 @@ async function ensureSession(persona: Persona): Promise<boolean> {
 
     sessionId = String(created?.session_id ?? created?.sid ?? created?.id ?? '') || null
   } catch (error) {
-    update({
-      status: 'error',
-      error: error instanceof Error ? error.message : 'Could not reach the assistant.'
-    })
+    update({ status: 'error', error: error instanceof Error ? error.message : 'Could not reach the assistant.' })
 
     return false
   }
@@ -141,70 +108,49 @@ async function ensureSession(persona: Persona): Promise<boolean> {
     return false
   }
 
-  // One subscription for the whole conversation.
+  // Only tool activity is surfaced. The assistant's prose is deliberately
+  // ignored — the screen shows fixed questions and finished pages, not chat.
   unsubscribe = gateway.onEvent(event => {
     if (event.session_id !== sessionId) {
       return
     }
 
-    // tui_gateway emits tool.start with {tool_id, name, args}.
     if (event.type === 'tool.start') {
       const payload = event.payload as { name?: unknown } | undefined
-      const name = String(payload?.name ?? '')
 
-      update({ activity: activityFor(name) })
-    }
-
-    if (event.type === 'message.delta') {
-      const payload = event.payload as { text?: unknown } | undefined
-      const text = typeof payload?.text === 'string' ? payload.text : ''
-
-      if (!text) {
-        return
-      }
-
-      streamed += text
-      appendAssistantText(text)
-    }
-
-    // Not every provider streams. The Codex backend sends one
-    // message.complete carrying the whole reply and no deltas at all — which
-    // is how a 185-character greeting rendered as a single "?" on screen.
-    // Trust complete's text whenever it is longer than what we streamed.
-    if (event.type === 'message.complete') {
-      const payload = event.payload as { text?: unknown } | undefined
-      const full = typeof payload?.text === 'string' ? payload.text : ''
-
-      if (full && full.length > streamed.length) {
-        replaceAssistantText(full)
-      }
-
-      streamed = ''
+      update({ activity: activityFor(String(payload?.name ?? '')) })
     }
   })
 
   return true
 }
 
-/** Attribute everything created during a turn to that turn, for Undo. */
-async function finishTurn(before: Set<string>): Promise<void> {
-  await refreshVaultNotes()
-
-  const created = [...currentPaths()].filter(path => !before.has(path))
-  const state = $setup.get()
-  const last = state.messages.at(-1)
+/** Move to the next question, or finish. */
+function advance(persona: Persona): void {
+  const next = $setup.get().index + 1
 
   update({
-    status: 'ready',
-    activity: null,
-    messages:
-      last?.role === 'assistant' && created.length
-        ? [...state.messages.slice(0, -1), { ...last, created }]
-        : state.messages
+    index: next,
+    status: next >= persona.questions.length ? 'done' : 'asking',
+    activity: null
   })
 }
 
-async function send(persona: Persona, prompt: string, visible: string | null): Promise<void> {
+/**
+ * Hand one answer to the assistant and record what it built.
+ *
+ * The vault diff is taken around the whole turn, which is why Undo can be
+ * exact: whatever appeared between the prompt going out and the turn ending
+ * belongs to this step and nothing else.
+ */
+export async function answerQuestion(persona: Persona, answer: string): Promise<void> {
+  const state = $setup.get()
+  const question = persona.questions[state.index]
+
+  if (!question || state.status === 'working') {
+    return
+  }
+
   if (!(await ensureSession(persona))) {
     return
   }
@@ -217,22 +163,24 @@ async function send(persona: Persona, prompt: string, visible: string | null): P
 
   const before = currentPaths()
 
-  streamed = ''
-
-  update({
-    status: 'thinking',
-    error: null,
-    activity: null,
-    messages: visible
-      ? [...$setup.get().messages, { id: nextId(), role: 'user', text: visible, created: [] }]
-      : $setup.get().messages
-  })
+  update({ status: 'working', error: null, activity: null })
 
   try {
-    await gateway.request('prompt.submit', { session_id: sessionId, text: prompt }, PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
+    await gateway.request(
+      'prompt.submit',
+      {
+        session_id: sessionId,
+        text:
+          `The user was asked: "${question.ask}"\nThey answered: "${answer}"\n\n` +
+          `${question.instruction}\n\n` +
+          'Do the work now. Do not ask follow-up questions and do not explain — this runs behind a fixed ' +
+          'setup screen and your prose is not shown. Never invent a detail the user did not give.'
+      },
+      PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
+    )
   } catch (error) {
     update({
-      status: 'error',
+      status: 'asking',
       activity: null,
       error: error instanceof Error ? error.message : 'The assistant stopped responding.'
     })
@@ -240,69 +188,47 @@ async function send(persona: Persona, prompt: string, visible: string | null): P
     return
   }
 
-  await finishTurn(before)
+  await refreshVaultNotes()
+
+  const created = [...currentPaths()].filter(path => !before.has(path))
+
+  update({ steps: [...$setup.get().steps, { question: state.index, answer, created }] })
+  advance(persona)
 }
 
-/**
- * Open the conversation: the assistant speaks first, unprompted.
- *
- * Idempotent, because the guard belongs with the state it guards — React can
- * mount an effect twice (StrictMode, a remount) and the user must not get two
- * greetings and two sessions.
- */
-export async function startSetup(persona: Persona): Promise<void> {
-  if (sessionId || $setup.get().status !== 'idle') {
+/** Skip the question on screen without asking the assistant anything. */
+export function skipQuestion(persona: Persona): void {
+  const state = $setup.get()
+
+  if (state.status === 'working') {
     return
   }
 
-  $setup.set({ ...EMPTY, status: 'thinking' })
-  await send(persona, persona.kickoff, null)
+  update({ steps: [...state.steps, { question: state.index, answer: null, created: [] }] })
+  advance(persona)
 }
 
-export async function replyToSetup(persona: Persona, text: string): Promise<void> {
-  const trimmed = text.trim()
-
-  if (!trimmed || $setup.get().status === 'thinking') {
-    return
-  }
-
-  await send(persona, trimmed, trimmed)
-}
-
-/** Hand the assistant files the user dropped in. */
+/** Hand the assistant files the user dropped, against the current question. */
 export async function offerFilesToSetup(persona: Persona, paths: string[]): Promise<void> {
   if (!paths.length) {
     return
   }
 
-  const names = paths.map(path => path.split('/').pop() ?? path)
-  const list = paths.map(path => `"${path}"`).join(', ')
+  const names = paths.map(path => path.split('/').pop() ?? path).join(', ')
 
-  await send(
-    persona,
-    `The user gave you these files: ${list}. Read them — if a file is an image or a PDF, read it visually — ` +
-      `and create the pages they imply with vault_write, following your setup brief. Then say in one or two ` +
-      `sentences what you made.`,
-    names.length === 1 ? `Here's ${names[0]}` : `Here are ${names.length} files: ${names.join(', ')}`
-  )
+  await answerQuestion(persona, `I've given you these files: ${paths.map(p => `"${p}"`).join(', ')} (${names}). ` +
+    'Read them — if a file is an image or a PDF, read it visually — and use what they say.')
 }
 
-/**
- * Remove the pages a single turn created.
- *
- * Deliberately not a general undo: it only touches paths recorded for that
- * turn, so a page the user edited afterwards is still theirs to lose — which
- * is why the button disappears once used.
- */
-export async function undoTurn(messageId: string): Promise<void> {
-  const state = $setup.get()
-  const target = state.messages.find(message => message.id === messageId)
+/** Remove the pages one step created. */
+export async function undoStep(index: number): Promise<void> {
+  const step = $setup.get().steps[index]
 
-  if (!target?.created.length) {
+  if (!step?.created.length) {
     return
   }
 
-  for (const path of target.created) {
+  for (const path of step.created) {
     try {
       await window.hermesDesktop.vault.trash(path)
     } catch {
@@ -313,8 +239,8 @@ export async function undoTurn(messageId: string): Promise<void> {
   await refreshVaultNotes()
 
   update({
-    messages: $setup.get().messages.map(message =>
-      message.id === messageId ? { ...message, undone: true, created: [] } : message
+    steps: $setup.get().steps.map((entry, position) =>
+      position === index ? { ...entry, created: [], undone: true } : entry
     )
   })
 }

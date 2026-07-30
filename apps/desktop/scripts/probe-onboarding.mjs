@@ -111,10 +111,20 @@ await page.waitForTimeout(4000)
 
 console.log('--- step 3: the assistant takes over ---')
 
-check('the setup conversation opens', await page.evaluate(() =>
-  document.body.textContent?.includes('Setting up with Daat') ?? false
-))
+// The question is a fixed local string, so it must be on screen complete and
+// immediately — the version a model wrote arrived word by word and was
+// unreadable at this size.
+const asked = await page.evaluate(() => {
+  const big = [...document.querySelectorAll('p')].find(p => parseFloat(getComputedStyle(p).fontSize) >= 22)
+
+  return { text: big?.textContent ?? '', px: big ? getComputedStyle(big).fontSize : null }
+})
+
+check('the first question is asked', asked.text.includes('clients are you working on'))
+check('it is set large', asked.px === '24px')
 check('there is somewhere to answer', (await page.locator('textarea').count()) > 0)
+check('progress is shown', await page.evaluate(() => /\d \/ \d/.test(document.body.innerText)))
+check('a question can be skipped', await page.evaluate(() => document.body.innerText.includes('Skip')))
 check('files can be handed over', await page.evaluate(() =>
   document.body.textContent?.includes('drop a timetable') ?? false
 ))
@@ -152,7 +162,20 @@ const files = walk(vault)
 
 console.log(JSON.stringify(files, null, 2))
 check('accounting starter pages were created', files.some(file => file.includes('Workpaper')))
-check('SOUL.md was written for the persona', fs.existsSync(path.join(home, 'SOUL.md')))
+// The SOUL write goes through the backend REST API, which races the backend
+// coming up in this fake-boot environment — poll rather than report a flake.
+const soulPath = path.join(home, 'SOUL.md')
+let soulWritten = false
+
+for (let attempt = 0; attempt < 10 && !soulWritten; attempt++) {
+  soulWritten = fs.existsSync(soulPath)
+
+  if (!soulWritten) {
+    await page.waitForTimeout(1000)
+  }
+}
+
+check('SOUL.md was written for the persona', soulWritten)
 
 // Re-launching must not show the wizard again.
 const persisted = await page.evaluate(() => localStorage.getItem('daat.onboarded.v1'))

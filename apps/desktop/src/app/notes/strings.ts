@@ -141,6 +141,11 @@ const EN = {
   setupPlaceholder: 'Type your answer…',
   dropAnything: 'You can also drop a timetable, a PDF or a photo anywhere on this window.',
   send: 'Send',
+  skipQuestion: 'Skip',
+  setupDoneTitle: "That's your setup done.",
+  setupDoneBody:
+    'Everything is a plain markdown file in your folder — edit or delete any of it. Press ⌘J any time to ask ' +
+    'for something else.',
   undo: 'Undo',
   undone: 'Removed those pages.',
   madePages: (count: number) => `Made ${count} page${count === 1 ? '' : 's'}`,
@@ -268,6 +273,10 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   setupPlaceholder: '답을 입력하세요…',
   dropAnything: '시간표, PDF, 사진을 이 창 아무 데나 끌어다 놓아도 됩니다.',
   send: '보내기',
+  skipQuestion: '건너뛰기',
+  setupDoneTitle: '설정이 끝났습니다.',
+  setupDoneBody:
+    '전부 내 폴더 안의 일반 마크다운 파일입니다 — 수정하거나 지워도 됩니다. 다른 게 필요하면 언제든 ⌘J 를 눌러 주세요.',
   undo: '되돌리기',
   undone: '만든 페이지를 지웠습니다.',
   madePages: (count: number) => `페이지 ${count}개를 만들었어요`,

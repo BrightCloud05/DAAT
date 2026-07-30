@@ -1,13 +1,14 @@
 /**
- * The first-run conversation.
+ * First-run setup screen.
  *
- * Centre of the screen, covering the app, because on a first run this IS the
- * app — there is nothing behind it worth looking at yet. The assistant speaks
- * first and does the work; the user answers one question at a time and can
- * hand over files by dropping them anywhere on this screen.
+ * One fixed question at a time, full screen, set large. The question is a
+ * local string so it appears complete and instantly — the version that had a
+ * model write it revealed itself word by word, which at heading size is
+ * unreadable and makes the app feel like it is struggling.
  *
- * Everything it builds is listed under the message that built it, with an
- * Undo. That is what makes "just do it" acceptable instead of alarming.
+ * The assistant works in the background on the answer and never speaks here.
+ * Each step reports a fact and an Undo instead, which is the honest shape for
+ * "just do it for me": you can always see what it made and take it back.
  */
 
 import { useStore } from '@nanostores/react'
@@ -17,25 +18,27 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
 import type { Persona } from './personas'
-import { $setup, offerFilesToSetup, replyToSetup, startSetup, undoTurn } from './setup-agent'
+import { $setup, answerQuestion, offerFilesToSetup, skipQuestion, undoStep } from './setup-agent'
 import { $productLocale, productStrings } from './strings'
 
 export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () => void }) {
   const setup = useStore($setup)
-  const s = productStrings(useStore($productLocale))
+  const locale = useStore($productLocale)
+  const s = productStrings(locale)
   const [draft, setDraft] = useState('')
   const [dragging, setDragging] = useState(false)
-  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
-  // The assistant opens the conversation. startSetup is idempotent, so a
-  // double mount can't produce two greetings.
-  useEffect(() => {
-    void startSetup(persona)
-  }, [persona])
+  const question = persona.questions[setup.index]
+  const working = setup.status === 'working'
+  const finished = setup.status === 'done'
 
+  // A new question deserves the cursor.
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
-  }, [setup.messages, setup.activity])
+    if (!working && !finished) {
+      inputRef.current?.focus()
+    }
+  }, [setup.index, working, finished])
 
   const submit = () => {
     const text = draft.trim()
@@ -45,14 +48,17 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
     }
 
     setDraft('')
-    void replyToSetup(persona, text)
+    void answerQuestion(persona, text)
   }
 
-  const busy = setup.status === 'thinking'
+  const built = setup.steps.filter(step => step.created.length)
 
   return (
     <div
-      className="fixed inset-0 z-(--z-onboarding) flex items-center justify-center bg-(--theme-neutral-chrome) backdrop-blur-xl p-6"
+      className={cn(
+        'fixed inset-0 z-(--z-onboarding) flex flex-col bg-(--theme-neutral-chrome) transition-colors',
+        dragging && 'bg-[color-mix(in_srgb,var(--dt-primary)_5%,var(--theme-neutral-chrome))]'
+      )}
       onDragLeave={() => setDragging(false)}
       onDragOver={event => {
         event.preventDefault()
@@ -69,105 +75,129 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
         void offerFilesToSetup(persona, paths)
       }}
     >
-      <div
-        className={cn(
-          // An opaque card: this panel sits over the dashboard, and with only
-          // a border the whole app read through it.
-          'flex h-full max-h-[42rem] w-full max-w-[40rem] flex-col rounded-2xl border bg-(--theme-neutral-card) shadow-[0_24px_60px_-24px_rgba(0,0,0,0.45)] transition-colors',
-          dragging ? 'border-(--dt-primary)' : 'border-(--stroke-nous)'
-        )}
-        style={{ animation: 'daat-lift 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both' }}
-      >
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-(--stroke-nous) px-5 py-3.5">
-          <span className="text-[13px] font-semibold">{s.settingUpTitle}</span>
-          <button
-            className="ml-auto rounded-md px-2 py-1 text-[12.5px] opacity-45 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-90"
-            onClick={onDone}
-          >
-            {s.imDone}
-          </button>
-        </div>
+      {/* Progress as a count, not a bar — two questions doesn't need a bar. */}
+      <div className="flex shrink-0 items-center px-6 pt-5">
+        {persona.questions.length > 1 && !finished ? (
+          <span className="text-[12px] tabular-nums opacity-35">
+            {Math.min(setup.index + 1, persona.questions.length)} / {persona.questions.length}
+          </span>
+        ) : null}
+        <button
+          className="ml-auto rounded-lg px-3 py-1.5 text-[13px] opacity-45 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-90"
+          onClick={onDone}
+        >
+          {finished ? s.startWriting : s.imDone}
+        </button>
+      </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-5" ref={scrollRef}>
-          {setup.messages.map(message => (
-            <div
-              className={cn('flex flex-col gap-1.5', message.role === 'user' ? 'items-end' : 'items-start')}
-              key={message.id}
-            >
-              <div
-                className={cn(
-                  'max-w-[85%] whitespace-pre-wrap text-[14px] leading-relaxed',
-                  message.role === 'user' &&
-                    'rounded-2xl rounded-br-md bg-(--ui-control-hover-background) px-3.5 py-2'
-                )}
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6">
+        <div className="flex w-full max-w-[34rem] flex-col gap-7">
+          {finished ? (
+            <div className="flex flex-col gap-4">
+              <p className="text-[24px] leading-[1.4]">{s.setupDoneTitle}</p>
+              <p className="text-[15px] leading-relaxed opacity-60">{s.setupDoneBody}</p>
+              <button
+                className="mt-1 self-start rounded-lg bg-(--dt-primary) px-4 py-2 text-[13.5px] font-medium text-white transition-opacity hover:opacity-90"
+                onClick={onDone}
               >
-                {message.text}
-              </div>
+                {s.startWriting}
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Fixed text, rendered whole. Nothing streams into this. */}
+              <p className="text-[24px] leading-[1.4]" key={setup.index}>
+                {locale === 'ko' ? question?.askKo : question?.ask}
+              </p>
 
-              {/* What this turn built, and the way back out of it. */}
-              {message.created.length ? (
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5 text-[12px] opacity-60">
-                  <Codicon className="text-[11px] text-(--dt-primary)" name="check" />
-                  <span>{s.madePages(message.created.length)}</span>
+              <div className="flex flex-col gap-2.5">
+                <div
+                  className={cn(
+                    'flex items-end gap-2 rounded-xl border px-4 py-3 transition-colors',
+                    working
+                      ? 'border-(--stroke-nous) opacity-50'
+                      : 'border-(--stroke-nous) focus-within:border-(--dt-primary)'
+                  )}
+                >
+                  <textarea
+                    autoFocus
+                    className="max-h-40 min-h-[26px] flex-1 resize-none bg-transparent text-[16px] leading-relaxed outline-none placeholder:opacity-35"
+                    disabled={working}
+                    onChange={event => setDraft(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault()
+                        submit()
+                      }
+                    }}
+                    placeholder={locale === 'ko' ? question?.hintKo : question?.hint}
+                    ref={inputRef}
+                    rows={1}
+                    value={draft}
+                  />
                   <button
-                    className="underline underline-offset-2 hover:opacity-100"
-                    onClick={() => void undoTurn(message.id)}
+                    className="grid size-8 shrink-0 place-items-center rounded-lg bg-(--dt-primary) text-white transition-opacity hover:opacity-90 disabled:opacity-25"
+                    disabled={working || !draft.trim()}
+                    onClick={submit}
+                    title={s.send}
                   >
-                    {s.undo}
+                    <Codicon className="text-[14px]" name="arrow-up" />
                   </button>
                 </div>
-              ) : null}
 
-              {message.undone ? <span className="text-[12px] opacity-40">{s.undone}</span> : null}
-            </div>
-          ))}
-
-          {setup.activity ? (
-            <div className="flex items-center gap-2 text-[13px] opacity-55">
-              <span
-                className="size-1.5 rounded-full bg-(--dt-primary)"
-                style={{ animation: 'daat-pulse 1.2s ease-in-out infinite' }}
-              />
-              {setup.activity}
-            </div>
-          ) : busy && !setup.messages.length ? (
-            <div className="text-[13px] opacity-50">{s.loading}</div>
-          ) : null}
+                {/* One status line, always in the same place. */}
+                <div className="flex min-h-[20px] items-center gap-2 text-[12.5px]">
+                  {working ? (
+                    <>
+                      <span
+                        className="size-1.5 rounded-full bg-(--dt-primary)"
+                        style={{ animation: 'daat-pulse 1.2s ease-in-out infinite' }}
+                      />
+                      <span className="opacity-60">{setup.activity ?? s.loading}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="opacity-35">{s.dropAnything}</span>
+                      <button
+                        className="ml-auto opacity-45 underline underline-offset-2 transition-opacity hover:opacity-90"
+                        onClick={() => skipQuestion(persona)}
+                      >
+                        {s.skipQuestion}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
 
           {setup.error ? (
-            <div className="flex items-start gap-2 rounded-lg bg-[rgba(255,59,48,0.10)] px-3 py-2 text-[12.5px]">
+            <div className="flex items-start gap-2 rounded-lg bg-[rgba(255,59,48,0.10)] px-3.5 py-2.5 text-[13px]">
               <Codicon className="mt-0.5 shrink-0" name="warning" />
               <span>{setup.error}</span>
             </div>
           ) : null}
         </div>
+      </div>
 
-        <div className="shrink-0 border-t border-(--stroke-nous) px-5 py-3.5">
-          <div className="flex items-end gap-2">
-            <textarea
-              autoFocus
-              className="max-h-28 min-h-[38px] flex-1 resize-none rounded-xl bg-(--ui-control-hover-background) px-3.5 py-2.5 text-[14px] outline-none placeholder:opacity-45"
-              onChange={event => setDraft(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault()
-                  submit()
-                }
-              }}
-              placeholder={s.setupPlaceholder}
-              rows={1}
-              value={draft}
-            />
-            <button
-              className="grid size-[38px] shrink-0 place-items-center rounded-xl bg-(--dt-primary) text-white transition-opacity hover:opacity-90 disabled:opacity-35"
-              disabled={busy || !draft.trim()}
-              onClick={submit}
-              title={s.send}
-            >
-              <Codicon className="text-[15px]" name="arrow-up" />
-            </button>
-          </div>
-          <p className="mt-2 text-[11.5px] opacity-45">{s.dropAnything}</p>
+      {/* What it made, and the way back out of each of them. */}
+      <div className="flex shrink-0 justify-center px-6 pb-7">
+        <div className="flex w-full max-w-[34rem] flex-col gap-1.5">
+          {built.map(step => (
+            <div className="flex items-center gap-2 text-[12.5px]" key={step.question}>
+              <Codicon className="shrink-0 text-[11px] text-(--dt-primary)" name="check" />
+              <span className="opacity-55">{s.madePages(step.created.length)}</span>
+              <button
+                className="opacity-45 underline underline-offset-2 transition-opacity hover:opacity-90"
+                onClick={() => void undoStep(setup.steps.indexOf(step))}
+              >
+                {s.undo}
+              </button>
+            </div>
+          ))}
+          {setup.steps.some(step => step.undone) ? (
+            <span className="text-[12.5px] opacity-35">{s.undone}</span>
+          ) : null}
         </div>
       </div>
     </div>
