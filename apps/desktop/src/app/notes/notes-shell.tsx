@@ -11,6 +11,8 @@ import { useEffect, useState } from 'react'
 import { WiredPane } from '@/app/contrib/context'
 import { submitAgentPrompt } from '@/store/quick-entry'
 
+import { AgentSessions } from './agent-sessions'
+
 import {
   $agentPanelOpen,
   $notesSidebarOpen,
@@ -147,6 +149,7 @@ export function NotesShell() {
               <span className="min-w-0 flex-1 truncate text-xs font-medium">
                 Agent{active ? ` · ${active.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '')}` : ''}
               </span>
+              <AgentSessions />
               <Button size="icon-xs" variant="ghost" title="Close (⌘J)" onClick={() => setAgentOpen(false)}>
                 <Codicon name="close" />
               </Button>
