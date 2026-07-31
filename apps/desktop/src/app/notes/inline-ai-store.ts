@@ -249,6 +249,30 @@ async function cancelRun(sessionId: string): Promise<void> {
   }
 }
 
+/**
+ * Wrap untrusted document text in a delimiter it cannot contain.
+ *
+ * The prompt used to fence every section with a bare triple quote, which any
+ * ordinary note can contain — a Python docstring, a quoted block, a JSON
+ * sample. The fence then closed early and the model saw the rest of the
+ * passage as loose text outside the section it had been told to rewrite, so
+ * "make this shorter" shortened one line and left the remainder mangled.
+ *
+ * Lengthening the delimiter until the body cannot contain it is the fix,
+ * rather than escaping the body: escaping changes the text the model is asked
+ * to rewrite, and it would faithfully reproduce the escapes in its answer.
+ */
+/** Exported for the delimiter tests. */
+export function fence(label: string, body: string): string {
+  let mark = '"""'
+
+  while (body.includes(mark)) {
+    mark += '"'
+  }
+
+  return label + '\n' + mark + '\n' + body + '\n' + mark + '\n\n'
+}
+
 function buildPrompt(task: string): string {
   const note = $activeNote.get()
   const view = $editorView.get()
@@ -265,9 +289,9 @@ function buildPrompt(task: string): string {
 
     return [
       `You are editing a passage INSIDE the user's markdown note titled "${title}".\n\n`,
-      before ? `Text before it (context only, do not rewrite):\n"""\n${before}\n"""\n\n` : '',
-      `THE PASSAGE TO REWRITE:\n"""\n${selected}\n"""\n\n`,
-      after ? `Text after it (context only, do not rewrite):\n"""\n${after}\n"""\n\n` : '',
+      before ? fence('Text before it (context only, do not rewrite):', before) : '',
+      fence('THE PASSAGE TO REWRITE:', selected),
+      after ? fence('Text after it (context only, do not rewrite):', after) : '',
       `Instruction: ${task}\n\n`,
       'Reply with ONLY the rewritten passage, which will replace it exactly as you write it. ',
       'Keep the markdown formatting and heading levels it already uses unless the instruction ',
@@ -280,11 +304,9 @@ function buildPrompt(task: string): string {
   const after = doc.slice(anchor, anchor + 1000)
 
   return [
-    `You are writing INSIDE the user's markdown note titled "${title}". `,
-    'Text before the cursor:\n"""\n',
-    before,
-    '\n"""\n',
-    after ? `Text after the cursor:\n"""\n${after}\n"""\n` : '',
+    `You are writing INSIDE the user's markdown note titled "${title}".\n\n`,
+    fence('Text before the cursor:', before),
+    after ? fence('Text after the cursor:', after) : '',
     `Task: ${task}\n`,
     'Reply with ONLY the markdown text to insert at the cursor position. ',
     'No preamble, no explanations, no wrapping code fence. Do not repeat the existing text.'
