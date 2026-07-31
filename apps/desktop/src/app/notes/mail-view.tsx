@@ -7,6 +7,8 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
+
+import { htmlMailToText } from './mail-html'
 import { cn } from '@/lib/utils'
 
 const LIST_LIMIT = 40
@@ -134,7 +136,14 @@ export function MailView({ onAskAgent }: { onAskAgent?: (prompt: string) => void
   }, [selected, account])
 
   const unread = useMemo(() => envelopes.filter(envelope => !envelope.seen).length, [envelopes])
-  const message = useMemo(() => splitMessage(body), [body])
+  // Flatten HTML mail to text before anything else touches it. Nothing
+  // sender-controlled is ever rendered as markup — see mail-html.ts for why
+  // that matters in a renderer holding window.hermesDesktop.
+  const message = useMemo(() => {
+    const split = splitMessage(body)
+
+    return { ...split, body: htmlMailToText(split.body) }
+  }, [body])
 
   if (state && !state.installed) {
     return (

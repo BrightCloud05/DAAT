@@ -134,7 +134,12 @@ export function initMailIpc(): void {
         args.push('-a', opts.account)
       }
 
-      args.push(opts.id)
+      // `--` terminates option parsing. Without it an id beginning with `-`
+      // is read as a flag, and himalaya's `-c/--config` would load an
+      // arbitrary TOML whose `auth.cmd` runs a shell command — the same hole
+      // that was closed in plugins/mail/himalaya.py. The id comes over IPC, so
+      // it is only as trustworthy as the renderer.
+      args.push('--', opts.id)
 
       const exe = himalayaBinary()
 
