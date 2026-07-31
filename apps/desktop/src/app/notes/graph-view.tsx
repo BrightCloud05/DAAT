@@ -18,7 +18,7 @@ import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from 'd3-fo
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { $vaultRevision, openNote } from '../vault/store'
-import { beginDrag, type DragOrigin, draggedFrom, panFor } from './graph-gesture'
+import { beginDrag, type DragOrigin, draggedFrom, panFor, zoomAt } from './graph-gesture'
 import { $productLocale, productStrings } from './strings'
 import { closeTableView } from './view-store'
 
@@ -157,7 +157,14 @@ export function GraphView() {
       // under charge alone. A weak pull home keeps them on screen.
       .force('x', forceX(0).strength(0.045))
       .force('y', forceY(0).strength(0.045))
-      .alphaDecay(0.028)
+      // Friction. d3's default of 0.4 lets nodes keep their speed for a long
+      // time, so the layout skates around before it settles — the "too fast"
+      // the graph felt next to Obsidian's, which is visibly damped. Higher
+      // means each tick keeps less of the previous velocity.
+      .velocityDecay(0.62)
+      // Cooling. Slower than the previous 0.028 so the settling reads as
+      // slowing down rather than freezing mid-motion.
+      .alphaDecay(0.019)
 
     const draw = () => {
       const ink = readVar('--ui-text-primary', '#211e1c')
@@ -328,9 +335,26 @@ export function GraphView() {
             }
           }}
           onWheel={event => {
-            const next = view.current.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)
+            const rect = canvasRef.current?.getBoundingClientRect()
 
-            view.current.zoom = Math.min(6, Math.max(0.2, next))
+            if (!rect) {
+              return
+            }
+
+            // Scaled by the delta and anchored at the pointer — see
+            // graph-gesture.ts. The previous version stepped a fixed 12% per
+            // event around the canvas centre, which on a trackpad threw the
+            // graph across the screen.
+            view.current = zoomAt(
+              view.current,
+              event.deltaY,
+              // macOS delivers pinch-to-zoom as a wheel event with ctrlKey.
+              event.ctrlKey,
+              event.clientX - rect.left,
+              event.clientY - rect.top,
+              rect.width,
+              rect.height
+            )
           }}
           ref={canvasRef}
         />

@@ -239,18 +239,12 @@ is rendered (`src/app/notes/mail-html.ts`), but that is one layer, not two. A
 CSP is the defence-in-depth that is missing, and it is required before any
 "show original message" feature.
 
-### 3. Table view takes 3.2s to open on 10k notes
-
-Rendering is fixed (virtualised: 160k DOM nodes → 582). The remaining time is
-the data fetch — `propertiesTable()` reads frontmatter for every note. Should
-read from the index DB instead.
-
-### 4. Mail is thin
+### 3. Mail is thin
 
 Read-only. No reply, archive, mark-read, or search. Decide whether Daat is a
 mail client or a place mail lands.
 
-### 5. Design work not done
+### 4. Design work not done
 
 - The editor now paints a paper "sheet"; other screens have not been revisited.
 - Empty states beyond the editor are still one dim line.

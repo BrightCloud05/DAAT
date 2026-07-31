@@ -15,10 +15,10 @@ import { cn } from '@/lib/utils'
 
 import { openNote } from '../vault/store'
 import { todayStamp } from './templates'
+import { DUE_RE } from './calendar'
 import { $vaultTodos, initTodosStore, refreshTodos, toggleTodo, type VaultTodo } from './todos-store'
 import { closeTableView } from './view-store'
 
-const DUE_RE = /(?:📅\s*|due:\s*|@)(\d{4}-\d{2}-\d{2})/i
 
 export interface DecoratedTodo extends VaultTodo {
   due: string | null

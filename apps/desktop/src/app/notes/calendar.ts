@@ -123,7 +123,22 @@ export interface TodoLike {
   done: boolean
 }
 
-const DUE_RE = /(?:📅\s*|due:\s*|@)(\d{4}-\d{2}-\d{2})/i
+/**
+ * A task's due date, written inline: `📅 2026-08-01`, `due:2026-08-01`, or
+ * `@2026-08-01`. Exported because the Todo screen and the home briefing read
+ * the same tasks — three private copies of one rule is how they drift.
+ */
+export const DUE_RE = /(?:📅\s*|due:\s*|@)(\d{4}-\d{2}-\d{2})/i
+
+/** The date a task is due, or null when it carries none. */
+export function dueOf(text: string): string | null {
+  return DUE_RE.exec(text)?.[1] ?? null
+}
+
+/** The task text with its date marker removed, for display. */
+export function taskLabel(text: string): string {
+  return text.replace(DUE_RE, '').replace(/\s+/g, ' ').trim()
+}
 
 function noteName(path: string): string {
   return path.split('/').pop()?.replace(/\.(md|markdown)$/i, '') ?? path

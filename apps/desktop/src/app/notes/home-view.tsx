@@ -13,9 +13,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { activeGateway } from '@/store/gateway'
 
 import { $vaultInfo, $vaultNotes, $vaultRevision, openNote } from '../vault/store'
-import { collectEntries, type TableLikeRow } from './calendar'
+import { collectEntries, dueOf, type TableLikeRow, taskLabel } from './calendar'
 import { formatAmount, MONEY_DIR, type MoneySummary, parseMonthNote, summarize } from './money'
 import { PersonaWidgets } from './persona-widgets'
+import { briefingParts, buildBriefing } from './briefing'
 import { isTemplateNote, openDailyNote, todayStamp } from './templates'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView, openCalendarView, openMailView, openMeetingsView, openMoneyView } from './view-store'
@@ -242,6 +243,28 @@ export function HomeView() {
   const hasDaily = notes.some(note => note.path === `Daily/${todayStamp()}.md`)
   const dateLabel = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })
 
+  // What to lead with. Counting pages told the user nothing they wanted to
+  // know — see briefing.ts. This leads with the most urgent true thing, and
+  // says plainly when there is nothing pressing.
+  const locale = useStore($productLocale)
+
+  const briefing = useMemo(
+    () =>
+      buildBriefing(
+        {
+          today: todayStamp(),
+          tasks: todos.map(todo => ({ label: taskLabel(todo.text), due: dueOf(todo.text) ?? undefined, done: todo.done })),
+          hasDaily,
+          // Today's daily note is not "where you left off" — it is where the
+          // app just put you, and naming it back reads as a non-sequitur.
+          lastEdited: recent.find(note => !note.path.startsWith('Daily/'))?.title,
+          pageCount: notes.length
+        },
+        locale === 'ko'
+      ),
+    [todos, hasDaily, recent, notes.length, locale]
+  )
+
   const openNoteFromHome = (path: string) => {
     closeTableView()
     void openNote(path)
@@ -275,23 +298,14 @@ export function HomeView() {
               <span className={MUTED}>{info?.name ?? 'vault'}</span>
             </div>
             <p className="m-0 max-w-[46rem] font-(--dt-font-serif) text-[21px] leading-snug tracking-[-0.01em]">
-              {notes.length ? (
-                <>
-                  You have <strong className="font-semibold">{notes.length} pages</strong>,{' '}
-                  <strong className="font-semibold">{open.length} open tasks</strong>
-                  {hasDaily ? (
-                    <>
-                      , and <strong className="font-semibold">today's note is ready</strong>.
-                    </>
-                  ) : (
-                    <>
-                      {' '}
-                      — <strong className="font-semibold">today's note isn't started yet</strong>.
-                    </>
-                  )}
-                </>
-              ) : (
-                <>Welcome — create your first page and I'll keep the overview here.</>
+              {briefingParts(briefing.text).map((part, index) =>
+                part.strong ? (
+                  <strong className="font-semibold" key={index}>
+                    {part.text}
+                  </strong>
+                ) : (
+                  <span key={index}>{part.text}</span>
+                )
               )}
             </p>
             <div className="flex items-center gap-2">

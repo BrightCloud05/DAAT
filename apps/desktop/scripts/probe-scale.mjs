@@ -43,11 +43,15 @@ const q0 = Date.now(); await box.fill('Note 4242'); await page.waitForTimeout(15
 console.log(`search round-trip: ${Date.now() - q0}ms`)
 
 // Open the Notes table over 10k rows.
+// Wait for the table to actually be on screen rather than for a fixed delay.
+// A sleep here measured the sleep: an earlier run reported "3.2s to open the
+// table" and 3.0s of that was this line.
 const n0 = Date.now()
 await page.locator('aside button', { hasText: 'Notes' }).first().click()
-await page.waitForTimeout(3000)
+await page.waitForSelector('main table tbody tr', { timeout: 30000 })
+const openMs = Date.now() - n0
 const table = await page.evaluate(() => ({ rows: document.querySelectorAll('main tr, main [role="row"]').length, nodes: document.querySelectorAll('main *').length }))
-console.log(`table open: ${Date.now() - n0}ms | rows: ${table.rows} | canvas nodes: ${table.nodes}`)
+console.log(`table open: ${openMs}ms | rows: ${table.rows} | canvas nodes: ${table.nodes}`)
 
 // The graph is the one screen that holds the entire library at once.
 const g0 = Date.now()
