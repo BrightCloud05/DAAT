@@ -10,6 +10,13 @@ import { useEffect, useState } from 'react'
 
 import { WiredPane } from '@/app/contrib/context'
 import { submitAgentPrompt } from '@/store/quick-entry'
+
+import {
+  $agentPanelOpen,
+  $notesSidebarOpen,
+  setAgentPanelOpen,
+  toggleAgentPanel
+} from './panes-store'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
@@ -31,19 +38,16 @@ import { openDailyNote } from './templates'
 import { DocTopbar } from './topbar'
 import { $canvasView } from './view-store'
 
-const AGENT_PANEL_KEY = 'daat.notes.agentOpen.v1'
-
 export function NotesShell() {
   const active = useStore($activeNote)
   const canvasView = useStore($canvasView)
   const onboarded = useStore($onboarded)
-  const [agentOpen, setAgentOpen] = useState(() => {
-    try {
-      return window.localStorage.getItem(AGENT_PANEL_KEY) === '1'
-    } catch {
-      return false
-    }
-  })
+  // Both panes live in a store, not local state: the window titlebar toggles
+  // them, and before that it was wired to the upstream chat shell's panes —
+  // which do not exist here, so every titlebar button was a no-op.
+  const agentOpen = useStore($agentPanelOpen)
+  const sidebarOpen = useStore($notesSidebarOpen)
+  const setAgentOpen = setAgentPanelOpen
 
   // Module screens hand work to the agent through the app's one submit
   // pipeline, opening the panel so the user sees it happen.
@@ -58,18 +62,10 @@ export function NotesShell() {
   }
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(AGENT_PANEL_KEY, agentOpen ? '1' : '0')
-    } catch {
-      // Storage unavailable — panel state just won't persist.
-    }
-  }, [agentOpen])
-
-  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
         event.preventDefault()
-        setAgentOpen(open => !open)
+        toggleAgentPanel()
       }
 
       // ⌘D — today's daily note.
@@ -104,13 +100,15 @@ export function NotesShell() {
       {!onboarded && <OnboardingWizard />}
 
       {/* Sidebar: pages + search. Translucent — the Glass material shows. */}
-      <aside className="flex w-60 shrink-0 flex-col border-r border-(--stroke-nous) bg-(--ui-bg-sidebar)">
+      {sidebarOpen ? (
+        <aside className="flex w-60 shrink-0 flex-col border-r border-(--stroke-nous) bg-(--ui-bg-sidebar)">
         <NotesSidebar />
-      </aside>
+        </aside>
+      ) : null}
 
       {/* Document canvas — the product. */}
       <main className="relative flex min-w-0 flex-1 flex-col bg-(--ui-bg-editor)">
-        <DocTopbar agentOpen={agentOpen} onToggleAgent={() => setAgentOpen(open => !open)} />
+        <DocTopbar agentOpen={agentOpen} onToggleAgent={() => toggleAgentPanel()} />
         <div className="min-h-0 flex-1">
           {canvasView === 'graph' ? (
             <GraphView />

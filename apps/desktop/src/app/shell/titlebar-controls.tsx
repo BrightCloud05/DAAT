@@ -22,6 +22,13 @@ import {
 import { appViewForPath, isOverlayView, SETTINGS_ROUTE } from '../routes'
 
 import { titlebarButtonClass } from './titlebar'
+import { isSimpleMode } from '@/store/ui-mode'
+import {
+  $agentPanelOpen,
+  $notesSidebarOpen,
+  toggleAgentPanel,
+  toggleNotesSidebar
+} from '../notes/panes-store'
 
 export interface TitlebarTool {
   id: string
@@ -120,46 +127,88 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   // stay correct through flips and rearranges. $sidebarOpen ≙ left side,
   // $fileBrowserOpen ≙ right side. Never an active highlight — plain
   // show/hide affordances.
+  const notesSidebarOpen = useStore($notesSidebarOpen)
+  const agentPanelOpen = useStore($agentPanelOpen)
   const leftEdge = { open: sidebarOpen, toggle: toggleSidebarOpen }
   const rightEdge = { open: fileBrowserOpen, toggle: toggleFileBrowserOpen }
 
-  const leftToolbarTools: TitlebarTool[] = [
-    {
-      actionId: 'view.toggleSidebar',
-      icon: <Codicon name="layout-sidebar-left" />,
-      id: 'sidebar',
-      label: leftEdge.open ? t.titlebar.hideSidebar : t.titlebar.showSidebar,
-      onSelect: () => {
-        triggerHaptic('tap')
-        leftEdge.toggle()
-      }
-    },
-    {
-      actionId: 'view.flipPanes',
-      icon: <Codicon name="arrow-swap" />,
-      id: 'flip-panes',
-      label: t.titlebar.swapSidebarSides,
-      onSelect: () => {
-        triggerHaptic('tap')
-        togglePanesFlipped()
-      }
-    },
-    ...leftTools
-  ]
+  // Daat's screen has one sidebar and an agent slide-over — not the chat
+  // shell's rearrangeable panes. Pointing these at the chat stores meant every
+  // button here did nothing at all, which is worse than not having them.
+  const notes = isSimpleMode()
 
-  const rightSidebarTool: TitlebarTool = {
-    actionId: 'view.toggleRightSidebar',
-    icon: <Codicon name="layout-sidebar-right" />,
-    id: 'right-sidebar',
-    label: rightEdge.open ? t.titlebar.hideRightSidebar : t.titlebar.showRightSidebar,
-    onSelect: () => {
-      triggerHaptic('tap')
-      rightEdge.toggle()
-    }
-  }
+  const leftToolbarTools: TitlebarTool[] = notes
+    ? [
+        {
+          actionId: 'view.toggleSidebar',
+          icon: <Codicon name="layout-sidebar-left" />,
+          id: 'sidebar',
+          label: notesSidebarOpen ? t.titlebar.hideSidebar : t.titlebar.showSidebar,
+          onSelect: () => {
+            triggerHaptic('tap')
+            toggleNotesSidebar()
+          }
+        },
+        ...leftTools
+      ]
+    : [
+        {
+          actionId: 'view.toggleSidebar',
+          icon: <Codicon name="layout-sidebar-left" />,
+          id: 'sidebar',
+          label: leftEdge.open ? t.titlebar.hideSidebar : t.titlebar.showSidebar,
+          onSelect: () => {
+            triggerHaptic('tap')
+            leftEdge.toggle()
+          }
+        },
+        {
+          // Swapping which side the panes sit on only means something when
+          // there are two rearrangeable panes. Daat has one sidebar.
+          actionId: 'view.flipPanes',
+          icon: <Codicon name="arrow-swap" />,
+          id: 'flip-panes',
+          label: t.titlebar.swapSidebarSides,
+          onSelect: () => {
+            triggerHaptic('tap')
+            togglePanesFlipped()
+          }
+        },
+        ...leftTools
+      ]
+
+  const rightSidebarTool: TitlebarTool = notes
+    ? {
+        // On the Notes screen the right edge is the agent, and it already has
+        // a keybind — so this button should be the same thing the keybind is,
+        // not a file browser that never appears here.
+        actionId: 'view.toggleRightSidebar',
+        icon: <Codicon name="sparkle" />,
+        id: 'right-sidebar',
+        label: agentPanelOpen ? t.titlebar.hideRightSidebar : t.titlebar.showRightSidebar,
+        onSelect: () => {
+          triggerHaptic('tap')
+          toggleAgentPanel()
+        }
+      }
+    : {
+        actionId: 'view.toggleRightSidebar',
+        icon: <Codicon name="layout-sidebar-right" />,
+        id: 'right-sidebar',
+        label: rightEdge.open ? t.titlebar.hideRightSidebar : t.titlebar.showRightSidebar,
+        onSelect: () => {
+          triggerHaptic('tap')
+          rightEdge.toggle()
+        }
+      }
 
   // Static system tools — always pinned to the screen's right edge.
   const systemTools: TitlebarTool[] = [
+    // The layout editor rearranges the chat shell's pane tree. Daat's layout is
+    // fixed, so on the Notes screen this button edits something invisible.
+    ...(notes
+      ? []
+      : [
     {
       className: 'group/tool',
       // Hover + held ⌘/Ctrl morphs the glyph into its reset form (see
@@ -179,7 +228,8 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         toggleLayoutEditMode()
       },
       title: t.titlebar.layoutEditorTitle
-    },
+    }
+        ] as TitlebarTool[]),
     {
       active: hapticsMuted,
       icon: <Codicon name={hapticsMuted ? 'mute' : 'unmute'} />,
