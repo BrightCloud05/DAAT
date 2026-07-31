@@ -427,18 +427,46 @@ test.skipIf(!staged)('no staged package is missing a dependency it requires', ()
   assert.deepEqual(missing, [], `these throw "Cannot find module" at startup:\n  ${missing.join('\n  ')}`)
 })
 
-test.skipIf(!staged)('@parcel/watcher loads out of the staged tree', () => {
-  // End-to-end: resolve it for real with dist/ as the base, exactly as the
-  // packaged app's bundled entry does.
-  const distDir = path.join(path.dirname(stagedRoot), path.sep)
-  const script =
-    "const {createRequire}=require('module');" +
-    `const r=createRequire(${JSON.stringify(distDir)});` +
-    "const w=r('@parcel/watcher');" +
-    "if(typeof w.subscribe!=='function')throw new Error('loaded but exposes no subscribe()');" +
-    "console.log('ok')"
+test.skipIf(!staged)('every external resolves under the packaged path rule', () => {
+  // The real discriminator between dev and packaged, extracted from the
+  // shipped Electron framework: Electron patches Module._nodeModulePaths so
+  // that when the requiring file lives under process.resourcesPath, the
+  // node_modules search is FILTERED to paths inside resourcesPath.
+  //
+  //   packaged: the file is under Contents/Resources → filtered → a dependency
+  //             hoisted to the monorepo root is invisible → throw.
+  //   dev:      resourcesPath points inside node_modules/electron, the file is
+  //             not under it → unfiltered → the walk-up finds the root copy.
+  //
+  // So "it works in dev" proves nothing about the package. Simulate the
+  // packaged rule by resolving with ONLY dist/node_modules on the path.
+  const missing = []
 
-  const out = execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' })
+  for (const name of EXTERNAL_PACKAGES) {
+    const script =
+      'const path=require("path"),Module=require("module");' +
+      // Confine resolution to the staged tree, exactly as Electron confines it
+      // to Contents/Resources in a packaged app.
+      `const only=${JSON.stringify(stagedRoot)};` +
+      'const orig=Module._nodeModulePaths;' +
+      'Module._nodeModulePaths=function(from){return orig.call(this,from).filter(p=>p.startsWith(only))};' +
+      `const r=Module.createRequire(${JSON.stringify(path.join(stagedRoot, 'x.js'))});` +
+      `r(${JSON.stringify(name)});console.log("ok")`
 
-  assert.equal(out.trim(), 'ok')
+    try {
+      execFileSync(process.execPath, ['-e', script], { encoding: 'utf8', stdio: 'pipe' })
+    } catch (error) {
+      const why = String(error.stderr ?? error.message)
+        .split('\n')
+        .find(line => /Cannot find module|Error:/.test(line))
+
+      missing.push(`${name}: ${(why ?? 'failed to load').trim()}`)
+    }
+  }
+
+  assert.deepEqual(
+    missing,
+    [],
+    `these cannot load once Electron confines resolution to the app bundle:\n  ${missing.join('\n  ')}`
+  )
 })
