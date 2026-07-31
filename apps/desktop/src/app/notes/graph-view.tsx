@@ -18,6 +18,7 @@ import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from 'd3-fo
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { $vaultRevision, openNote } from '../vault/store'
+import { beginDrag, type DragOrigin, draggedFrom, panFor } from './graph-gesture'
 import { $productLocale, productStrings } from './strings'
 import { closeTableView } from './view-store'
 
@@ -263,7 +264,7 @@ export function GraphView() {
     return best
   }
 
-  const dragging = useRef<{ x: number; y: number } | null>(null)
+  const dragging = useRef<DragOrigin | null>(null)
 
   return (
     <div className="flex h-full flex-col bg-(--ui-bg-sidebar)">
@@ -284,7 +285,7 @@ export function GraphView() {
         <canvas
           className="absolute inset-0 cursor-grab active:cursor-grabbing"
           onMouseDown={event => {
-            dragging.current = { x: event.clientX - view.current.panX, y: event.clientY - view.current.panY }
+            dragging.current = beginDrag(event.clientX, event.clientY, view.current.panX, view.current.panY)
           }}
           onMouseLeave={() => {
             dragging.current = null
@@ -293,8 +294,10 @@ export function GraphView() {
           }}
           onMouseMove={event => {
             if (dragging.current) {
-              view.current.panX = event.clientX - dragging.current.x
-              view.current.panY = event.clientY - dragging.current.y
+              const next = panFor(dragging.current, event.clientX, event.clientY)
+
+              view.current.panX = next.panX
+              view.current.panY = next.panY
 
               return
             }
@@ -305,18 +308,15 @@ export function GraphView() {
             setHover(previous => (previous === node ? previous : node))
           }}
           onMouseUp={event => {
-            const wasDragging = dragging.current
+            const origin = dragging.current
 
             dragging.current = null
 
-            // A drag that moved is a pan, not a click on whatever ended up
-            // under the cursor.
-            const moved =
-              wasDragging &&
-              (Math.abs(event.clientX - wasDragging.x - view.current.panX) > 3 ||
-                Math.abs(event.clientY - wasDragging.y - view.current.panY) > 3)
-
-            if (moved) {
+            // A gesture that travelled is a pan, not a click on whatever ended
+            // up under the cursor. Measured against the raw press coordinates:
+            // comparing against the live pan cancels out, because panning is
+            // computed from that same origin (see graph-gesture.ts).
+            if (draggedFrom(origin, event.clientX, event.clientY)) {
               return
             }
 

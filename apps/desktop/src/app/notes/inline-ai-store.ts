@@ -102,6 +102,16 @@ export interface AiUndoState {
   to: number
   /** The text that was there before. Empty when the run only inserted. */
   restore: string
+  /**
+   * What the assistant actually wrote into that span.
+   *
+   * Offsets alone are not enough to undo safely. A note can change underneath
+   * the offer without a keystroke — the vault watcher reloads a file edited
+   * outside the app, and the path is unchanged, so the note-switch guard does
+   * not fire. Restoring blind would then overwrite whatever now occupies those
+   * positions with text from a different version of the document.
+   */
+  wrote: string
   notePath: string | null
 }
 
@@ -120,6 +130,13 @@ export function undoInlineAi(): void {
   const end = Math.min(undo.to, view.state.doc.length)
 
   if (undo.from > end) {
+    return
+  }
+
+  // Only put the old text back if the assistant's text is still exactly where
+  // it was left. Anything else means the document moved on, and undoing would
+  // destroy content rather than restore it.
+  if (view.state.doc.sliceString(undo.from, end) !== undo.wrote) {
     return
   }
 
@@ -350,7 +367,15 @@ export async function runInlineAi(task: string): Promise<void> {
     // Offer the way back, but only if something was actually written — a run
     // the user stopped before the first token has nothing to undo.
     if (streamed > 0) {
-      $aiUndo.set({ from: origin, to: origin + streamed, restore: replaced, notePath })
+      const to = Math.min(origin + streamed, view.state.doc.length)
+
+      $aiUndo.set({
+        from: origin,
+        to,
+        restore: replaced,
+        wrote: view.state.doc.sliceString(origin, to),
+        notePath
+      })
     }
 
     if (deleteSession && sessionId) {

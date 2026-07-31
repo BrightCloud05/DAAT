@@ -203,12 +203,38 @@ test('undo puts the original passage back', () => {
 
   setEditorView(view)
   $activeNote.set({ path: 'n.md', content: view.state.doc.toString(), mtimeMs: 0, dataless: false })
-  $aiUndo.set({ from: 7, to: 16, restore: before, notePath: 'n.md' })
+  $aiUndo.set({ from: 7, to: 16, restore: before, wrote: 'AI OUTPUT', notePath: 'n.md' })
 
   undoInlineAi()
 
   assert.equal(view.state.doc.toString(), `intro\n\n${before}\n\noutro`)
   assert.equal($aiUndo.get(), null, 'the offer is consumed')
+
+  setEditorView(null)
+  view.destroy()
+})
+
+test('undo refuses when the document moved on underneath it', () => {
+  // A note can change without a keystroke — the vault watcher reloads a file
+  // edited outside the app, and the path is unchanged so the note-switch guard
+  // never fires. Undoing on offsets alone would overwrite whatever now sits
+  // there with text from a different version of the document.
+  const view = new EditorView({
+    parent: document.body,
+    state: EditorState.create({ doc: 'intro\n\nSOMETHING ELSE ENTIRELY\n\noutro' })
+  })
+
+  setEditorView(view)
+  $activeNote.set({ path: 'n.md', content: view.state.doc.toString(), mtimeMs: 0, dataless: false })
+  // Offsets from the old document; `wrote` is what the assistant left there.
+  $aiUndo.set({ from: 7, to: 16, restore: 'the passage to fix', wrote: 'AI OUTPUT', notePath: 'n.md' })
+
+  const before = view.state.doc.toString()
+
+  undoInlineAi()
+
+  assert.equal(view.state.doc.toString(), before, 'the document must be left alone')
+  assert.equal($aiUndo.get(), null, 'and the stale offer is dropped')
 
   setEditorView(null)
   view.destroy()
