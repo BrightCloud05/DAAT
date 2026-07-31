@@ -3958,6 +3958,11 @@ async function ensureRuntime(backend) {
       installStamp: backend.installStamp,
       activeRoot: backend.activeRoot,
       sourceRepoRoot: SOURCE_REPO_ROOT,
+      // Where the bundled agent source lives, and where it goes. `activeRoot`
+      // is empty before anything is installed — which is exactly the case the
+      // seeding exists for — so the destination comes from the constant.
+      appRoot: APP_ROOT,
+      seedRoot: ACTIVE_HERMES_ROOT,
       hermesHome: HERMES_HOME,
       logRoot: path.join(HERMES_HOME, 'logs'),
       abortSignal: bootstrapAbortController.signal,

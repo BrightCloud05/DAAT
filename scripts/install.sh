@@ -1281,6 +1281,16 @@ EOF
                     log_info "Restore manually with: git stash apply $autostash_ref"
                 fi
             fi
+        elif [ -f "$INSTALL_DIR/pyproject.toml" ] && [ -d "$INSTALL_DIR/hermes_cli" ]; then
+            # A seeded checkout: the source was unpacked here from the app
+            # bundle rather than cloned. The packaged app already carries
+            # everything `hermes serve` needs, so a fresh machine should not
+            # have to fetch 2.4 GB it mostly will not use — and a private
+            # repository has no anonymous clone to fetch from at all.
+            #
+            # There is no .git here on purpose. Updates come from a new build,
+            # not from `git pull`.
+            log_info "Using the source that shipped with the app (no clone needed)."
         else
             log_error "Directory exists but is not a git repository: $INSTALL_DIR"
             log_info "Remove it or choose a different directory with --dir"

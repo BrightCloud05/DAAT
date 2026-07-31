@@ -211,6 +211,70 @@ function installedAgentInstallScript(hermesHome) {
   }
 }
 
+/**
+ * The agent's Python source, shipped inside the app bundle.
+ *
+ * See scripts/stage-agent-source.mjs for why it is there: the packaged app
+ * already contains the renderer, so cloning the repo to rebuild it downloads
+ * ~2.4 GB a buyer never uses — and an anonymous clone cannot reach a private
+ * repository at all.
+ */
+function bundledAgentSource(appRoot) {
+  const candidates = [
+    // Packaged: dist/** is asarUnpack'd, so this is a real directory on disk.
+    path.join(process.resourcesPath || '', 'app.asar.unpacked', 'dist', 'agent-src'),
+    path.join(process.resourcesPath || '', 'app', 'dist', 'agent-src'),
+    // Unpackaged dev run. app.getAppPath() is apps/desktop; __dirname does not
+    // exist in the ESM bundle and referencing it throws.
+    path.join(appRoot || '', 'dist', 'agent-src')
+  ]
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(path.join(candidate, 'pyproject.toml'))) {
+        return candidate
+      }
+    } catch {
+      // Unreadable candidate — try the next.
+    }
+  }
+
+  return null
+}
+
+/**
+ * Put the bundled source in place so the installer has nothing to clone.
+ *
+ * Only ever seeds an ABSENT directory. An existing checkout — a git clone, or
+ * a previous seed the user may have edited — is left exactly alone, because
+ * overwriting someone's install directory to save a download is not a trade
+ * this code gets to make.
+ */
+function seedAgentSource(activeRoot, appRoot, emit) {
+  if (!activeRoot || fs.existsSync(activeRoot)) {
+    return false
+  }
+
+  const source = bundledAgentSource(appRoot)
+
+  if (!source) {
+    return false
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(activeRoot), { recursive: true })
+    fs.cpSync(source, activeRoot, { recursive: true })
+    emit?.(`[bootstrap] using the source that ships with the app (no clone needed)`)
+
+    return true
+  } catch (err) {
+    // Fall through to the normal clone path — a failed seed must not be fatal.
+    emit?.(`[bootstrap] could not use the bundled source (${err.message}); falling back to clone`)
+
+    return false
+  }
+}
+
 function hasExistingGitCheckout(activeRoot) {
   if (!activeRoot) {
     return false
@@ -860,6 +924,8 @@ async function runBootstrap(opts) {
   const {
     installStamp,
     activeRoot,
+    appRoot,
+    seedRoot,
     sourceRepoRoot,
     hermesHome,
     logRoot,
@@ -914,6 +980,9 @@ async function runBootstrap(opts) {
   })
 
   try {
+    // Seed before deciding, so a fresh machine takes the no-clone path.
+    seedAgentSource(seedRoot || activeRoot, appRoot, emit)
+
     const existingCheckout = hasExistingGitCheckout(activeRoot)
     const pinCommit = !existingCheckout
 
