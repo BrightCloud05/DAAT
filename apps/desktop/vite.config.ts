@@ -1,8 +1,10 @@
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 import fs from 'fs'
+import { createHash } from 'crypto'
 
 // `hgui` symlinks a worktree's node_modules to the main checkout. Vite realpaths
 // those before enforcing server.fs.allow, so codicon/font assets resolve outside
@@ -36,9 +38,87 @@ const debugEntry = (command: string, env: Record<string, string>) =>
     ? path.resolve(__dirname, './src/debug/dev-only.ts')
     : path.resolve(__dirname, './src/debug/dev-only.noop.ts')
 
+/**
+ * Content-Security-Policy, injected into the built index.html only.
+ *
+ * The renderer holds `window.hermesDesktop` — vault read/write, mail send, the
+ * whole IPC surface — and page JS can reach it by design, because that is what
+ * it is for. So any script that gets into this document owns every note the
+ * user has. The app also reads genuinely hostile input: mail is flattened to
+ * text before display (see app/notes/mail-html.ts), but that is one layer, and
+ * a CSP is the layer that holds when a filter has a bug.
+ *
+ * BUILD ONLY, on purpose. Vite's dev server injects inline scripts for HMR and
+ * React Refresh, so a dev-safe policy would need `script-src 'unsafe-inline'` —
+ * which is most of what the policy is for. Rather than ship a weakened rule to
+ * keep dev quiet, the policy applies to what users actually run.
+ *
+ * The source lists below are not guesses: each was derived by shipping
+ * `default-src 'none'`, walking every screen, and reading the violations off
+ * the console. Anything removed here should be re-measured the same way.
+ */
+function contentSecurityPolicy(): Plugin {
+  const policy = [
+    // Nothing is allowed unless a directive below says so.
+    "default-src 'none'",
+    // The app's own bundle. No inline, no eval — this is the directive that
+    // makes injected markup inert.
+    "script-src 'self'",
+    // Tailwind's stylesheet plus React's style props, which are inline by
+    // construction. Style injection cannot execute code; it can exfiltrate via
+    // url(), which is why img-src/font-src below stay local.
+    "style-src 'self' 'unsafe-inline'",
+    // Bundled icons, generated images, and files served over the app's own
+    // media protocol. No remote origins: a remote image in mail or a note is a
+    // read receipt.
+    "img-src 'self' data: blob: hermes-media:",
+    "font-src 'self' data:",
+    "media-src 'self' blob: hermes-media:",
+    // The local agent gateway only.
+    "connect-src 'self' blob: data: ws://127.0.0.1:* ws://localhost:* http://127.0.0.1:* http://localhost:*",
+    // Workers ship in the bundle (CodeMirror, mermaid).
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "frame-src 'none'",
+    "child-src 'none'",
+    // A <base> tag could re-point every relative URL in the document.
+    "base-uri 'none'",
+    // Nothing in this app posts a form; an injected one should not be able to.
+    "form-action 'none'"
+  ].join('; ')
+
+  return {
+    apply: 'build',
+    name: 'daat-csp',
+    transformIndexHtml: {
+      handler(html: string) {
+        // index.html carries one inline script: it paints the themed background
+        // before the bundle loads, which is the difference between opening a
+        // window and opening a white flash. Allowing it with 'unsafe-inline'
+        // would allow every OTHER inline script too — i.e. the exact thing this
+        // policy exists to stop. Hash it instead, computed from what actually
+        // ships so it can never drift from the file.
+        const hashes = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(
+          match => `'sha256-${createHash('sha256').update(match[1], 'utf8').digest('base64')}'`
+        )
+
+        const withHashes = hashes.length
+          ? policy.replace("script-src 'self'", `script-src 'self' ${hashes.join(' ')}`)
+          : policy
+
+        return html.replace(
+          '<head>',
+          `<head>\n    <meta http-equiv="Content-Security-Policy" content="${withHashes}" />`
+        )
+      },
+      order: 'post'
+    }
+  }
+}
+
 export default defineConfig(({ command }) => ({
   base: './',
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), contentSecurityPolicy()],
   css: {
     // Pin an explicit (empty) PostCSS config. Tailwind is handled entirely by
     // `@tailwindcss/vite`, so the renderer needs no PostCSS plugins — and

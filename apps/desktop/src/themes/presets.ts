@@ -245,8 +245,13 @@ export const nousTheme: DesktopTheme = {
   },
   typography: {
     fontSans: SYSTEM_SANS,
-    fontMono: `"Courier Prime", ${SYSTEM_MONO}`,
-    fontUrl: 'https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap'
+    fontMono: `"Courier Prime", ${SYSTEM_MONO}`
+    // No fontUrl. Fetching a webfont at theme-switch time told Google the user
+    // was running Daat, with their IP, every launch — in an app whose whole
+    // claim is that your files stay yours. The family is still named, so the
+    // face is used when it happens to be installed, and JetBrains Mono is
+    // bundled outright (see the @font-face in styles.css). Otherwise the
+    // system mono is a perfectly good fallback.
   }
 }
 
@@ -283,7 +288,6 @@ export const midnightTheme: DesktopTheme = {
   },
   typography: {
     fontMono: `"JetBrains Mono", ${SYSTEM_MONO}`,
-    fontUrl: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap'
   }
 }
 
@@ -320,7 +324,6 @@ export const emberTheme: DesktopTheme = {
   },
   typography: {
     fontMono: `"IBM Plex Mono", ${SYSTEM_MONO}`,
-    fontUrl: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&display=swap'
   }
 }
 
