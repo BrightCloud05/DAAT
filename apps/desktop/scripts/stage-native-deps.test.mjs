@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import fs, { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { test } from 'vitest'
 
 import {
@@ -356,4 +357,88 @@ test('validation rejects a staged binary with the wrong platform magic', () => {
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true })
   }
+})
+
+// ─── the staged tree must be require()-able, not merely present ─────────────
+//
+// The bug this guards: @parcel/watcher was staged with its own .js files and
+// its native payload, but WITHOUT its plain-JS dependencies. The package is
+// external in bundle-electron-main.mjs, so the shipped bundle still does
+// `require('@parcel/watcher')` at module scope — which threw
+// `Cannot find module 'picomatch'` 39ms into startup.
+//
+// That throw happened while the ESM entry was still evaluating, so it produced
+// no window, no stdout, and no crash report: the packaged app sat there alive
+// and empty. Nothing in the build failed. `npm run dist` reported success and
+// shipped a DMG that could never open.
+//
+// A file-presence assertion would NOT have caught this — every file the staging
+// script knew about was present. Only resolving the module graph the way the
+// packaged app does catches it.
+
+// fileURLToPath, not URL.pathname: the latter percent-encodes, and this repo
+// lives under a path containing a space — which made stagedRoot point at a
+// directory that does not exist, so every check below skipped silently.
+const stagedRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist/node_modules')
+
+/** Packages the shipped bundle require()s at runtime instead of inlining. */
+const EXTERNAL_PACKAGES = ['@parcel/watcher', 'better-sqlite3', 'node-pty']
+
+const staged = existsSync(stagedRoot)
+
+test.skipIf(!staged)('every externalised package is staged', () => {
+  for (const name of EXTERNAL_PACKAGES) {
+    assert.ok(
+      existsSync(path.join(stagedRoot, name, 'package.json')),
+      `${name} is external in the bundle but is not in dist/node_modules`
+    )
+  }
+})
+
+test.skipIf(!staged)('no staged package is missing a dependency it requires', () => {
+  const missing = []
+  const seen = new Set()
+
+  const walk = name => {
+    if (seen.has(name)) return
+    seen.add(name)
+
+    const manifestPath = path.join(stagedRoot, name, 'package.json')
+    if (!existsSync(manifestPath)) return
+
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+
+    for (const dep of Object.keys(manifest.dependencies ?? {})) {
+      // Node resolves upward from dist/node_modules/<pkg>/ and passes through
+      // dist/node_modules, so either a nested or a flat sibling copy works.
+      const nested = existsSync(path.join(stagedRoot, name, 'node_modules', dep, 'package.json'))
+      const flat = existsSync(path.join(stagedRoot, dep, 'package.json'))
+
+      if (!nested && !flat) {
+        missing.push(`${name} → ${dep}`)
+      } else if (flat) {
+        walk(dep)
+      }
+    }
+  }
+
+  EXTERNAL_PACKAGES.forEach(walk)
+
+  assert.deepEqual(missing, [], `these throw "Cannot find module" at startup:\n  ${missing.join('\n  ')}`)
+})
+
+test.skipIf(!staged)('@parcel/watcher loads out of the staged tree', () => {
+  // End-to-end: resolve it for real with dist/ as the base, exactly as the
+  // packaged app's bundled entry does.
+  const distDir = path.join(path.dirname(stagedRoot), path.sep)
+  const script =
+    "const {createRequire}=require('module');" +
+    `const r=createRequire(${JSON.stringify(distDir)});` +
+    "const w=r('@parcel/watcher');" +
+    "if(typeof w.subscribe!=='function')throw new Error('loaded but exposes no subscribe()');" +
+    "console.log('ok')"
+
+  const out = execFileSync(process.execPath, ['-e', script], { encoding: 'utf8' })
+
+  assert.equal(out.trim(), 'ok')
 })

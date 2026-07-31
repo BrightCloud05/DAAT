@@ -400,6 +400,63 @@ export function stageBetterSqlite3({ platform = process.platform, arch = process
  * payload packages (@parcel/watcher-<platform>-<arch>) required at runtime
  * by its index.js — stage the wrapper plus the one payload for the target.
  */
+/**
+ * Copy a package and everything it requires at runtime into dist/node_modules.
+ *
+ * Staging a package without its dependencies produces a bundle that looks
+ * complete and fails at `require` time. That is not a hypothetical: shipping
+ * @parcel/watcher without `picomatch` made the packaged app die 39ms into
+ * startup with `Cannot find module 'picomatch'`, thrown while the ESM entry
+ * was still evaluating — so there was no window, no stdout, and no crash
+ * report. The app just sat there.
+ *
+ * The closure is walked from each package's own `dependencies` rather than
+ * hard-coded, so this keeps working when @parcel/watcher changes what it needs.
+ * Flat placement in dist/node_modules is deliberate: Node's resolver walks up
+ * from dist/node_modules/@parcel/watcher/ and reaches dist/node_modules on the
+ * way, so a sibling copy is found.
+ */
+function stageRuntimeDeps(packageName, seen = new Set()) {
+  let root
+
+  try {
+    root = resolvePackageRoot(packageName)
+  } catch {
+    throw new Error(
+      `[stage-native-deps] ${packageName} is required at runtime but is not installed. ` +
+        `The packaged app would throw "Cannot find module '${packageName}'" during startup.`
+    )
+  }
+
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  const staged = []
+
+  for (const dep of Object.keys(manifest.dependencies ?? {})) {
+    if (seen.has(dep)) {
+      continue
+    }
+
+    seen.add(dep)
+
+    // Optional per-platform payloads are staged explicitly by the caller and
+    // are not resolvable on other platforms — never fail the build over one.
+    if (Object.prototype.hasOwnProperty.call(manifest.optionalDependencies ?? {}, dep)) {
+      continue
+    }
+
+    const depRoot = resolvePackageRoot(dep)
+    const depDest = resolve(projectRoot, 'dist/node_modules', dep)
+
+    rmSync(depDest, { recursive: true, force: true })
+    mkdirSync(depDest, { recursive: true })
+    cpSync(depRoot, depDest, { recursive: true })
+    staged.push(dep)
+    staged.push(...stageRuntimeDeps(dep, seen))
+  }
+
+  return staged
+}
+
 export function stageParcelWatcher({ platform = process.platform, arch = process.arch } = {}) {
   const srcRoot = resolvePackageRoot('@parcel/watcher')
   const destRoot = resolve(projectRoot, 'dist/node_modules/@parcel/watcher')
@@ -428,7 +485,15 @@ export function stageParcelWatcher({ platform = process.platform, arch = process
   mkdirSync(payloadDest, { recursive: true })
   cpSync(payloadRoot, payloadDest, { recursive: true })
   validateStagedBinaries(payloadDest, platform)
-  console.log(`[stage-native-deps] staged @parcel/watcher + ${payloadName} -> ${destRoot}`)
+
+  // @parcel/watcher is marked external in bundle-electron-main.mjs, so its own
+  // `require`s survive into the shipped bundle and must resolve at runtime.
+  const deps = stageRuntimeDeps('@parcel/watcher')
+
+  console.log(
+    `[stage-native-deps] staged @parcel/watcher + ${payloadName}` +
+      `${deps.length ? ` + deps (${deps.join(', ')})` : ''} -> ${destRoot}`
+  )
   return destRoot
 }
 
