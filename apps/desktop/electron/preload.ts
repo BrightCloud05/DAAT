@@ -170,6 +170,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     resolveWikilink: targetRaw => ipcRenderer.invoke('hermes:vault:resolveWikilink', targetRaw),
     noteNames: () => ipcRenderer.invoke('hermes:vault:noteNames'),
     propertiesTable: () => ipcRenderer.invoke('hermes:vault:propertiesTable'),
+      linkGraph: () => ipcRenderer.invoke('hermes:vault:linkGraph'),
     todos: limit => ipcRenderer.invoke('hermes:vault:todos', limit),
     reportContext: payload => ipcRenderer.send('hermes:vault:context', payload),
     toggleTodo: (relPath, line, text) => ipcRenderer.invoke('hermes:vault:toggleTodo', relPath, line, text),

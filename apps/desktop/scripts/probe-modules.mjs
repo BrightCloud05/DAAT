@@ -67,6 +67,17 @@ fs.writeFileSync(
   'utf8'
 )
 
+fs.writeFileSync(
+  path.join(vault, 'Courses', 'Hub.md'),
+  '---\ntype: course\n---\n\n# Hub\n\nSee [[Linear Algebra]] and [[Assignment 2]] and [[Never Today]].\n',
+  'utf8'
+)
+fs.writeFileSync(
+  path.join(vault, 'Courses', 'Spoke.md'),
+  '---\ntype: note\n---\n\n# Spoke\n\nBack to [[Hub]].\n',
+  'utf8'
+)
+
 fs.writeFileSync(path.join(userData, 'vault.json'), JSON.stringify({ root: vault }), 'utf8')
 
 const app = await electron.launch({
@@ -189,6 +200,46 @@ const assessmentsCard = await page.evaluate(() => {
 check('a finished assessment is filtered out', assessmentsCard.length > 0 && !assessmentsCard.includes('Already Marked'))
 check('the assessment card names its course', assessmentsCard.includes('MATH2001'))
 check('the countdown is in days', dashboard.includes('2 days'))
+
+console.log('--- Graph ---')
+await openModule('Graph')
+await page.waitForTimeout(2500)
+
+check('the graph screen opens', await bodyHas('Graph'))
+// The counts come from the index, so a wrong number here means the link
+// resolution is broken rather than the drawing.
+const graphCounts = await page.evaluate(() => document.querySelector('main')?.textContent ?? '')
+
+check('it counts the pages it found', /\d+ pages/.test(graphCounts), graphCounts.slice(0, 80))
+check('it resolved the wikilinks into edges', /[1-9]\d* links/.test(graphCounts), graphCounts.slice(0, 80))
+
+// A canvas that never sized itself draws nothing at all.
+const graphCanvas = await page.evaluate(() => {
+  const el = document.querySelector('main canvas')
+
+  return el ? { w: el.width, h: el.height } : null
+})
+
+check('the canvas is sized', Boolean(graphCanvas && graphCanvas.w > 100 && graphCanvas.h > 100), JSON.stringify(graphCanvas))
+
+// And it must actually have ink on it, not just be a blank element.
+const painted = await page.evaluate(() => {
+  const el = document.querySelector('main canvas')
+
+  if (!el) return -1
+
+  const ctx = el.getContext('2d')
+  const data = ctx.getImageData(0, 0, el.width, el.height).data
+  let on = 0
+
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] > 8) on++
+  }
+
+  return on
+})
+
+check('something is actually drawn on it', painted > 200, `${painted} non-transparent pixels`)
 
 console.log('--- Meetings ---')
 await openModule('Meetings')

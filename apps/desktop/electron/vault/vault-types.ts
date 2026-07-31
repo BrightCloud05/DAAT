@@ -81,3 +81,20 @@ export interface VaultConflictEvent {
   path: string
   conflictPath: string
 }
+
+/** One note in the link graph. `degree` is how many edges touch it. */
+export interface VaultGraphNode {
+  path: string
+  title: string
+  degree: number
+}
+
+export interface VaultGraphEdge {
+  source: string
+  target: string
+}
+
+export interface VaultGraph {
+  nodes: VaultGraphNode[]
+  edges: VaultGraphEdge[]
+}

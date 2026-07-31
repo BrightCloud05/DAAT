@@ -6,7 +6,7 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { Codicon } from '@/components/ui/codicon'
@@ -23,11 +23,13 @@ import {
   createNote,
   createVault,
   openNote as openNoteInStore,
-  runVaultSearch
+  runVaultSearch,
+  newUntitledPath
 } from '../vault/store'
 
 import { $productLocale, productStrings } from './strings'
 import { $vaultTodos, initTodosStore } from './todos-store'
+import { useVirtualRows } from './virtual-rows'
 import {
   $canvasView,
   closeTableView,
@@ -37,6 +39,7 @@ import {
   openMeetingsView,
   openMoneyView,
   openTableView,
+  openGraphView,
   openTodoView
 } from './view-store'
 
@@ -94,18 +97,23 @@ function buildTree(notes: VaultNote[], collapsed: Set<string>): TreeEntry[] {
   })
 }
 
-const ROW = 'flex w-full items-center gap-1.5 rounded-md px-2 py-[3px] text-left text-[13px] transition-colors hover:bg-(--ui-control-hover-background)'
+const ROW =
+  'flex w-full items-center gap-2 rounded-xs px-2.5 py-[5px] text-left text-[13px] transition-colors hover:bg-(--ui-control-hover-background)'
 
-function newUntitled(notes: VaultNote[]): string {
-  const existing = new Set(notes.map(note => note.path))
-  let name = 'Untitled.md'
+/**
+ * Selected state. Deliberately NOT a coloured pill — these rows used to carry
+ * a hard-coded `rgba(0,122,255,0.10)`, which meant the sidebar stayed Apple
+ * blue no matter which skin was active. Selection now reads the way it does on
+ * paper: the ink goes full strength and the weight steps up, over a fill that
+ * is just the page a shade darker.
+ */
+const ROW_ON = 'bg-(--ui-control-active-background) font-medium text-(--ui-text-primary)'
 
-  for (let i = 2; existing.has(name); i++) {
-    name = `Untitled ${i}.md`
-  }
+/** Group label above a list — small, spaced, and quiet. */
+const GROUP = 'px-2.5 pb-1 pt-4 text-[10px] font-medium uppercase tracking-[0.09em] opacity-40'
 
-  return name
-}
+/** Fixed tree-row height, pinned so the windowing maths stays exact. */
+const TREE_ROW_PX = 26
 
 export function NotesSidebar() {
   const s = productStrings(useStore($productLocale))
@@ -124,14 +132,20 @@ export function NotesSidebar() {
 
   const openTodoCount = todos.filter(todo => !todo.done).length
 
+  const treeRef = useRef<HTMLDivElement | null>(null)
   const entries = useMemo(() => buildTree(notes, collapsed), [notes, collapsed])
+
+  // Only the rows on screen. A leading spacer carries the height of what is
+  // scrolled past, so the scrollbar still reports the real depth of the tree.
+  const treeWindow = useVirtualRows(treeRef, entries.length, TREE_ROW_PX)
+  const visibleEntries = entries.slice(treeWindow.start, treeWindow.end)
 
   if (!info?.root) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center">
         <div className="text-[13px] opacity-75">Your notes live in a vault — a plain folder of markdown files you own.</div>
         <button
-          className="rounded-md bg-(--dt-primary) px-3 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+          className="rounded-md bg-(--dt-primary) px-3 py-1.5 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-90"
           onClick={() => void createVault()}
         >
           Create my vault
@@ -156,16 +170,16 @@ export function NotesSidebar() {
   }
 
   return (
-    <div className="flex h-full flex-col px-2 pt-2">
+    <div className="flex h-full flex-col px-2 pt-3">
       {/* Workspace header — the real mark, not a letter in a gradient box. */}
-      <div className={cn(ROW, 'group mb-1')}>
+      <div className={cn(ROW, 'group mb-3')}>
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-[13px] font-semibold">Daat</span>
           <span className="truncate text-[11px] opacity-50">{info.name ?? 'Vault'} · {info.noteCount}</span>
         </span>
         <button
           className="opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
-          onClick={() => void createNote(newUntitled(notes))}
+          onClick={() => void createNote(newUntitledPath(notes))}
           title="New page"
         >
           <Codicon className="text-[14px]" name="new-file" />
@@ -173,7 +187,7 @@ export function NotesSidebar() {
       </div>
 
       {/* Search — Notion's quiet inline field. */}
-      <div className="mb-2 flex items-center gap-1.5 rounded-md bg-(--ui-control-hover-background) px-2 py-1">
+      <div className="mb-1 flex items-center gap-2 rounded-xs bg-(--ui-control-hover-background) px-2.5 py-1.5">
         <Codicon className="shrink-0 text-[12px] opacity-50" name="search" />
         <input
           className="w-full bg-transparent text-[13px] outline-none placeholder:opacity-50"
@@ -196,14 +210,14 @@ export function NotesSidebar() {
 
       {/* Module nav (design 2a): Home, Notes(+tree), then the module rows. */}
       <button
-        className={cn(ROW, view === 'home' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+        className={cn(ROW, view === 'home' && ROW_ON)}
         onClick={openHomeView}
       >
         <Codicon className="shrink-0 text-[13px] opacity-70" name="home" />
         <span>Home</span>
       </button>
       <button
-        className={cn(ROW, view !== 'home' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+        className={cn(ROW, view !== 'home' && ROW_ON)}
         onClick={openTableView}
       >
         <Codicon className="shrink-0 text-[13px] opacity-70" name="note" />
@@ -212,10 +226,12 @@ export function NotesSidebar() {
       </button>
 
       {/* Pages tree, nested under Notes. */}
-      <div className="px-2 pb-0.5 pt-1 pl-4 text-[11px] font-medium tracking-wide opacity-45">
-        {search.trim() ? 'Results' : 'Pages'}
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+      <div className={GROUP}>{search.trim() ? 'Results' : 'Pages'}</div>
+      {/* The tree is windowed for the same reason the table is: a large vault
+          put every note in the DOM at once. Search results are not — that list
+          is already capped, and its rows are two lines tall rather than a
+          fixed height. */}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-2" ref={treeRef}>
         {search.trim() ? (
           hits.length ? (
             hits.map(hit => (
@@ -235,13 +251,17 @@ export function NotesSidebar() {
             <div className="px-2 py-2 text-xs opacity-50">No matches</div>
           )
         ) : (
-          entries.map(entry =>
+          [
+            treeWindow.start > 0 ? (
+              <div aria-hidden key="__pad" style={{ height: treeWindow.start * TREE_ROW_PX }} />
+            ) : null,
+            ...visibleEntries.map(entry =>
             entry.kind === 'dir' ? (
               <button
                 className={cn(ROW, 'opacity-80')}
                 key={entry.path}
                 onClick={() => toggleDir(entry.path)}
-                style={{ paddingLeft: `${8 + entry.depth * 14}px` }}
+                style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14}px` }}
               >
                 <Codicon
                   className="shrink-0 text-[11px] opacity-55"
@@ -258,21 +278,29 @@ export function NotesSidebar() {
                 )}
                 key={entry.path}
                 onClick={() => void openNote(entry.path)}
-                style={{ paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
+                style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
               >
                 <Codicon className="shrink-0 text-[13px] opacity-55" name="note" />
                 <span className="truncate">{entry.name}</span>
               </button>
             )
           )
+          ]
         )}
+        {!search.trim() && treeWindow.end < entries.length ? (
+          <div aria-hidden style={{ height: (entries.length - treeWindow.end) * TREE_ROW_PX }} />
+        ) : null}
       </div>
 
       {/* Module rows (design 2a): real counts where the data exists,
           quiet "soon" rows for modules not wired yet. */}
-      <div className="border-t border-(--stroke-nous) pt-1.5">
+      <div className="mt-2 border-t border-(--stroke-nous) pt-2">
+        <button className={cn(ROW, view === 'graph' && ROW_ON)} onClick={openGraphView}>
+          <Codicon className="shrink-0 text-[13px] opacity-70" name="type-hierarchy-sub" />
+          <span>{s.graph}</span>
+        </button>
         <button
-          className={cn(ROW, view === 'todo' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          className={cn(ROW, view === 'todo' && ROW_ON)}
           onClick={openTodoView}
         >
           <Codicon className="shrink-0 text-[13px] opacity-70" name="checklist" />
@@ -280,28 +308,28 @@ export function NotesSidebar() {
           <span className="ml-auto text-[11px] opacity-40">{openTodoCount || ''}</span>
         </button>
         <button
-          className={cn(ROW, view === 'mail' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          className={cn(ROW, view === 'mail' && ROW_ON)}
           onClick={openMailView}
         >
           <Codicon className="shrink-0 text-[13px] opacity-70" name="mail" />
           <span>{s.mail}</span>
         </button>
         <button
-          className={cn(ROW, view === 'money' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          className={cn(ROW, view === 'money' && ROW_ON)}
           onClick={openMoneyView}
         >
-          <Codicon className="shrink-0 text-[13px] opacity-70" name="symbol-currency" />
+          <Codicon className="shrink-0 text-[13px] opacity-70" name="credit-card" />
           <span>{s.money}</span>
         </button>
         <button
-          className={cn(ROW, view === 'calendar' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          className={cn(ROW, view === 'calendar' && ROW_ON)}
           onClick={openCalendarView}
         >
           <Codicon className="shrink-0 text-[13px] opacity-70" name="calendar" />
           <span>{s.calendar}</span>
         </button>
         <button
-          className={cn(ROW, view === 'meetings' && 'bg-[rgba(0,122,255,0.10)] font-medium text-(--dt-primary)')}
+          className={cn(ROW, view === 'meetings' && ROW_ON)}
           onClick={openMeetingsView}
         >
           <Codicon className="shrink-0 text-[13px] opacity-70" name="record" />
@@ -310,10 +338,10 @@ export function NotesSidebar() {
       </div>
 
       {/* Bottom-anchored actions — Notion's New / Settings grammar. */}
-      <div className="border-t border-(--stroke-nous) py-1.5">
-        <button className={ROW} onClick={() => void createNote(newUntitled(notes))}>
-          <Codicon className="text-[13px] text-(--dt-primary)" name="add" />
-          <span className="text-(--dt-primary)">New page</span>
+      <div className="mt-2 border-t border-(--stroke-nous) py-2">
+        <button className={ROW} onClick={() => void createNote(newUntitledPath(notes))}>
+          <Codicon className="text-[13px] opacity-55" name="add" />
+          <span>New page</span>
           <span className="ml-auto text-[11px] opacity-40">⌘N</span>
         </button>
         <button className={ROW} onClick={() => navigate('/settings')}>

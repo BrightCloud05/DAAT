@@ -24,13 +24,113 @@ export interface InlineAiState {
   left: number
   /** Doc position where output streams in. */
   anchor: number
+  /**
+   * The passage being rewritten, when the user had text selected. Null means
+   * "write something new here" — the two modes need different prompts and
+   * different edits, so the overlay reads this to say which one it is.
+   */
+  range: { from: number; to: number } | null
+  /** The selected text, captured at open time so the prompt can quote it. */
+  selected: string
   sessionId: string | null
   error: string | null
 }
 
-const IDLE: InlineAiState = { status: 'idle', top: 0, left: 0, anchor: 0, sessionId: null, error: null }
+const IDLE: InlineAiState = {
+  status: 'idle',
+  top: 0,
+  left: 0,
+  anchor: 0,
+  range: null,
+  selected: '',
+  sessionId: null,
+  error: null
+}
 
 export const $inlineAi = atom<InlineAiState>(IDLE)
+
+/**
+ * The "⌘I to edit" nudge that follows a selection.
+ *
+ * The inline assistant was finished and working for weeks and nobody could
+ * find it, because nothing on screen said it was there. A keyboard shortcut
+ * with no affordance is a feature only its author has.
+ */
+export interface AiHintState {
+  visible: boolean
+  top: number
+  left: number
+  from: number
+  to: number
+}
+
+export const $aiHint = atom<AiHintState>({ visible: false, top: 0, left: 0, from: 0, to: 0 })
+
+export function setAiHint(next: AiHintState): void {
+  const current = $aiHint.get()
+
+  if (
+    current.visible === next.visible &&
+    current.from === next.from &&
+    current.to === next.to &&
+    Math.round(current.top) === Math.round(next.top) &&
+    Math.round(current.left) === Math.round(next.left)
+  ) {
+    return
+  }
+
+  $aiHint.set(next)
+}
+
+export function hideAiHint(): void {
+  if ($aiHint.get().visible) {
+    $aiHint.set({ ...$aiHint.get(), visible: false })
+  }
+}
+
+/**
+ * What the last generation replaced, so it can be put back.
+ *
+ * A rewrite destroys the user's own words, and CodeMirror's history can't
+ * undo it in one step because the output arrives as many separate dispatches.
+ * "The AI mangled my paragraph and I can't get it back" is the fastest way to
+ * lose someone's trust in a feature like this, so the previous text is kept
+ * until they move on.
+ */
+export interface AiUndoState {
+  from: number
+  to: number
+  /** The text that was there before. Empty when the run only inserted. */
+  restore: string
+  notePath: string | null
+}
+
+export const $aiUndo = atom<AiUndoState | null>(null)
+
+export function undoInlineAi(): void {
+  const undo = $aiUndo.get()
+  const view = $editorView.get()
+
+  $aiUndo.set(null)
+
+  if (!undo || !view || undo.notePath !== $activeNote.get()?.path) {
+    return
+  }
+
+  const end = Math.min(undo.to, view.state.doc.length)
+
+  if (undo.from > end) {
+    return
+  }
+
+  view.dispatch({
+    changes: { from: undo.from, to: end, insert: undo.restore },
+    selection: { anchor: undo.from + undo.restore.length },
+    annotations: inlineAiInsert.of(true)
+  })
+  view.focus()
+  void flushActiveNote()
+}
 
 /**
  * Teardown for the run in flight. It lives at module scope because the things
@@ -40,12 +140,14 @@ export const $inlineAi = atom<InlineAiState>(IDLE)
  */
 let activeRun: { notePath: string | null; stop: () => void } | null = null
 
-export function openInlineAiAt(anchor: number): void {
+export function openInlineAiAt(anchor: number, range?: { from: number; to: number }): void {
   const view = $editorView.get()
 
   if (!view) {
     return
   }
+
+  const selected = range ? view.state.doc.sliceString(range.from, range.to) : ''
 
   // Re-triggering while a generation is streaming used to leave that run
   // writing into the document with no overlay and no way to stop it: the
@@ -54,7 +156,18 @@ export function openInlineAiAt(anchor: number): void {
     closeInlineAi()
   }
 
-  const coords = view.coordsAtPos(anchor)
+  // coordsAtPos can throw when the position isn't laid out (a detached or
+  // freshly-mounted view). It is only used to place the bubble, so a throw
+  // here must not take the keypress — and the fallback below already handles
+  // a missing measurement.
+  let coords: { bottom: number; left: number } | null = null
+
+  try {
+    coords = view.coordsAtPos(anchor)
+  } catch {
+    coords = null
+  }
+
   const host = view.dom.getBoundingClientRect()
 
   $inlineAi.set({
@@ -62,6 +175,8 @@ export function openInlineAiAt(anchor: number): void {
     top: (coords?.bottom ?? host.top) - host.top + 4,
     left: Math.max(8, (coords?.left ?? host.left) - host.left),
     anchor,
+    range: range ?? null,
+    selected,
     sessionId: null,
     error: null
   })
@@ -87,6 +202,13 @@ export function closeInlineAi(): void {
 $activeNote.subscribe(note => {
   if (activeRun && note?.path !== activeRun.notePath) {
     closeInlineAi()
+  }
+
+  const undo = $aiUndo.get()
+
+  // Offsets only mean anything inside the document they were measured in.
+  if (undo && undo.notePath !== (note?.path ?? null)) {
+    $aiUndo.set(null)
   }
 })
 
@@ -115,7 +237,27 @@ function buildPrompt(task: string): string {
   const view = $editorView.get()
   const title = note?.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '') ?? 'Untitled'
   const doc = view?.state.doc.toString() ?? ''
-  const anchor = $inlineAi.get().anchor
+  const { anchor, range, selected } = $inlineAi.get()
+
+  // Rewriting a selection is a different job from writing at a cursor, and
+  // the cursor prompt is actively wrong for it: "do not repeat the existing
+  // text" is precisely what a rewrite must do.
+  if (range) {
+    const before = doc.slice(Math.max(0, range.from - 2000), range.from)
+    const after = doc.slice(range.to, range.to + 1000)
+
+    return [
+      `You are editing a passage INSIDE the user's markdown note titled "${title}".\n\n`,
+      before ? `Text before it (context only, do not rewrite):\n"""\n${before}\n"""\n\n` : '',
+      `THE PASSAGE TO REWRITE:\n"""\n${selected}\n"""\n\n`,
+      after ? `Text after it (context only, do not rewrite):\n"""\n${after}\n"""\n\n` : '',
+      `Instruction: ${task}\n\n`,
+      'Reply with ONLY the rewritten passage, which will replace it exactly as you write it. ',
+      'Keep the markdown formatting and heading levels it already uses unless the instruction ',
+      'says otherwise. No preamble, no explanation, no wrapping code fence.'
+    ].join('')
+  }
+
   // Window the context around the cursor so huge notes stay cheap.
   const before = doc.slice(Math.max(0, anchor - 4000), anchor)
   const after = doc.slice(anchor, anchor + 1000)
@@ -172,11 +314,18 @@ export async function runInlineAi(task: string): Promise<void> {
     return
   }
 
-  let anchor = state.anchor
+  // A rewrite starts by consuming the selection: the first chunk of output
+  // replaces it, and everything after that appends normally.
+  const origin = state.range ? state.range.from : state.anchor
+  const replaced = state.selected
+  let anchor = origin
+  let pending = state.range ? { from: state.range.from, to: state.range.to } : null
+  let streamed = 0
   let finished = false
   let graceTimer: ReturnType<typeof setTimeout> | null = null
   const notePath = note?.path ?? null
 
+  $aiUndo.set(null)
   $inlineAi.set({ ...state, status: 'running', sessionId, error: null })
 
   const finish = async (deleteSession: boolean) => {
@@ -198,6 +347,12 @@ export async function runInlineAi(task: string): Promise<void> {
     unsubscribe()
     unsubscribeEdits()
 
+    // Offer the way back, but only if something was actually written — a run
+    // the user stopped before the first token has nothing to undo.
+    if (streamed > 0) {
+      $aiUndo.set({ from: origin, to: origin + streamed, restore: replaced, notePath })
+    }
+
     if (deleteSession && sessionId) {
       try {
         await gateway.request('session.delete', { session_id: sessionId }, 10_000)
@@ -213,6 +368,18 @@ export async function runInlineAi(task: string): Promise<void> {
     await flushActiveNote()
   }
 
+  /** One insertion point for both paths, so the two can't drift apart. */
+  const write = (text: string) => {
+    view.dispatch({
+      changes: pending ? { from: pending.from, to: pending.to, insert: text } : { from: anchor, insert: text },
+      annotations: inlineAiInsert.of(true),
+      scrollIntoView: true
+    })
+    anchor = (pending ? pending.from : anchor) + text.length
+    pending = null
+    streamed += text.length
+  }
+
   const unsubscribe = gateway.onEvent(event => {
     if (event.session_id !== sessionId) {
       return
@@ -223,16 +390,21 @@ export async function runInlineAi(task: string): Promise<void> {
       const text = typeof payload?.text === 'string' ? payload.text : ''
 
       if (text) {
-        view.dispatch({
-          changes: { from: anchor, insert: text },
-          annotations: inlineAiInsert.of(true),
-          scrollIntoView: true
-        })
-        anchor += text.length
+        write(text)
       }
     }
 
     if (event.type === 'message.complete') {
+      // Not every backend streams. The Codex provider sends no deltas at all
+      // and only this one event, so without writing its text here the whole
+      // feature silently produced nothing on that backend.
+      const payload = event.payload as { text?: unknown } | undefined
+      const whole = typeof payload?.text === 'string' ? payload.text : ''
+
+      if (whole && whole.length > streamed) {
+        write(streamed ? whole.slice(streamed) : whole)
+      }
+
       void finish(true)
     }
 
@@ -288,6 +460,15 @@ export async function runInlineAi(task: string): Promise<void> {
     const message = error instanceof Error ? error.message : 'Generation failed.'
 
     await finish(false)
-    $inlineAi.set({ ...$inlineAi.get(), status: 'prompt', anchor: state.anchor, top: state.top, left: state.left, error: message })
+    $inlineAi.set({
+      ...$inlineAi.get(),
+      status: 'prompt',
+      anchor: state.anchor,
+      range: state.range,
+      selected: state.selected,
+      top: state.top,
+      left: state.left,
+      error: message
+    })
   }
 }

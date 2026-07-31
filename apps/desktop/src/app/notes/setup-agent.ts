@@ -16,7 +16,7 @@
 
 import { atom } from 'nanostores'
 
-import { PROMPT_SUBMIT_REQUEST_TIMEOUT_MS } from '@/hermes'
+import { getProfileSoul, PROMPT_SUBMIT_REQUEST_TIMEOUT_MS, updateProfileSoul } from '@/hermes'
 import { activeGateway } from '@/store/gateway'
 
 import { $vaultInfo, $vaultNotes, refreshVaultNotes } from '../vault/store'
@@ -125,6 +125,24 @@ async function ensureSession(persona: Persona): Promise<boolean> {
   return true
 }
 
+/**
+ * Record how the user wants the assistant to behave.
+ *
+ * Their own words go into SOUL.md verbatim, appended rather than replacing
+ * the persona's voice. Verbatim on purpose: "never guess a number, always
+ * cite the source" is already a better instruction than any paraphrase, and
+ * it needs no model round-trip — the answer takes effect the moment they
+ * press return.
+ */
+async function rememberPreferences(answer: string): Promise<void> {
+  // "default" is HERMES_HOME itself, so this is ~/.daat/SOUL.md.
+  const current = await getProfileSoul('default')
+  const existing = typeof current?.content === 'string' ? current.content : ''
+  const section = `\n\n## How I like to work\n\n${answer.trim()}\n`
+
+  await updateProfileSoul('default', `${existing.trimEnd()}${section}`)
+}
+
 /** Move to the next question, or finish. */
 function advance(persona: Persona): void {
   const next = $setup.get().index + 1
@@ -148,6 +166,28 @@ export async function answerQuestion(persona: Persona, answer: string): Promise<
   const question = persona.questions[state.index]
 
   if (!question || state.status === 'working') {
+    return
+  }
+
+  // Preferences never reach the model; they change how it behaves instead.
+  if (question.kind === 'preferences') {
+    update({ status: 'working', error: null, activity: null })
+
+    try {
+      await rememberPreferences(answer)
+    } catch (error) {
+      update({
+        status: 'asking',
+        activity: null,
+        error: error instanceof Error ? error.message : "Couldn't save that preference."
+      })
+
+      return
+    }
+
+    update({ steps: [...$setup.get().steps, { question: state.index, answer, created: [] }] })
+    advance(persona)
+
     return
   }
 

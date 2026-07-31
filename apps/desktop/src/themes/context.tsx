@@ -35,7 +35,11 @@ const PROFILE_MODES_KEY = 'hermes-desktop-profile-modes-v1'
 // Last active profile, recorded so the boot-time paint can pick that profile's
 // theme before the gateway reports which profile actually launched.
 const LAST_PROFILE_KEY = 'hermes-desktop-active-profile-v1'
-const RETIRED_SKINS = new Set(['nous-light', 'default', 'gold'])
+// `daat-glass` is retired rather than merely deselected: anyone who opened the
+// app before Paper shipped has it persisted, and leaving it selectable would
+// mean they never see the new default. Its translucent chrome is also the
+// direct cause of the see-through overlays.
+const RETIRED_SKINS = new Set(['nous-light', 'default', 'gold', 'daat-glass'])
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 

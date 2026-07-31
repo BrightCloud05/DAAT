@@ -1,4 +1,4 @@
-import { type CSSProperties, useState } from 'react'
+import { useState } from 'react'
 
 import { capitalize, normalize } from '@/lib/text'
 
@@ -144,8 +144,6 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
   return copies[Math.abs(seed) % copies.length] || FALLBACK_COPY[0]
 }
 
-const WORDMARK = 'Daat'
-
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)
 
@@ -165,19 +163,14 @@ export function Intro({ personality, seed }: IntroProps) {
       className="pointer-events-none flex w-full min-w-0 flex-col items-center justify-center px-0.5 py-6 text-center text-muted-foreground sm:px-6 lg:px-8"
       data-slot="aui_intro"
     >
-      <div className="w-full min-w-0">
-        <p
-          aria-label={WORDMARK}
-          className="fit-text mx-auto mb-1 w-[calc(100%-1rem)] font-['Collapse'] font-bold uppercase leading-[0.9] tracking-[0.08em] text-midground mix-blend-plus-lighter dark:text-foreground/90"
-          style={{ '--fit-min': '2.75rem' } as CSSProperties}
-        >
-          <span>
-            <span>{WORDMARK}</span>
-          </span>
-          <span aria-hidden="true">{WORDMARK}</span>
+      {/* No wordmark here. A giant logo in your own empty state is a poster,
+          not an interface — it also crowded out the headline, leaving the
+          panel answering a question it never asked. */}
+      <div className="mx-auto w-full min-w-0 max-w-[22rem]">
+        <p className="m-0 font-(--dt-font-serif) text-[19px] leading-snug tracking-[-0.01em] text-(--ui-text-primary)">
+          {copy.headline}
         </p>
-
-        <p className="m-0 text-center leading-normal tracking-tight">{copy.body}</p>
+        <p className="mt-2 mb-0 text-[13px] leading-relaxed tracking-normal">{copy.body}</p>
       </div>
     </div>
   )

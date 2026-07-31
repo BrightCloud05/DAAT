@@ -72,14 +72,14 @@ function duePill(todo: DecoratedTodo, today: string): { text: string; tone: stri
   }
 
   if (todo.due < today) {
-    return { text: todo.due, tone: 'rgba(255,59,48,0.16)' }
+    return { text: todo.due, tone: 'var(--sem-late-wash)' }
   }
 
   if (todo.due === today) {
-    return { text: 'Today', tone: 'rgba(255,149,0,0.18)' }
+    return { text: 'Today', tone: 'var(--sem-soon-wash)' }
   }
 
-  return { text: todo.due, tone: 'rgba(52,199,89,0.18)' }
+  return { text: todo.due, tone: 'var(--sem-good-wash)' }
 }
 
 export function TodoView() {
@@ -114,7 +114,7 @@ export function TodoView() {
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-[46rem] px-6 pb-12 pt-8">
         <div className="mb-5 flex items-baseline gap-3">
-          <h1 className="text-[28px] font-bold tracking-tight">Todo</h1>
+          <h1 className="text-[28px] font-(--dt-font-serif) font-medium tracking-[-0.01em]">Todo</h1>
           <span className="text-xs opacity-45">{openCount} open</span>
           <button
             className="ml-auto rounded-md px-2 py-1 text-[12.5px] opacity-60 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100"
@@ -164,7 +164,7 @@ export function TodoView() {
                         style={
                           todo.done
                             ? { backgroundColor: 'var(--dt-primary)', borderColor: 'var(--dt-primary)' }
-                            : { borderColor: 'rgba(120,120,128,0.35)' }
+                            : { borderColor: 'var(--ui-stroke-secondary)' }
                         }
                         onClick={() => void toggleTodo(todo)}
                         title={todo.done ? 'Mark as not done' : 'Mark as done'}

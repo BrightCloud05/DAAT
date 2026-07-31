@@ -59,7 +59,16 @@ export interface SetupQuestion {
   askKo: string
   hint: string
   hintKo: string
-  instruction: string
+  /**
+   * 'pages' — the assistant reads the answer and builds notes from it.
+   * 'preferences' — the answer is written into SOUL.md verbatim, so the
+   * assistant actually behaves the way the user just described. Kept verbatim
+   * on purpose: their own words are a better instruction than a paraphrase,
+   * and it needs no model round-trip.
+   */
+  kind: 'pages' | 'preferences'
+  /** What the assistant should do with the answer. Only for kind: 'pages'. */
+  instruction?: string
 }
 
 /** Dashboard cards a persona can switch on. */
@@ -78,20 +87,20 @@ export const PERSONAS: Persona[] = [
     id: 'student',
     questions: [
       {
-        ask: 'What are you studying this term?',
-        askKo: '이번 학기에 뭘 배우세요?',
-        hint: 'Subject names are enough — “linear algebra, stats, two history units”',
-        hintKo: '과목 이름만 적어도 됩니다 — “선형대수, 통계, 역사 2과목”',
+        ask: "Tell me what you're studying at the moment.",
+        askKo: '지금 학교에서 뭘 배우고 있는지 얘기해 주세요.',
+        hint: "Whole sentences are fine — subjects, what's hard, what's coming up",
+        hintKo: '문장으로 편하게 — 과목, 어려운 것, 다가오는 일정',
+        kind: 'pages',
         instruction:
-          'Create one page per subject from Templates/Course.md using vault_write, under Courses/. Fill in code, term, days, time and room only where the user actually said them; leave the rest blank. Do not invent a timetable.'
+          'Read the answer as prose, not as a list. Create a page per subject they mentioned from Templates/Course.md under Courses/ with vault_write, and a page per assessment or deadline from Templates/Assessment.md. Fill in only what they actually said — code, term, days, time, room, due date — and leave the rest blank. If they described something that is neither a subject nor an assessment (a worry, a goal, a reading list), make it a plain page for that. Never invent a date or a timetable.'
       },
       {
-        ask: 'Anything due soon?',
-        askKo: '곧 마감인 게 있나요?',
-        hint: 'An assignment, a test, a reading — or skip this',
-        hintKo: '과제, 시험, 읽기 — 없으면 건너뛰세요',
-        instruction:
-          'Create one page per assessment from Templates/Assessment.md using vault_write, under Courses/. Set course, due and weight only where stated. If the user gave no date, leave due blank rather than guessing.'
+        ask: 'How would you like this to work for you?',
+        askKo: '이 노트가 어떻게 작동하면 좋을까요?',
+        hint: 'e.g. “summarise my lectures and quiz me before exams”',
+        hintKo: '예: “강의 내용을 요약해 주고 시험 전에 문제를 내 줘”',
+        kind: 'preferences'
       },
     ],
 
@@ -117,27 +126,32 @@ export const PERSONAS: Persona[] = [
       'Templates/Assessment.md':
         '---\ntype: assessment\ncourse: \ndue: \nweight: \nstatus: not started\n---\n\n# {{title}}\n\n## What is being asked\n\n## Plan\n\n- [ ] \n\n## Sources\n\n',
       'Templates/Lecture.md':
-        '---\ntype: lecture\ncourse: \ndate: {{date}}\ntopic: \n---\n\n## Key points\n\n- \n\n## Questions\n\n> [!question] Unclear\n> \n\n## To review\n\n- [ ] \n'
+        // `date` is quoted because `{{date}}` is also YAML flow-mapping syntax:
+        // unquoted, opening the template itself parsed the placeholder into a
+        // map whose key was a map, and the properties panel showed
+        // `{"[object Object]":null}`. Quoted it reads as a plain string here
+        // and stays valid once substituted.
+        '---\ntype: lecture\ncourse: \ndate: "{{date}}"\ntopic: \n---\n\n## Key points\n\n- \n\n## Questions\n\n> [!question] Unclear\n> \n\n## To review\n\n- [ ] \n'
     }
   },
   {
     id: 'accounting',
     questions: [
       {
-        ask: 'Which clients are you working on?',
-        askKo: '지금 어떤 고객 일을 하고 계세요?',
-        hint: 'Names are enough',
-        hintKo: '이름만 적어도 됩니다',
+        ask: "Tell me what you're working on at the moment.",
+        askKo: '지금 어떤 일을 하고 계신지 얘기해 주세요.',
+        hint: "Clients, engagements, what's due — in your own words",
+        hintKo: '고객, 업무, 마감 — 편하게 적어 주세요',
+        kind: 'pages',
         instruction:
-          'Create one page per client from Templates/Workpaper.md using vault_write, under Clients/. Never invent a figure, a period or an entity number.'
+          "Read the answer as prose. Create a page per client from Templates/Workpaper.md under Clients/ with vault_write, and record any deadline they mentioned in that client's frontmatter. Never invent a figure, a period, an entity number or a due date."
       },
       {
-        ask: 'Anything with a deadline?',
-        askKo: '마감이 걸린 일이 있나요?',
-        hint: 'A lodgement, a review, a year-end — or skip',
-        hintKo: '신고, 검토, 결산 — 없으면 건너뛰세요',
-        instruction:
-          'Add the deadline to the relevant client page with vault_write, or create a page for it if there is no client. Set a due date only if the user gave one.'
+        ask: 'How should I handle your work?',
+        askKo: '제가 어떤 방식으로 일하면 좋을까요?',
+        hint: 'e.g. “never guess a number, always cite the source document”',
+        hintKo: '예: “숫자를 절대 추측하지 말고 항상 근거 문서를 적어 줘”',
+        kind: 'preferences'
       },
     ],
 
@@ -164,12 +178,20 @@ export const PERSONAS: Persona[] = [
     id: 'office',
     questions: [
       {
-        ask: 'What are you keeping track of this week?',
-        askKo: '이번 주에 뭘 챙기고 계세요?',
+        ask: "Tell me what's on your plate.",
+        askKo: '지금 무슨 일을 맡고 계신지 얘기해 주세요.',
         hint: 'Meetings, people waiting on you, anything running',
         hintKo: '회의, 답을 기다리는 사람, 진행 중인 일',
+        kind: 'pages',
         instruction:
-          'Create a page per topic with vault_write. Turn anything that reads as a task into a markdown checklist item with an owner where one is named.'
+          'Read the answer as prose. Create a page per topic with vault_write, and turn anything that reads as a task into a markdown checklist item with an owner where one is named. Put any date in the frontmatter so it reaches the calendar.'
+      },
+      {
+        ask: 'How would you like this to work for you?',
+        askKo: '이 노트가 어떻게 작동하면 좋을까요?',
+        hint: 'e.g. “draft replies for me but never send them”',
+        hintKo: '예: “답장 초안은 써 주되 절대 먼저 보내지는 마”',
+        kind: 'preferences'
       },
     ],
 
@@ -195,12 +217,20 @@ export const PERSONAS: Persona[] = [
     id: 'programming',
     questions: [
       {
-        ask: 'What are you working on?',
-        askKo: '지금 뭘 만들고 계세요?',
-        hint: 'Project names, or a repo path',
-        hintKo: '프로젝트 이름이나 저장소 경로',
+        ask: "Tell me what you're building.",
+        askKo: '지금 뭘 만들고 계신지 얘기해 주세요.',
+        hint: "Projects, a repo path, what's in flight",
+        hintKo: '프로젝트, 저장소 경로, 진행 중인 작업',
+        kind: 'pages',
         instruction:
-          'Create one page per project from Templates/Decision.md using vault_write, under Projects/. If the user gave a repo path, read its README first and summarise what the project is in two sentences.'
+          'Read the answer as prose. Create a page per project with vault_write under Projects/. If they gave a repo path, read its README first and summarise what the project is in two sentences. Record decisions and open questions they mentioned rather than inventing a task list.'
+      },
+      {
+        ask: 'How should I work with you?',
+        askKo: '제가 어떤 방식으로 도우면 좋을까요?',
+        hint: "e.g. “small diffs, run the tests, tell me when you're unsure”",
+        hintKo: '예: “변경은 작게, 테스트는 돌려보고, 확실하지 않으면 말해 줘”',
+        kind: 'preferences'
       },
     ],
 
@@ -227,12 +257,20 @@ export const PERSONAS: Persona[] = [
     id: 'secretary',
     questions: [
       {
-        ask: 'What do you need to stay on top of?',
-        askKo: '무엇을 놓치지 않고 챙겨야 하세요?',
+        ask: 'Tell me what you need to stay on top of.',
+        askKo: '무엇을 놓치지 않고 챙겨야 하는지 얘기해 주세요.',
         hint: 'People, commitments, anything recurring',
         hintKo: '사람, 약속, 반복되는 일',
+        kind: 'pages',
         instruction:
-          'Create a page per thing with vault_write. Anything with a date goes in the frontmatter so it reaches the calendar; anything owed by someone else becomes a checklist item saying who.'
+          'Read the answer as prose. Create a page per thing with vault_write. Anything with a date goes in the frontmatter so it reaches the calendar; anything owed by someone else becomes a checklist item naming who. Never invent a date.'
+      },
+      {
+        ask: 'How would you like me to look after your day?',
+        askKo: '제가 하루를 어떻게 챙겨 드리면 좋을까요?',
+        hint: "e.g. “one briefing each morning, don't interrupt me otherwise”",
+        hintKo: '예: “아침에 한 번만 정리해 주고 그 외에는 방해하지 마”',
+        kind: 'preferences'
       },
     ],
 
@@ -258,12 +296,20 @@ export const PERSONAS: Persona[] = [
     id: 'general',
     questions: [
       {
-        ask: 'What would you like to keep track of?',
-        askKo: '무엇을 정리해 두고 싶으세요?',
-        hint: 'Anything at all — projects, reading, a plan',
-        hintKo: '무엇이든 — 프로젝트, 읽을 것, 계획',
+        ask: "Tell me what you'd like to keep track of.",
+        askKo: '무엇을 정리해 두고 싶은지 얘기해 주세요.',
+        hint: "Anything at all — a project, a plan, things you're reading",
+        hintKo: '무엇이든 — 프로젝트, 계획, 읽고 있는 것들',
+        kind: 'pages',
         instruction:
-          'Create a page per thing with vault_write, at the top level of the vault. Keep the structure plain.'
+          "Read the answer as prose. Create a page per thing with vault_write, at the top level of the vault. Keep the structure plain and don't impose a template they didn't ask for."
+      },
+      {
+        ask: 'How would you like this to work for you?',
+        askKo: '이 노트가 어떻게 작동하면 좋을까요?',
+        hint: 'e.g. “keep it short, ask before changing anything”',
+        hintKo: '예: “짧게 정리해 주고, 뭔가 바꿀 땐 먼저 물어봐”',
+        kind: 'preferences'
       },
     ],
 

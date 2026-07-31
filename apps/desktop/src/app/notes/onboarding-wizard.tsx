@@ -178,7 +178,7 @@ export function OnboardingWizard() {
 function Heading({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="mb-6">
-      <h1 className="text-[26px] font-bold tracking-tight">{title}</h1>
+      <h1 className="text-[26px] font-(--dt-font-serif) font-medium tracking-[-0.01em]">{title}</h1>
       <p className="mt-1.5 max-w-[34rem] text-[13.5px] leading-relaxed opacity-60">{subtitle}</p>
     </div>
   )
@@ -225,8 +225,7 @@ function Actions({
         ) : null}
         <button
           className={cn(
-            'h-[32px] rounded-lg bg-(--dt-primary) px-4 text-[13px] font-medium text-white transition-opacity',
-            'shadow-[0_4px_12px_-5px_rgba(0,122,255,0.7)]',
+            'h-[32px] rounded-xs bg-(--dt-primary) px-4 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity',
             primary.disabled ? 'cursor-not-allowed opacity-40' : 'hover:opacity-90'
           )}
           disabled={primary.disabled}

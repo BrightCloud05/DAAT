@@ -51,8 +51,6 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
     void answerQuestion(persona, text)
   }
 
-  const built = setup.steps.filter(step => step.created.length)
-
   return (
     <div
       className={cn(
@@ -86,7 +84,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
           className="ml-auto rounded-lg px-3 py-1.5 text-[13px] opacity-45 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-90"
           onClick={onDone}
         >
-          {finished ? s.startWriting : s.imDone}
+          {finished ? s.openNotes : s.imDone}
         </button>
       </div>
 
@@ -94,19 +92,19 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
         <div className="flex w-full max-w-[34rem] flex-col gap-7">
           {finished ? (
             <div className="flex flex-col gap-4">
-              <p className="text-[24px] leading-[1.4]">{s.setupDoneTitle}</p>
+              <p className="font-(--dt-font-serif) text-[24px] leading-[1.4]">{s.setupDoneTitle}</p>
               <p className="text-[15px] leading-relaxed opacity-60">{s.setupDoneBody}</p>
               <button
-                className="mt-1 self-start rounded-lg bg-(--dt-primary) px-4 py-2 text-[13.5px] font-medium text-white transition-opacity hover:opacity-90"
+                className="mt-1 self-start rounded-lg bg-(--dt-primary) px-4 py-2 text-[13.5px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-90"
                 onClick={onDone}
               >
-                {s.startWriting}
+                {s.openNotes}
               </button>
             </div>
           ) : (
             <>
               {/* Fixed text, rendered whole. Nothing streams into this. */}
-              <p className="text-[24px] leading-[1.4]" key={setup.index}>
+              <p className="font-(--dt-font-serif) text-[24px] leading-[1.4]" key={setup.index}>
                 {locale === 'ko' ? question?.askKo : question?.ask}
               </p>
 
@@ -136,7 +134,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
                     value={draft}
                   />
                   <button
-                    className="grid size-8 shrink-0 place-items-center rounded-lg bg-(--dt-primary) text-white transition-opacity hover:opacity-90 disabled:opacity-25"
+                    className="grid size-8 shrink-0 place-items-center rounded-lg bg-(--dt-primary) text-(--dt-primary-foreground) transition-opacity hover:opacity-90 disabled:opacity-25"
                     disabled={working || !draft.trim()}
                     onClick={submit}
                     title={s.send}
@@ -172,7 +170,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
           )}
 
           {setup.error ? (
-            <div className="flex items-start gap-2 rounded-lg bg-[rgba(255,59,48,0.10)] px-3.5 py-2.5 text-[13px]">
+            <div className="flex items-start gap-2 rounded-lg bg-(--sem-late-wash) px-3.5 py-2.5 text-[13px]">
               <Codicon className="mt-0.5 shrink-0" name="warning" />
               <span>{setup.error}</span>
             </div>
@@ -183,18 +181,39 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
       {/* What it made, and the way back out of each of them. */}
       <div className="flex shrink-0 justify-center px-6 pb-7">
         <div className="flex w-full max-w-[34rem] flex-col gap-1.5">
-          {built.map(step => (
-            <div className="flex items-center gap-2 text-[12.5px]" key={step.question}>
-              <Codicon className="shrink-0 text-[11px] text-(--dt-primary)" name="check" />
-              <span className="opacity-55">{s.madePages(step.created.length)}</span>
-              <button
-                className="opacity-45 underline underline-offset-2 transition-opacity hover:opacity-90"
-                onClick={() => void undoStep(setup.steps.indexOf(step))}
-              >
-                {s.undo}
-              </button>
-            </div>
-          ))}
+          {setup.steps.map((step, index) => {
+            const kind = persona.questions[step.question]?.kind
+
+            if (step.answer === null) {
+              return null
+            }
+
+            if (kind === 'preferences') {
+              return (
+                <div className="flex items-center gap-2 text-[12.5px]" key={step.question}>
+                  <Codicon className="shrink-0 text-[11px] text-(--dt-primary)" name="check" />
+                  <span className="opacity-55">{s.savedPreference}</span>
+                </div>
+              )
+            }
+
+            if (!step.created.length) {
+              return null
+            }
+
+            return (
+              <div className="flex items-center gap-2 text-[12.5px]" key={step.question}>
+                <Codicon className="shrink-0 text-[11px] text-(--dt-primary)" name="check" />
+                <span className="opacity-55">{s.madePages(step.created.length)}</span>
+                <button
+                  className="opacity-45 underline underline-offset-2 transition-opacity hover:opacity-90"
+                  onClick={() => void undoStep(index)}
+                >
+                  {s.undo}
+                </button>
+              </div>
+            )
+          })}
           {setup.steps.some(step => step.undone) ? (
             <span className="text-[12.5px] opacity-35">{s.undone}</span>
           ) : null}

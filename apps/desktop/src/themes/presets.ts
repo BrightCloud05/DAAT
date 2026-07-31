@@ -35,6 +35,87 @@ const APPLE_BLUE_DARK = '#0A84FF'
  * popovers) stay near-opaque for legibility. Typography rides the system
  * stack, which resolves to SF Pro on macOS.
  */
+/**
+ * Paper — the default skin, taken from reMarkable's own palette.
+ *
+ * Two decisions carry the whole look, and both are easy to undo by accident:
+ *
+ * 1. **There is no accent hue.** `primary`, `ring` and `midground` are all the
+ *    ink colour. Every fill, stroke, hover and selected state the app derives
+ *    is therefore a warm grey of the text itself. A blue here — any blue —
+ *    puts the SaaS dashboard straight back.
+ * 2. **Every surface is opaque.** Glass made the chrome translucent for
+ *    NSVisualEffectView vibrancy, which is why overlays used to show the
+ *    desktop through them. Paper is not translucent.
+ *
+ * Companion settings that belong to the same look live in styles.css:
+ * `--radius-scalar: 0.2` (2px corners) and `--dt-font-serif` (serif headings).
+ */
+export const daatPaperTheme: DesktopTheme = {
+  name: 'daat-paper',
+  label: 'Paper',
+  description: 'Ink on paper — no accent colour, square corners, serif headings',
+  colors: {
+    background: '#FCFBF8',
+    foreground: '#211E1C',
+    card: '#FCFBF8',
+    cardForeground: '#211E1C',
+    muted: '#E7E1D5',
+    mutedForeground: '#6B6459',
+    popover: '#FCFBF8',
+    popoverForeground: '#211E1C',
+    primary: '#211E1C',
+    primaryForeground: '#FCFBF8',
+    secondary: '#F3EFE7',
+    secondaryForeground: '#211E1C',
+    accent: '#E7E1D5',
+    accentForeground: '#211E1C',
+    border: '#D9D2C4',
+    input: '#D9D2C4',
+    ring: '#211E1C',
+    midground: '#211E1C',
+    composerRing: '#8C8375',
+    // A muted brick rather than iOS red: system red is the one colour loud
+    // enough to break a palette this quiet, and errors still read fine.
+    destructive: '#A33A2A',
+    destructiveForeground: '#FCFBF8',
+    sidebarBackground: '#F3EFE7',
+    sidebarBorder: '#E7E1D5',
+    userBubble: '#F3EFE7',
+    userBubbleBorder: '#E7E1D5'
+  },
+  darkColors: {
+    // The same paper stock under low light — warm near-blacks, not neutral
+    // greys, so the ink/paper relationship survives the flip.
+    background: '#17150F',
+    foreground: '#ECE6DA',
+    card: '#1E1B16',
+    cardForeground: '#ECE6DA',
+    muted: '#2A261F',
+    mutedForeground: '#9C9285',
+    popover: '#23201A',
+    popoverForeground: '#ECE6DA',
+    primary: '#E7E1D5',
+    primaryForeground: '#17150F',
+    secondary: '#2A261F',
+    secondaryForeground: '#ECE6DA',
+    accent: '#322D25',
+    accentForeground: '#ECE6DA',
+    border: '#35302A',
+    input: '#35302A',
+    ring: '#E7E1D5',
+    midground: '#E7E1D5',
+    composerRing: '#8C8375',
+    destructive: '#C4634E',
+    destructiveForeground: '#17150F',
+    sidebarBackground: '#121009',
+    sidebarBorder: '#2A261F',
+    userBubble: '#23201A',
+    userBubbleBorder: '#2A261F'
+  },
+  typography: DEFAULT_TYPOGRAPHY
+}
+
 export const daatGlassTheme: DesktopTheme = {
   name: 'daat-glass',
   label: 'Daat Glass',
@@ -350,6 +431,7 @@ export const slateTheme: DesktopTheme = {
 }
 
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
+  'daat-paper': daatPaperTheme,
   'daat-glass': daatGlassTheme,
   nous: nousTheme,
   midnight: midnightTheme,
@@ -362,4 +444,4 @@ export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
 export const BUILTIN_THEME_LIST = Object.values(BUILTIN_THEMES)
 
 /** Skin used when nothing is persisted or the persisted name is retired. */
-export const DEFAULT_SKIN_NAME = 'daat-glass'
+export const DEFAULT_SKIN_NAME = 'daat-paper'

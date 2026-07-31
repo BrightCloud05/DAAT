@@ -39,7 +39,8 @@ import type {
   VaultNote,
   VaultReadResult,
   VaultSearchHit,
-  VaultWriteResult
+  VaultWriteResult,
+  VaultGraph
 } from './vault-types'
 
 const VAULT_CONFIG_FILENAME = 'vault.json'
@@ -627,6 +628,10 @@ export class VaultService {
 
   noteNames(): Array<{ path: string; title: string; name: string }> {
     return this.requireOpen().index.noteNames()
+  }
+
+  linkGraph(): VaultGraph {
+    return this.requireOpen().index.linkGraph()
   }
 
   propertiesTable(): Array<{ path: string; title: string; mtimeMs: number; props: Record<string, unknown> }> {

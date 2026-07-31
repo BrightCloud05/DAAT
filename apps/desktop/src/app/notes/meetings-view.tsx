@@ -86,26 +86,26 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-[56rem] px-6 pb-12 pt-8">
-        <h1 className="mb-5 text-[28px] font-bold tracking-tight">{s.meetings}</h1>
+        <h1 className="mb-5 text-[28px] font-(--dt-font-serif) font-medium tracking-[-0.01em]">{s.meetings}</h1>
 
         {/* Recorder. */}
         <div
           className={cn(
             'mb-6 flex flex-col gap-3 rounded-xl border p-5 transition-colors',
-            recorder.status === 'recording' ? 'border-[rgba(255,59,48,0.5)]' : 'border-(--stroke-nous)'
+            recorder.status === 'recording' ? 'border-[var(--sem-late)]' : 'border-(--stroke-nous)'
           )}
         >
           {recorder.status === 'recording' ? (
             <div className="flex items-center gap-3">
               <span
-                className="size-2.5 shrink-0 rounded-full bg-[#FF3B30]"
+                className="size-2.5 shrink-0 rounded-full bg-(--sem-late)"
                 style={{ animation: 'daat-pulse 1.4s ease-in-out infinite' }}
               />
               <span className="text-[15px] font-semibold tabular-nums">{formatElapsed(recorder.elapsed)}</span>
               <span className="text-[13px] opacity-60">{s.recording}</span>
 
               <button
-                className="ml-auto rounded-lg bg-(--dt-primary) px-3.5 py-1.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
+                className="ml-auto rounded-lg bg-(--dt-primary) px-3.5 py-1.5 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-90"
                 onClick={() => void finish()}
               >
                 {s.stopAndSummarize}
@@ -131,7 +131,7 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
                 value={title}
               />
               <button
-                className="flex shrink-0 items-center gap-2 rounded-lg bg-(--dt-primary) px-3.5 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                className="flex shrink-0 items-center gap-2 rounded-lg bg-(--dt-primary) px-3.5 py-2 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-90 disabled:opacity-40"
                 disabled={busy}
                 onClick={() => void begin()}
               >
@@ -144,7 +144,7 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
           <p className="text-[12.5px] leading-relaxed opacity-55">{s.recordingHint}</p>
 
           {recorder.error ? (
-            <div className="flex items-start gap-2 rounded-lg bg-[rgba(255,59,48,0.10)] px-3 py-2 text-[12.5px]">
+            <div className="flex items-start gap-2 rounded-lg bg-[var(--sem-late-wash)] px-3 py-2 text-[12.5px]">
               <Codicon className="mt-0.5 shrink-0" name="warning" />
               <span>{recorder.error}</span>
             </div>

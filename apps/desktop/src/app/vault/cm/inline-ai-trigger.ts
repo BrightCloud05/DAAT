@@ -35,7 +35,12 @@ export function inlineAiTrigger(): Extension {
     {
       key: 'Mod-i',
       run: view => {
-        openInlineAiAt(view.state.selection.main.head)
+        const { from, to } = view.state.selection.main
+
+        // With text selected this is "rewrite this", not "write something
+        // here" — the selection used to be dropped on the floor, so asking
+        // to shorten a paragraph appended a second one instead.
+        openInlineAiAt(to, from === to ? undefined : { from, to })
 
         return true
       }

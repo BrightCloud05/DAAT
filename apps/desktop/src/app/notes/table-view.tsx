@@ -6,12 +6,13 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
 import { $vaultRevision, openNote } from '../vault/store'
+import { useVirtualRows } from './virtual-rows'
 import { closeTableView } from './view-store'
 
 interface TableRow {
@@ -21,16 +22,18 @@ interface TableRow {
   props: Record<string, unknown>
 }
 
-// Notion's pastel pill palette — hash a value to a stable color.
+// Tag pills — hash a value to a stable colour. The set is defined in
+// styles.css so it can differ per theme; this used to inline Notion's
+// pastel palette, which meant eight saturated iOS hues on paper stock.
 const PILL_COLORS = [
-  'rgba(255, 115, 105, 0.22)',
-  'rgba(255, 159, 10, 0.22)',
-  'rgba(255, 214, 10, 0.26)',
-  'rgba(48, 209, 88, 0.20)',
-  'rgba(100, 210, 255, 0.22)',
-  'rgba(10, 132, 255, 0.18)',
-  'rgba(191, 90, 242, 0.20)',
-  'rgba(172, 142, 104, 0.24)'
+  'var(--pill-1)',
+  'var(--pill-2)',
+  'var(--pill-3)',
+  'var(--pill-4)',
+  'var(--pill-5)',
+  'var(--pill-6)',
+  'var(--pill-7)',
+  'var(--pill-8)'
 ]
 
 function pillColor(value: string): string {
@@ -91,6 +94,9 @@ function formatDate(mtimeMs: number): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+/** Rendered row height. Must match the `py` on the cells below. */
+const ROW_PX = 29
+
 export function TableView() {
   const revision = useStore($vaultRevision)
   const [rows, setRows] = useState<TableRow[]>([])
@@ -131,6 +137,8 @@ export function TableView() {
       .map(([key]) => key)
   }, [rows])
 
+  const scrollerRef = useRef<HTMLDivElement | null>(null)
+
   const sorted = useMemo(() => {
     const copy = [...rows]
 
@@ -160,6 +168,13 @@ export function TableView() {
 
     return copy
   }, [rows, sortKey, sortAsc])
+
+  // Only the rows on screen (plus a screenful either side, so a fast scroll
+  // doesn't reach empty space before React catches up).
+  const virtual = useVirtualRows(scrollerRef, sorted.length, ROW_PX)
+  const windowed = sorted.slice(virtual.start, virtual.end)
+  const padTop = virtual.start * ROW_PX
+  const padBottom = Math.max(0, (sorted.length - virtual.end) * ROW_PX)
 
   const toggleSort = (key: string) => {
     if (sortKey === key) {
@@ -198,7 +213,12 @@ export function TableView() {
           </button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-6 pb-10">
+      {/* Virtualised. Rendering every row put 160k nodes on the page and took
+          five seconds to open a 10k-note vault — the table is the one screen
+          that scales with the whole library rather than a slice of it.
+          Rows are a fixed height, so the measurement is a multiplication and
+          the scrollbar stays honest. */}
+      <div className="min-h-0 flex-1 overflow-auto px-6 pb-10" ref={scrollerRef}>
         <table className="mx-auto w-full max-w-[64rem] border-separate border-spacing-0">
           <thead className="sticky top-0 z-10 bg-(--ui-bg-editor)">
             <tr>
@@ -208,8 +228,9 @@ export function TableView() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map(row => (
-              <tr key={row.path} className="group">
+            {padTop > 0 && <tr style={{ height: padTop }} aria-hidden />}
+            {windowed.map(row => (
+              <tr key={row.path} className="group" style={{ height: ROW_PX }}>
                 <td className="max-w-[18rem] border-b border-(--stroke-nous) px-1 py-0.5">
                   <button
                     className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px] font-medium transition-colors hover:bg-(--ui-control-hover-background)"
@@ -232,6 +253,7 @@ export function TableView() {
                 </td>
               </tr>
             ))}
+            {padBottom > 0 && <tr style={{ height: padBottom }} aria-hidden />}
           </tbody>
         </table>
         {!sorted.length && (

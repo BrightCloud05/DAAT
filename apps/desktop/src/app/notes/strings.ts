@@ -142,6 +142,25 @@ const EN = {
   dropAnything: 'You can also drop a timetable, a PDF or a photo anywhere on this window.',
   send: 'Send',
   skipQuestion: 'Skip',
+  savedPreference: "Noted — I'll work that way",
+  editWithAi: 'Edit with AI',
+  graph: 'Graph',
+  graphCount: (notes: number, links: number) =>
+    `${notes} page${notes === 1 ? '' : 's'} · ${links} link${links === 1 ? '' : 's'}`,
+  graphLinkCount: (n: number) => `${n} link${n === 1 ? '' : 's'}`,
+  graphRecenter: 'Recentre',
+  graphEmptyTitle: 'Nothing linked yet.',
+  graphEmptyBody:
+    'Type [[ in any page to link to another. Every link you make shows up here as a line between them.',
+  emptyEditorTitle: 'Nothing open yet.',
+  emptyEditorBody: "Pick a page on the left, or start today's — it's the one most people open first.",
+  openTodaysPage: "Open today's page",
+  aiRewrote: 'Rewritten by AI.',
+  aiWrote: 'Written by AI.',
+  aiUndone: 'Put back.',
+  // Not `startWriting` — that one is the empty-editor placeholder, and reusing
+  // it made this button read "Type here" in Korean.
+  openNotes: 'Open my notes',
   setupDoneTitle: "That's your setup done.",
   setupDoneBody:
     'Everything is a plain markdown file in your folder — edit or delete any of it. Press ⌘J any time to ask ' +
@@ -274,6 +293,21 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   dropAnything: '시간표, PDF, 사진을 이 창 아무 데나 끌어다 놓아도 됩니다.',
   send: '보내기',
   skipQuestion: '건너뛰기',
+  savedPreference: '알겠습니다 — 그렇게 할게요',
+  editWithAi: 'AI로 고치기',
+  graph: '그래프',
+  graphCount: (notes: number, links: number) => `페이지 ${notes}개 · 링크 ${links}개`,
+  graphLinkCount: (n: number) => `링크 ${n}개`,
+  graphRecenter: '가운데로',
+  graphEmptyTitle: '아직 이어진 게 없습니다.',
+  graphEmptyBody: '아무 페이지에서나 [[ 를 입력하면 다른 페이지로 이어집니다. 이어질 때마다 여기에 선으로 나타납니다.',
+  emptyEditorTitle: '아직 열어 둔 게 없습니다.',
+  emptyEditorBody: '왼쪽에서 페이지를 고르거나, 오늘 날짜로 시작해 보세요 — 대부분 여기서 시작합니다.',
+  openTodaysPage: '오늘 페이지 열기',
+  aiRewrote: 'AI가 고쳐 썼습니다.',
+  aiWrote: 'AI가 썼습니다.',
+  aiUndone: '되돌렸습니다.',
+  openNotes: '내 노트 열기',
   setupDoneTitle: '설정이 끝났습니다.',
   setupDoneBody:
     '전부 내 폴더 안의 일반 마크다운 파일입니다 — 수정하거나 지워도 됩니다. 다른 게 필요하면 언제든 ⌘J 를 눌러 주세요.',

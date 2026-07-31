@@ -18,6 +18,7 @@ import { VaultEditorPane } from '../vault/editor-pane'
 import { $activeNote, $vaultNotes, createNote } from '../vault/store'
 import { CalendarView } from './calendar-view'
 import { MeetingsView } from './meetings-view'
+import { GraphView } from './graph-view'
 import { HomeView } from './home-view'
 import { OnboardingWizard } from './onboarding-wizard'
 import { $onboarded } from './persona-store'
@@ -111,7 +112,9 @@ export function NotesShell() {
       <main className="relative flex min-w-0 flex-1 flex-col bg-(--ui-bg-editor)">
         <DocTopbar agentOpen={agentOpen} onToggleAgent={() => setAgentOpen(open => !open)} />
         <div className="min-h-0 flex-1">
-          {canvasView === 'home' ? (
+          {canvasView === 'graph' ? (
+            <GraphView />
+          ) : canvasView === 'home' ? (
             <HomeView />
           ) : canvasView === 'table' ? (
             <TableView />

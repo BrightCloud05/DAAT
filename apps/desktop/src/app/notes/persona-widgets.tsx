@@ -138,11 +138,11 @@ function AssessmentsCard() {
   const distance = (due: string): { text: string; tone?: string } => {
     const days = Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86_400_000)
 
-    if (days < 0) {return { text: s.daysLate(Math.abs(days)), tone: '#C0392B' }}
+    if (days < 0) {return { text: s.daysLate(Math.abs(days)), tone: 'var(--sem-late)' }}
 
-    if (days === 0) {return { text: s.dueToday, tone: '#C0392B' }}
+    if (days === 0) {return { text: s.dueToday, tone: 'var(--sem-late)' }}
 
-    if (days <= 7) {return { text: s.inDays(days), tone: '#B26A00' }}
+    if (days <= 7) {return { text: s.inDays(days), tone: 'var(--sem-soon)' }}
 
     return { text: s.inDays(days) }
   }

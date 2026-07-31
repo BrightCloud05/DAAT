@@ -141,20 +141,26 @@
   :root {
     color-scheme: light;
 
-    --theme-foreground: #17171a;
-    --theme-primary: #0053fd;
-    --theme-secondary: color-mix(in srgb, #0053fd 7%, #ffffff);
-    --theme-accent-soft: color-mix(in srgb, #0053fd 10%, #ffffff);
-    --theme-midground: #0053fd;
-    --theme-warm: #cf806d;
-    --theme-background-seed: #f8faff;
-    --theme-sidebar-seed: #f3f7ff;
-    --theme-card-seed: #ffffff;
-    --theme-elevated-seed: #ffffff;
-    --theme-bubble-seed: color-mix(in srgb, #0053fd 6%, #ffffff);
-    --theme-neutral-chrome: #f3f3f3;
-    --theme-neutral-sidebar: #f3f3f3;
-    --theme-neutral-card: #fcfcfc;
+    /* Paper and ink, measured off reMarkable's own site.
+       The one decision that carries the whole look: THERE IS NO ACCENT HUE.
+       `--theme-primary` is the ink, so every derived fill, stroke, hover and
+       selected state below is a warm grey of the text itself rather than a
+       blue that announces "software". Reintroducing a hue here undoes the
+       entire skin — tint the paper seeds instead. */
+    --theme-foreground: #211e1c;
+    --theme-primary: #211e1c;
+    --theme-secondary: #f3efe7;
+    --theme-accent-soft: #e7e1d5;
+    --theme-midground: #211e1c;
+    --theme-warm: #8c7f6a;
+    --theme-background-seed: #fcfbf8;
+    --theme-sidebar-seed: #f3efe7;
+    --theme-card-seed: #fcfbf8;
+    --theme-elevated-seed: #fcfbf8;
+    --theme-bubble-seed: #f3efe7;
+    --theme-neutral-chrome: #f3efe7;
+    --theme-neutral-sidebar: #f3efe7;
+    --theme-neutral-card: #fcfbf8;
     --theme-mix-chrome: 92%;
     --theme-mix-sidebar: 100%;
     --theme-mix-card: 22%;
@@ -378,6 +384,11 @@
     --dt-font-sans:
       'Segoe WPC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif,
       'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', emoji;
+    /* Headings only. reMarkable pairs a serif display face with a plain sans
+       body, which is most of why its pages read as a document rather than an
+       interface. Iowan Old Style and Charter both ship with macOS, so this
+       needs no bundled font and degrades to Palatino elsewhere. */
+    --dt-font-serif: 'Iowan Old Style', Charter, 'Palatino Linotype', Palatino, Georgia, serif;
     /* Key caps always use the native UI face — never theme typography overrides. */
     --dt-font-kbd: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
     /* JetBrains Mono first — the face we bundle (@font-face above) and the
@@ -391,12 +402,45 @@
     --dt-letter-spacing: 0;
     --dt-spacing-mul: 1;
 
-    --radius: 0.75rem;
-    /* Apple-soft pass: 0.85 puts the token scale at md≈8.5px, lg≈10px,
-       xl≈13.6px, 2xl≈20px — HIG-feel continuous curvature on cards, overlays,
-       and the composer. (History: an ungated leva slider used to pin 0.2,
-       rendering the whole app near-square.) */
-    --radius-scalar: 0.85;
+    /* ── Semantic + categorical washes ──────────────────────────────────
+       These carry meaning (overdue, income, a tag's identity) so they are
+       allowed hue where the rest of Paper is not — but they are NOT the
+       accent, and they stay muted on purpose. The screens used to hard-code
+       the iOS system palette here (#FF3B30, #34C759, #0A84FF and friends),
+       which on paper stock reads as a completely different product and
+       ignored the skin entirely. */
+    --sem-late: #a33a2a;
+    --sem-soon: #a8763a;
+    --sem-good: #4f7548;
+    --sem-late-wash: color-mix(in srgb, var(--sem-late) 14%, transparent);
+    --sem-soon-wash: color-mix(in srgb, var(--sem-soon) 16%, transparent);
+    --sem-good-wash: color-mix(in srgb, var(--sem-good) 14%, transparent);
+
+    /* Tag pills. A categorical set needs to stay distinguishable, so this
+       is eight muted earths at roughly equal lightness rather than eight
+       saturated hues shouting over each other. */
+    --pill-1: color-mix(in srgb, #b5654a 22%, transparent);
+    --pill-2: color-mix(in srgb, #b4894a 22%, transparent);
+    --pill-3: color-mix(in srgb, #8a8a45 22%, transparent);
+    --pill-4: color-mix(in srgb, #5f8055 22%, transparent);
+    --pill-5: color-mix(in srgb, #4e8080 22%, transparent);
+    --pill-6: color-mix(in srgb, #5c7391 22%, transparent);
+    --pill-7: color-mix(in srgb, #8a6688 22%, transparent);
+    --pill-8: color-mix(in srgb, #8b7361 22%, transparent);
+
+    /* Width of the editor's paper sheet: the 38rem reading measure plus a
+       page margin either side. Kept here so the gradient in editor-pane and
+       the column inside CodeMirror can never drift apart. */
+    --sheet-w: 44rem;
+
+    --radius: 0.125rem;
+    /* 0.2 puts md at exactly 2px — reMarkable's radius, which it uses on
+       essentially everything. Near-square is the intent, not a bug: soft
+       continuous curvature is what makes an app read as a SaaS dashboard,
+       and paper does not have rounded corners. (History: an ungated leva
+       slider once landed on this same value by accident and was reverted to
+       0.85. Do not revert it again.) */
+    --radius-scalar: 0.2;
 
     /* Space under last message vs overlay composer — driven by the measured composer height (see composer/index.tsx)
        plus the out-of-flow status stack's measured height (see status-stack/index.tsx) when one is showing.
@@ -487,9 +531,27 @@
     --theme-mix-card: 38%;
     --theme-mix-elevated: 46%;
     --theme-mix-bubble: 46%;
-    --theme-neutral-chrome: #0d0d0e;
-    --theme-neutral-sidebar: #0a0a0b;
-    --theme-neutral-card: #161618;
+    /* Dark is the same paper stock under low light, not a different material:
+       warm near-blacks rather than the neutral greys this used to ship, so the
+       ink/paper relationship survives the flip. */
+    --theme-neutral-chrome: #17150f;
+    --theme-neutral-sidebar: #121009;
+    --theme-neutral-card: #1e1b16;
+
+    /* The light seeds put the ink in `--theme-primary`; unflipped, every
+       button and selected row would be dark-on-dark. Paper becomes the ink. */
+    --theme-foreground: #ece6da;
+    --theme-primary: #e7e1d5;
+    --theme-secondary: #2a261f;
+    --theme-accent-soft: #322d25;
+    --theme-midground: #e7e1d5;
+    --theme-warm: #a8998a;
+    --theme-background-seed: #17150f;
+    --theme-sidebar-seed: #121009;
+    --theme-card-seed: #1e1b16;
+    --theme-elevated-seed: #23201a;
+    --theme-bubble-seed: #23201a;
+    --dt-primary-foreground: #17150f;
 
     /* Dark-only accent palette overrides. */
     --ui-red: #e75e78;
@@ -510,6 +572,23 @@
     --ui-inline-code-background: color-mix(in srgb, #ffffff 7%, transparent);
     --ui-inline-code-foreground: color-mix(in srgb, #ffffff 88%, transparent);
     --ui-selection-background: color-mix(in srgb, #ffd24a 38%, transparent);
+
+    --sem-late: #c4634e;
+    --sem-soon: #c9a061;
+    --sem-good: #7fa876;
+    --sem-late-wash: color-mix(in srgb, var(--sem-late) 22%, transparent);
+    --sem-soon-wash: color-mix(in srgb, var(--sem-soon) 22%, transparent);
+    --sem-good-wash: color-mix(in srgb, var(--sem-good) 20%, transparent);
+    /* Lighter hues and more alpha, or an earth tone at 22% simply vanishes
+       into a dark ground. */
+    --pill-1: color-mix(in srgb, #d08769 26%, transparent);
+    --pill-2: color-mix(in srgb, #cfa669 26%, transparent);
+    --pill-3: color-mix(in srgb, #a8a862 26%, transparent);
+    --pill-4: color-mix(in srgb, #7fa373 26%, transparent);
+    --pill-5: color-mix(in srgb, #6ba0a0 26%, transparent);
+    --pill-6: color-mix(in srgb, #7b93b3 26%, transparent);
+    --pill-7: color-mix(in srgb, #ab86a9 26%, transparent);
+    --pill-8: color-mix(in srgb, #ac9280 26%, transparent);
   }
 
   * {

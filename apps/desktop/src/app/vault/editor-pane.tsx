@@ -20,14 +20,17 @@ import { foldGutter, foldKeymap } from '@codemirror/language'
 
 import { BacklinksSection } from '../notes/backlinks-section'
 import { BlockHandlesOverlay } from '../notes/block-handles-overlay'
+import { AiUndoBar, SelectionHint } from '../notes/ai-affordances'
 import { InlineAiOverlay } from '../notes/inline-ai-overlay'
 import { PageIcon } from '../notes/page-icon'
+import { openDailyNote } from '../notes/templates'
 import { PropertiesPanel } from '../notes/properties-panel'
 import { TemplateSuggestions } from '../notes/template-suggestions'
 
 import { blockHandles } from './cm/block-handles'
 import { callouts } from './cm/callouts'
 import { inlineAiTrigger } from './cm/inline-ai-trigger'
+import { selectionHint } from './cm/selection-hint'
 import { bumpDocEpoch, setEditorView } from './editor-bridge'
 import { livePreview } from './cm/live-preview'
 import { markdownStyling } from './cm/markdown-style'
@@ -44,7 +47,9 @@ import {
   dismissConflict,
   flushActiveNote,
   noteEdited,
-  openNote
+  openNote,
+  newUntitledPath,
+  $vaultNotes
 } from './store'
 
 async function openWikilink(target: string): Promise<void> {
@@ -58,6 +63,14 @@ async function openWikilink(target: string): Promise<void> {
     await createNote(target)
   }
 }
+
+/**
+ * Reading measure. 46rem ran to roughly 95 characters a line — comfortable for
+ * a code editor, tiring for prose. 38rem lands near 70, which is the width
+ * reMarkable and most typographers settle on. The title block below shares the
+ * constant so the heading can never sit wider than the text it titles.
+ */
+const MEASURE = '38rem'
 
 const editorTheme = EditorView.theme({
   '&': {
@@ -105,11 +118,11 @@ const editorTheme = EditorView.theme({
   },
   '.cm-scroller': {
     fontFamily: 'inherit',
-    lineHeight: '1.65',
-    padding: '0.25rem 1.5rem 40vh'
+    lineHeight: '1.7',
+    padding: '0.25rem 2.5rem 40vh'
   },
   '.cm-content': {
-    maxWidth: '46rem',
+    maxWidth: MEASURE,
     margin: '0 auto',
     caretColor: 'var(--ui-accent)'
   },
@@ -215,6 +228,7 @@ export function VaultEditorPane() {
         extensions: [
           history(),
           inlineAiTrigger(),
+          selectionHint(),
           keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
           markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [wikiLinkExtension] }),
           markdownStyling,
@@ -257,9 +271,30 @@ export function VaultEditorPane() {
 
   if (!active) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-center opacity-60">
-        <Codicon name="notebook" className="text-3xl" />
-        <div className="text-sm">{s.selectANote}</div>
+      /* An empty screen is still a screen. This used to be a large glyph over
+         one dimmed line, which tells the user nothing they can act on — so
+         it now says what to do and offers the page they were most likely
+         about to make. No icon: a giant notebook mark is the same species as
+         the logo we took out everywhere else. */
+      <div className="flex h-full flex-col items-center justify-center bg-(--ui-bg-sidebar) px-8">
+        <div className="w-full max-w-[24rem]">
+          <p className="m-0 font-(--dt-font-serif) text-[22px] leading-snug">{s.emptyEditorTitle}</p>
+          <p className="mt-2 mb-0 text-[13.5px] leading-relaxed opacity-55">{s.emptyEditorBody}</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <button
+              className="rounded-xs bg-(--dt-primary) px-3.5 py-1.5 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-85"
+              onClick={() => void openDailyNote()}
+            >
+              {s.openTodaysPage}
+            </button>
+            <button
+              className="rounded-xs border border-(--stroke-nous) px-3.5 py-1.5 text-[13px] transition-colors hover:bg-(--ui-control-hover-background)"
+              onClick={() => void createNote(newUntitledPath($vaultNotes.get()))}
+            >
+              {s.newPage}
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -267,14 +302,34 @@ export function VaultEditorPane() {
   const title = active.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '') ?? active.path
 
   return (
-    <div className="flex h-full flex-col">
+    /**
+     * A sheet of paper on a desk, not a wall of colour edge to edge.
+     *
+     * Painted as a background gradient rather than a wrapper element: the
+     * sheet has to run the full height behind both the title block and the
+     * scrolling editor, and those are siblings. A real element would have to
+     * be positioned behind both and would fight CodeMirror for the scroll.
+     * Two hairline stops give it its edges.
+     */
+    <div
+      className="flex h-full flex-col bg-(--ui-bg-sidebar)"
+      style={{
+        backgroundImage:
+          'linear-gradient(to right,' +
+          ' transparent 0 calc(50% - var(--sheet-w) / 2),' +
+          ' var(--stroke-nous) calc(50% - var(--sheet-w) / 2) calc(50% - var(--sheet-w) / 2 + 1px),' +
+          ' var(--dt-card) calc(50% - var(--sheet-w) / 2 + 1px) calc(50% + var(--sheet-w) / 2 - 1px),' +
+          ' var(--stroke-nous) calc(50% + var(--sheet-w) / 2 - 1px) calc(50% + var(--sheet-w) / 2),' +
+          ' transparent calc(50% + var(--sheet-w) / 2))'
+      }}
+    >
       {/* Notion-style document header: emoji icon + big title (design 2a). */}
-      <div className="group shrink-0 px-6 pt-9 pb-1">
-        <div className="mx-auto max-w-[46rem]">
+      <div className="group shrink-0 px-10 pt-16 pb-2">
+        <div className="mx-auto max-w-[38rem]">
           <PageIcon />
         </div>
-        <div className="mx-auto flex max-w-[46rem] items-baseline gap-3">
-          <h1 className="min-w-0 flex-1 truncate text-[28px] font-bold leading-tight tracking-tight">{title}</h1>
+        <div className="mx-auto flex max-w-[38rem] items-baseline gap-3">
+          <h1 className="min-w-0 flex-1 truncate text-[28px] font-(--dt-font-serif) font-medium leading-tight tracking-[-0.01em]">{title}</h1>
           {active.dataless ? (
             <span className="flex items-center gap-1 text-[10px] opacity-60">
               <Codicon name="cloud-download" /> {s.downloadingFromICloud}
@@ -295,7 +350,7 @@ export function VaultEditorPane() {
           editor and still being retried, but silence here is how people lose
           an afternoon's writing to a full disk or an offline volume. */}
       {saveError ? (
-        <div className="flex items-center gap-2 border-b border-(--stroke-nous) bg-[rgba(255,59,48,0.10)] px-4 py-1.5 text-xs">
+        <div className="flex items-center gap-2 border-b border-(--stroke-nous) bg-(--sem-late-wash) px-4 py-1.5 text-xs">
           <Codicon name="warning" />
           <span className="min-w-0 flex-1 truncate">
             {s.saveFailed(saveError)}
@@ -332,7 +387,9 @@ export function VaultEditorPane() {
       <div className="relative min-h-0 flex-1">
         <div ref={attachHost} className="h-full overflow-hidden" />
         <BlockHandlesOverlay />
+        <SelectionHint />
         <InlineAiOverlay />
+        <AiUndoBar />
       </div>
     </div>
   )

@@ -18,7 +18,7 @@ import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { VaultLink, VaultNote, VaultSearchHit } from './vault-types'
+import type { VaultGraph, VaultGraphEdge, VaultLink, VaultNote, VaultSearchHit } from './vault-types'
 import type { ParsedNote } from './vault-parser'
 
 export const SNIPPET_START = ''
@@ -293,6 +293,77 @@ export class VaultIndex {
       targetPath: this.resolveWikilink(row.targetRaw),
       line: row.line
     }))
+  }
+
+  /**
+   * The whole link graph in two queries.
+   *
+   * Built here rather than by asking for each note's links in turn: a vault
+   * of a few thousand notes would be a few thousand IPC round-trips, and the
+   * graph screen is the one place that wants every edge at once.
+   *
+   * Targets resolve through the same three keys `backlinks` uses (path, file
+   * name, title), so a `[[Note]]` written any of those ways lands on the same
+   * node. Links to notes that don't exist yet are dropped — Obsidian draws
+   * those as ghosts, but an unresolved edge here would point at nothing the
+   * user can open.
+   */
+  linkGraph(): VaultGraph {
+    const notes = this.db
+      .prepare('SELECT path, title, path_key, name_key, title_key FROM notes ORDER BY path')
+      .all() as Array<{ path: string; title: string; path_key: string; name_key: string; title_key: string }>
+
+    const byKey = new Map<string, string>()
+
+    for (const note of notes) {
+      // Path is the most specific, so it must win a collision with a bare
+      // name or title shared by two notes in different folders.
+      byKey.set(note.name_key, note.path)
+      byKey.set(note.title_key, note.path)
+      byKey.set(note.path_key, note.path)
+    }
+
+    const rows = this.db.prepare('SELECT source, target_key FROM links').all() as Array<{
+      source: string
+      target_key: string
+    }>
+
+    const seen = new Set<string>()
+    const edges: VaultGraphEdge[] = []
+
+    for (const row of rows) {
+      const target = byKey.get(row.target_key)
+
+      if (!target || target === row.source) {
+        continue
+      }
+
+      // One edge per pair per direction, however many times it is written.
+      const key = `${row.source}\u0000${target}`
+
+      if (seen.has(key)) {
+        continue
+      }
+
+      seen.add(key)
+      edges.push({ source: row.source, target })
+    }
+
+    const degree = new Map<string, number>()
+
+    for (const edge of edges) {
+      degree.set(edge.source, (degree.get(edge.source) ?? 0) + 1)
+      degree.set(edge.target, (degree.get(edge.target) ?? 0) + 1)
+    }
+
+    return {
+      nodes: notes.map(note => ({
+        path: note.path,
+        title: note.title,
+        degree: degree.get(note.path) ?? 0
+      })),
+      edges
+    }
   }
 
   search(query: string, limit = 50): VaultSearchHit[] {

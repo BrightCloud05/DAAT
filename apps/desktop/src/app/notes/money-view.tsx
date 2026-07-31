@@ -17,14 +17,14 @@ import { closeTableView } from './view-store'
 import { $productLocale, productStrings } from './strings'
 
 const CATEGORY_TONES = [
-  'rgba(255,115,105,0.22)',
-  'rgba(255,159,10,0.22)',
-  'rgba(255,214,10,0.26)',
-  'rgba(48,209,88,0.20)',
-  'rgba(100,210,255,0.22)',
-  'rgba(10,132,255,0.18)',
-  'rgba(191,90,242,0.20)',
-  'rgba(172,142,104,0.24)'
+  'var(--pill-1)',
+  'var(--pill-2)',
+  'var(--pill-3)',
+  'var(--pill-4)',
+  'var(--pill-5)',
+  'var(--pill-6)',
+  'var(--pill-7)',
+  'var(--pill-8)'
 ]
 
 function toneFor(value: string): string {
@@ -131,7 +131,7 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
     >
       <div className="mx-auto w-full max-w-[56rem] px-6 pb-12 pt-8">
         <div className="mb-5 flex items-baseline gap-3">
-          <h1 className="text-[28px] font-bold tracking-tight">Money</h1>
+          <h1 className="text-[28px] font-(--dt-font-serif) font-medium tracking-[-0.01em]">Money</h1>
           {months.length > 1 ? (
             <select
               className="rounded-md bg-(--ui-control-hover-background) px-2 py-0.5 text-[12.5px] outline-none"
@@ -178,8 +178,8 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
         {rows.length ? (
           <div className="mb-6 grid grid-cols-3 gap-4">
             {[
-              { label: s.moneyIn, value: totals.income, tone: '#1F7A3D' },
-              { label: s.moneyOut, value: -totals.spend, tone: '#C0392B' },
+              { label: s.moneyIn, value: totals.income, tone: 'var(--sem-good)' },
+              { label: s.moneyOut, value: -totals.spend, tone: 'var(--sem-late)' },
               { label: s.moneyNet, value: totals.net, tone: undefined }
             ].map(card => (
               <div key={card.label} className="rounded-xl border border-(--stroke-nous) p-4">
@@ -231,7 +231,7 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
                   </td>
                   <td
                     className="whitespace-nowrap border-b border-(--stroke-nous) px-2.5 py-1.5 text-right text-[13px] font-medium"
-                    style={{ color: row.amount >= 0 ? '#1F7A3D' : undefined }}
+                    style={{ color: row.amount >= 0 ? 'var(--sem-good)' : undefined }}
                   >
                     {formatAmount(row.amount)}
                   </td>
@@ -258,7 +258,7 @@ export function MoneyView({ onAskAgent }: { onAskAgent?: (prompt: string) => voi
                   >
                     {entry.category}
                   </span>
-                  <span className="ml-auto font-medium" style={{ color: entry.total >= 0 ? '#1F7A3D' : undefined }}>
+                  <span className="ml-auto font-medium" style={{ color: entry.total >= 0 ? 'var(--sem-good)' : undefined }}>
                     {formatAmount(entry.total)}
                   </span>
                 </div>

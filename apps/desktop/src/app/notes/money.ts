@@ -95,9 +95,22 @@ export function emptyMonthNote(month: string): string {
  * skipping rows already present (same date + amount + description).
  */
 export function appendRows(content: string, rows: Transaction[]): { content: string; added: number; skipped: number } {
-  const existing = new Set(
-    parseMonthNote('', content).map(row => `${row.date}|${row.amount}|${row.description.toLowerCase()}`)
-  )
+  // Counted, not a Set. Two genuinely separate transactions can share a date,
+  // an amount and a description — two coffees at the same café, two identical
+  // fares, two ATM withdrawals — and a Set silently dropped the second one and
+  // reported it as an already-present duplicate. The user's totals then came
+  // out short with nothing on screen to say so.
+  //
+  // Matching on multiplicity keeps the property the dedupe was there for
+  // (re-importing the same statement adds nothing) while letting a statement
+  // that really does contain the row twice land twice.
+  const remaining = new Map<string, number>()
+
+  for (const row of parseMonthNote('', content)) {
+    const key = `${row.date}|${row.amount}|${row.description.toLowerCase()}`
+
+    remaining.set(key, (remaining.get(key) ?? 0) + 1)
+  }
 
   let next = content
 
@@ -111,13 +124,16 @@ export function appendRows(content: string, rows: Transaction[]): { content: str
 
   for (const row of rows) {
     const key = `${row.date}|${row.amount}|${row.description.toLowerCase()}`
+    const alreadyThere = remaining.get(key) ?? 0
 
-    if (existing.has(key)) {
+    // Consume one copy per match, so the Nth identical incoming row is only
+    // skipped if the note already holds an Nth copy of it.
+    if (alreadyThere > 0) {
+      remaining.set(key, alreadyThere - 1)
       skipped += 1
       continue
     }
 
-    existing.add(key)
     added += 1
     lines.push(
       `| ${row.date} | ${row.description.replace(/\|/g, '/')} | ${row.category.replace(/\|/g, '/')} | ${row.amount.toFixed(2)} |`

@@ -195,7 +195,7 @@ function ConversationPill({
           type="button"
           variant="ghost"
         >
-          <Codicon name={muted ? 'mic-off' : 'mic'} size="1rem" />
+          <Codicon name={muted ? 'mute' : 'mic'} size="1rem" />
         </Button>
       </Tip>
       {listening && (

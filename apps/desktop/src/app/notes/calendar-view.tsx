@@ -29,9 +29,9 @@ import { $productLocale, productStrings } from './strings'
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const KIND_TONE: Record<CalendarEntry['kind'], string> = {
-  task: 'rgba(255,149,0,0.20)',
-  daily: 'rgba(10,132,255,0.16)',
-  note: 'rgba(120,120,128,0.16)'
+  task: 'var(--sem-soon-wash)',
+  daily: 'var(--ui-control-active-background)',
+  note: 'var(--ui-control-hover-background)'
 }
 
 export function CalendarView() {
@@ -101,7 +101,7 @@ export function CalendarView() {
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[64rem] flex-col px-6 pb-12 pt-8">
         <div className="mb-5 flex items-center gap-3">
-          <h1 className="text-[28px] font-bold tracking-tight">{monthLabel(cursor.year, cursor.month)}</h1>
+          <h1 className="text-[28px] font-(--dt-font-serif) font-medium tracking-[-0.01em]">{monthLabel(cursor.year, cursor.month)}</h1>
 
           <div className="ml-auto flex items-center gap-1">
             <button
@@ -163,7 +163,7 @@ export function CalendarView() {
                 <span
                   className={cn(
                     'grid size-[20px] shrink-0 place-items-center rounded-full text-[12px]',
-                    cell.isToday ? 'bg-(--dt-primary) font-semibold text-white' : 'opacity-70'
+                    cell.isToday ? 'bg-(--dt-primary) font-semibold text-(--dt-primary-foreground)' : 'opacity-70'
                   )}
                 >
                   {cell.day}
@@ -217,7 +217,7 @@ export function CalendarView() {
                         style={
                           entry.done
                             ? { backgroundColor: 'var(--dt-primary)', borderColor: 'var(--dt-primary)' }
-                            : { borderColor: 'rgba(120,120,128,0.35)' }
+                            : { borderColor: 'var(--ui-stroke-secondary)' }
                         }
                         onClick={() => {
                           const todo = todos.find(item => item.path === entry.path && item.line === entry.line)

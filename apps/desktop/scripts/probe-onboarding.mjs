@@ -120,7 +120,7 @@ const asked = await page.evaluate(() => {
   return { text: big?.textContent ?? '', px: big ? getComputedStyle(big).fontSize : null }
 })
 
-check('the first question is asked', asked.text.includes('clients are you working on'))
+check('the first question is asked', asked.text.includes("what you're working on at the moment"))
 check('it is set large', asked.px === '24px')
 check('there is somewhere to answer', (await page.locator('textarea').count()) > 0)
 check('progress is shown', await page.evaluate(() => /\d \/ \d/.test(document.body.innerText)))
@@ -129,21 +129,37 @@ check('files can be handed over', await page.evaluate(() =>
   document.body.textContent?.includes('drop a timetable') ?? false
 ))
 
-// HERMES_DESKTOP_BOOT_FAKE means no live gateway, so the assistant cannot
-// answer here. What matters is that it fails in words, not a blank screen.
-await page.waitForTimeout(6000)
+// Skipping must land on the next question, not on the done screen. This broke
+// once during the step-based rewrite and looked like a blank panel.
+await page.locator('button', { hasText: 'Skip' }).last().click()
+await page.waitForTimeout(1200)
 
-const conversation = await page.evaluate(() => document.body.textContent ?? '')
+const second = await page.evaluate(() => {
+  const big = [...document.querySelectorAll('p')].find(p => parseFloat(getComputedStyle(p).fontSize) >= 22)
 
-check(
-  'a missing assistant is explained, not silent',
-  conversation.includes('still starting up') ||
-    conversation.includes('Could not reach') ||
-    conversation.includes('did not start') ||
-    /[a-z]{20,}/i.test(conversation)
-)
+  return { text: big?.textContent ?? '', boxes: document.querySelectorAll('textarea').length }
+})
 
-await page.locator('button', { hasText: "I'm done" }).first().click()
+check('skipping advances to the second question', second.text.includes('How should I handle your work'))
+check('the second question still has an input', second.boxes > 0)
+check('progress counts up', await page.evaluate(() => document.body.innerText.includes('2 / 2')))
+
+// The preferences answer is the one thing here that needs no model: it goes
+// straight into SOUL.md, so it must work even with no gateway at all.
+const PREFERENCE = 'Never guess a number. Always cite the workpaper.'
+
+await page.locator('textarea').last().fill(PREFERENCE)
+await page.keyboard.press('Enter')
+await page.waitForTimeout(3000)
+
+check('the answer is acknowledged, not echoed as chat', await page.evaluate(() =>
+  document.body.innerText.includes("Noted — I'll work that way")
+))
+check('setup reports itself finished', await page.evaluate(() =>
+  document.body.innerText.includes('Open my notes')
+))
+
+await page.locator('button', { hasText: 'Open my notes' }).first().click()
 await page.waitForTimeout(1500)
 
 check('the wizard closes', (await page.locator('h1', { hasText: 'What will you use Daat' }).count()) === 0)
@@ -176,6 +192,14 @@ for (let attempt = 0; attempt < 10 && !soulWritten; attempt++) {
 }
 
 check('SOUL.md was written for the persona', soulWritten)
+
+// The whole point of the preferences question: the user's own words become the
+// assistant's standing instructions, appended rather than replacing the voice
+// the persona set up.
+const soul = soulWritten ? fs.readFileSync(soulPath, 'utf8') : ''
+
+check('the preference was saved verbatim', soul.includes(PREFERENCE))
+check("the persona's own voice survived it", soul.length > PREFERENCE.length + 200)
 
 // Re-launching must not show the wizard again.
 const persisted = await page.evaluate(() => localStorage.getItem('daat.onboarded.v1'))

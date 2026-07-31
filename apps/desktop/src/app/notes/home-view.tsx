@@ -21,8 +21,7 @@ import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView, openCalendarView, openMailView, openMeetingsView, openMoneyView } from './view-store'
 import { $productLocale, productStrings } from './strings'
 
-const CARD =
-  'rounded-xl border border-(--stroke-nous) bg-(--dt-card) p-[18px] flex flex-col gap-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.03),0_10px_24px_-18px_rgba(0,0,0,0.22)]'
+const CARD = 'rounded-xs border border-(--stroke-nous) bg-(--dt-card) p-6 flex flex-col gap-4'
 const CARD_TITLE = 'text-[13px] font-semibold'
 const MUTED = 'text-xs opacity-50'
 
@@ -200,7 +199,7 @@ function MoneyCard() {
       </div>
       {totals && (totals.income || totals.spend) ? (
         <div className="flex flex-col gap-1">
-          <span className="text-[19px] font-semibold" style={{ color: totals.net >= 0 ? '#1F7A3D' : '#C0392B' }}>
+          <span className="text-[19px] font-semibold" style={{ color: totals.net >= 0 ? 'var(--sem-good)' : 'var(--sem-late)' }}>
             {formatAmount(totals.net)}
           </span>
           <span className={MUTED}>
@@ -257,30 +256,25 @@ export function HomeView() {
         <span className="ml-auto flex h-[26px] items-center gap-1.5 rounded-lg border border-(--stroke-nous) bg-(--dt-card) px-2.5 text-xs">
           <span
             className="size-1.5 rounded-full"
-            style={{ backgroundColor: aiConnected ? '#28C840' : 'rgba(120,120,128,0.4)' }}
+            style={{ backgroundColor: aiConnected ? 'var(--sem-good)' : 'var(--ui-stroke-secondary)' }}
           />
           {aiConnected ? 'AI connected' : 'AI connecting…'}
         </span>
       </div>
 
-      <div className="mx-auto flex w-full max-w-[1000px] flex-col gap-5 px-6 pb-10 pt-3">
-        {/* Morning briefing hero — conic-gradient border, real numbers. */}
-        <div
-          className="rounded-[13px] p-px"
-          style={{
-            background:
-              'conic-gradient(from 210deg at 30% 20%, rgba(0,122,255,0.55), rgba(90,200,250,0.42), rgba(191,90,242,0.40), rgba(255,159,10,0.26), rgba(0,122,255,0.55))',
-            boxShadow: '0 18px 40px -22px rgba(0,60,140,0.35)',
-            animation: 'daat-lift 200ms ease-out both'
-          }}
-        >
-          <div className="flex flex-col gap-4 rounded-xl bg-(--dt-card) px-[26px] py-6">
+      <div className="mx-auto flex w-full max-w-[62rem] flex-col gap-6 px-10 pb-20 pt-6">
+        {/* Morning briefing. This used to sit inside a rainbow conic-gradient
+            border under a blue glow — the single loudest thing in the app, and
+            the reason the whole screen read as generated. The numbers were
+            always the point; a hairline is enough to hold them. */}
+        <div style={{ animation: 'daat-lift 200ms ease-out both' }}>
+          <div className="flex flex-col gap-4 rounded-xs border border-(--stroke-nous) bg-(--dt-card) px-8 py-7">
             <div className="flex items-center gap-2">
               <Sparkle />
-              <span className="text-xs font-semibold tracking-wide text-(--dt-primary)">Briefing</span>
+              <span className="text-xs font-medium uppercase tracking-[0.09em] opacity-45">Briefing</span>
               <span className={MUTED}>{info?.name ?? 'vault'}</span>
             </div>
-            <p className="m-0 max-w-[46rem] text-xl leading-normal tracking-tight">
+            <p className="m-0 max-w-[46rem] font-(--dt-font-serif) text-[21px] leading-snug tracking-[-0.01em]">
               {notes.length ? (
                 <>
                   You have <strong className="font-semibold">{notes.length} pages</strong>,{' '}
@@ -299,14 +293,10 @@ export function HomeView() {
               ) : (
                 <>Welcome — create your first page and I'll keep the overview here.</>
               )}
-              <span
-                className="ml-[3px] inline-block h-[18px] w-[2px] align-[-3px]"
-                style={{ backgroundColor: 'var(--dt-primary)', animation: 'daat-caret 1.1s steps(1) infinite' }}
-              />
             </p>
             <div className="flex items-center gap-2">
               <button
-                className="flex h-[30px] items-center rounded-lg bg-(--dt-primary) px-3.5 text-[13px] font-medium text-white shadow-[0_4px_10px_-4px_rgba(0,122,255,0.6)] transition-opacity hover:opacity-90"
+                className="flex h-[30px] items-center rounded-xs bg-(--dt-primary) px-4 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-85"
                 onClick={() => void openDailyNote()}
               >
                 {hasDaily ? s.openTodaysPlan : s.startTodaysPlan}
@@ -337,7 +327,7 @@ export function HomeView() {
                     style={
                       todo.done
                         ? { backgroundColor: 'var(--dt-primary)', borderColor: 'var(--dt-primary)' }
-                        : { borderColor: 'rgba(120,120,128,0.35)' }
+                        : { borderColor: 'var(--ui-stroke-secondary)' }
                     }
                   >
                     {todo.done ? (

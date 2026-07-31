@@ -111,6 +111,10 @@ declare global {
         resolveWikilink: (targetRaw: string) => Promise<string | null>
         noteNames: () => Promise<Array<{ path: string; title: string; name: string }>>
         propertiesTable: () => Promise<Array<{ path: string; title: string; mtimeMs: number; props: Record<string, unknown> }>>
+      linkGraph: () => Promise<{
+        nodes: Array<{ path: string; title: string; degree: number }>
+        edges: Array<{ source: string; target: string }>
+      }>
         todos: (limit?: number) => Promise<Array<{ path: string; line: number; text: string; done: boolean }>>
         reportContext: (payload: { activeNote: string | null; selection: string }) => void
         toggleTodo: (relPath: string, line: number, text?: string) => Promise<boolean>

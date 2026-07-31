@@ -425,3 +425,19 @@ export function initVaultStore(): void {
     void flushActiveNote()
   })
 }
+
+/**
+ * A free "Untitled.md" name for a new page. Lives here rather than in the
+ * sidebar because the empty editor offers the same action, and two copies of
+ * a uniqueness rule is one copy too many.
+ */
+export function newUntitledPath(notes: VaultNote[]): string {
+  const existing = new Set(notes.map(note => note.path))
+  let name = 'Untitled.md'
+
+  for (let index = 2; existing.has(name); index++) {
+    name = `Untitled ${index}.md`
+  }
+
+  return name
+}
