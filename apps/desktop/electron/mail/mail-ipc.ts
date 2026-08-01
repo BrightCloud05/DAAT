@@ -29,15 +29,35 @@ export interface MailEnvelope {
   hasAttachment: boolean
 }
 
+/**
+ * Where himalaya is, if it is anywhere.
+ *
+ * PATH comes first. The previous version checked four hard-coded directories
+ * and nothing else, so anyone who installed via cargo (~/.cargo/bin) or a
+ * custom prefix was told Mail was not installed while `himalaya` ran fine in
+ * their terminal — with no way to tell why. The fixed list stays as a fallback
+ * because a GUI app launched from Finder inherits a very short PATH that often
+ * does not include Homebrew at all.
+ */
 function himalayaBinary(): string | null {
   const explicit = process.env.HIMALAYA_BIN?.trim()
 
-  if (explicit && fs.existsSync(explicit)) {
-    return explicit
+  // An explicit setting is an answer either way: pointing it at something that
+  // is not there means "not installed", not "go looking elsewhere". Tests and
+  // support use this to reproduce a machine without it.
+  if (explicit) {
+    return fs.existsSync(explicit) ? explicit : null
   }
 
+  const onPath = (process.env.PATH ?? '')
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map(dir => path.join(dir, 'himalaya'))
+
   const candidates = [
+    ...onPath,
     path.join(os.homedir(), '.local', 'bin', 'himalaya'),
+    path.join(os.homedir(), '.cargo', 'bin', 'himalaya'),
     '/opt/homebrew/bin/himalaya',
     '/usr/local/bin/himalaya',
     '/usr/bin/himalaya'

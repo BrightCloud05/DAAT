@@ -19,6 +19,9 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'vitest'
 
+// The staging script is plain JS by design (it runs before any build step).
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-expect-error -- untyped build script
 import { declaredPackages } from '../scripts/stage-agent-source.mjs'
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -33,7 +36,7 @@ test('the package list is read from pyproject, not hard-coded', () => {
   assert.ok(packages.includes('hermes_cli'))
   assert.ok(packages.includes('agent'))
   assert.ok(packages.includes('plugins'))
-  assert.ok(!packages.some(name => name.includes('*')), 'glob forms are the same directory')
+  assert.ok(!packages.some((name: string) => name.includes('*')), 'glob forms are the same directory')
 })
 
 test('a pyproject without the include list fails loudly', () => {
@@ -42,7 +45,7 @@ test('a pyproject without the include list fails loudly', () => {
 })
 
 test.skipIf(!existsSync(staged))('every declared package is in the bundle', () => {
-  const missing = declaredPackages(pyproject()).filter(name => !existsSync(join(staged, name)))
+  const missing = declaredPackages(pyproject()).filter((name: string) => !existsSync(join(staged, name)))
 
   assert.deepEqual(missing, [], `these would be an ImportError on a user's machine: ${missing.join(', ')}`)
 })
