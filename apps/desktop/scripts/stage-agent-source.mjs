@@ -38,15 +38,12 @@ const here = dirname(fileURLToPath(import.meta.url))
 const desktopRoot = resolve(here, '..')
 const repoRoot = resolve(desktopRoot, '../..')
 
-/** Files at the repo root the agent needs at runtime or on install. */
-const ROOT_FILES = [
-  'pyproject.toml',
-  'uv.lock',
-  'LICENSE',
-  'cli.py',
-  'batch_runner.py',
-  'constraints-termux.txt'
-]
+/**
+ * Files at the repo root that are not Python modules.
+ *
+ * The root *modules* are read from pyproject — see declaredModules().
+ */
+const ROOT_FILES = ['pyproject.toml', 'uv.lock', 'LICENSE', 'constraints-termux.txt']
 
 /** Directories that are not Python packages but are needed all the same. */
 const EXTRA_DIRS = ['scripts', 'skills', 'prompts', 'personas']
@@ -73,6 +70,25 @@ export function declaredPackages(pyprojectToml) {
     .filter(name => !name.includes('*'))
 
   return [...new Set(names)]
+}
+
+/**
+ * The single-file modules at the repo root, from pyproject's own declaration.
+ *
+ * These were hard-coded once, and the list drifted: pyproject declares fourteen
+ * and the bundle shipped two. The venv installed cleanly and `hermes --version`
+ * then died on `No module named 'hermes_constants'` — a stranger's first launch,
+ * on a machine with no repo to fall back to. Same failure mode declaredPackages
+ * already guards against, one door down.
+ */
+export function declaredModules(pyprojectToml) {
+  const found = /^py-modules\s*=\s*\[([^\]]+)\]/m.exec(pyprojectToml)
+
+  if (!found) {
+    throw new Error('[stage-agent-source] could not read [tool.setuptools] py-modules from pyproject.toml')
+  }
+
+  return [...new Set([...found[1].matchAll(/"([^"]+)"/g)].map(match => `${match[1]}.py`))]
 }
 
 function copyTree(from, to) {
@@ -109,6 +125,7 @@ function sizeOf(dir) {
 export function stageAgentSource({ dest = resolve(desktopRoot, 'dist/agent-src') } = {}) {
   const pyproject = readFileSync(join(repoRoot, 'pyproject.toml'), 'utf8')
   const packages = declaredPackages(pyproject)
+  const modules = declaredModules(pyproject)
 
   rmSync(dest, { recursive: true, force: true })
   mkdirSync(dest, { recursive: true })
@@ -132,13 +149,21 @@ export function stageAgentSource({ dest = resolve(desktopRoot, 'dist/agent-src')
     copied.push(name)
   }
 
-  for (const file of ROOT_FILES) {
+  for (const file of [...modules, ...ROOT_FILES]) {
     const from = join(repoRoot, file)
 
-    if (existsSync(from)) {
-      cpSync(from, join(dest, file))
-      copied.push(file)
+    if (!existsSync(from)) {
+      // A declared module that is missing breaks `hermes` on first launch, so
+      // it fails the build here instead of on the buyer's machine.
+      if (modules.includes(file)) {
+        throw new Error(`[stage-agent-source] pyproject declares module "${file}" but it is not in the repo`)
+      }
+
+      continue
     }
+
+    cpSync(from, join(dest, file))
+    copied.push(file)
   }
 
   const megabytes = Math.round(sizeOf(dest) / 1024 / 1024)
