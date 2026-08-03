@@ -252,23 +252,51 @@ let submitHandler: ((payload: QuickEntrySubmitPayload) => void) | null = null
 let unsubscribeSubmit: (() => void) | null = null
 
 /**
+ * A prompt that arrived before anything could send it.
+ *
+ * "Ask the agent about this" opens the agent panel and submits, and the panel
+ * cannot register its handler until it has mounted. That gap used to be
+ * covered by guessing — submit after 120ms, retry once after another 400ms,
+ * then give up without a word. On a cold start the second attempt still lost
+ * the race, and the button did nothing at all.
+ *
+ * Holding the prompt until a handler exists replaces the guess with the fact.
+ */
+let pendingPrompt: QuickEntrySubmitPayload | null = null
+
+/**
  * Register the handler that turns a quick-window submit into a real send. The
  * primary window routes it by target: current chat → `submitText`, a stored
  * session id → resume + submit, new → fresh draft + submit.
  */
 export function setQuickEntrySubmitHandler(fn: ((payload: QuickEntrySubmitPayload) => void) | null): void {
   submitHandler = fn
+
+  if (fn && pendingPrompt) {
+    const queued = pendingPrompt
+
+    pendingPrompt = null
+    fn(queued)
+  }
 }
 
 /**
  * Send text to the agent from anywhere in the app (module screens' "ask the
  * agent" actions) through the SAME submit pipeline Quick Entry uses — one
- * path for every programmatic prompt, no bespoke RPC. Returns false when the
- * primary window hasn't registered a handler yet (secondary windows, boot).
+ * path for every programmatic prompt, no bespoke RPC.
+ *
+ * Returns whether the prompt was accepted: sent now, or held for the handler
+ * that is about to register. Only empty text is refused.
  */
 export function submitAgentPrompt(text: string, target: string = QUICK_TARGET_CURRENT): boolean {
-  if (!submitHandler || !text.trim()) {
+  if (!text.trim()) {
     return false
+  }
+
+  if (!submitHandler) {
+    pendingPrompt = { target, text }
+
+    return true
   }
 
   submitHandler({ target, text })

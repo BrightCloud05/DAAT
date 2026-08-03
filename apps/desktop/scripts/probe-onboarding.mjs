@@ -120,29 +120,23 @@ const asked = await page.evaluate(() => {
   return { text: big?.textContent ?? '', px: big ? getComputedStyle(big).fontSize : null }
 })
 
-check('the first question is asked', asked.text.includes("what you're working on at the moment"))
+// Setup asks one thing now. The question that made the agent build pages was
+// removed: it cost a model round-trip on the very first screen, and the agent
+// asks the same thing in chat straight afterwards anyway (see each persona's
+// kickoff). What is left needs no model at all.
+check('the one question is asked', asked.text.includes('How should I handle your work'))
 check('it is set large', asked.px === '24px')
 check('there is somewhere to answer', (await page.locator('textarea').count()) > 0)
-check('progress is shown', await page.evaluate(() => /\d \/ \d/.test(document.body.innerText)))
-check('a question can be skipped', await page.evaluate(() => document.body.innerText.includes('Skip')))
-check('files can be handed over', await page.evaluate(() =>
-  document.body.textContent?.includes('drop a timetable') ?? false
-))
-
-// Skipping must land on the next question, not on the done screen. This broke
-// once during the step-based rewrite and looked like a blank panel.
-await page.locator('button', { hasText: 'Skip' }).last().click()
-await page.waitForTimeout(1200)
-
-const second = await page.evaluate(() => {
-  const big = [...document.querySelectorAll('p')].find(p => parseFloat(getComputedStyle(p).fontSize) >= 22)
-
-  return { text: big?.textContent ?? '', boxes: document.querySelectorAll('textarea').length }
-})
-
-check('skipping advances to the second question', second.text.includes('How should I handle your work'))
-check('the second question still has an input', second.boxes > 0)
-check('progress counts up', await page.evaluate(() => document.body.innerText.includes('2 / 2')))
+check(
+  'a single question shows no progress counter',
+  await page.evaluate(() => !/\d \/ \d/.test(document.body.innerText)),
+  'counting to one is not progress'
+)
+check('the question can still be skipped', await page.evaluate(() => document.body.innerText.includes('Skip')))
+check(
+  'files can still be handed over',
+  await page.evaluate(() => document.body.textContent?.includes('drop a timetable') ?? false)
+)
 
 // The preferences answer is the one thing here that needs no model: it goes
 // straight into SOUL.md, so it must work even with no gateway at all.

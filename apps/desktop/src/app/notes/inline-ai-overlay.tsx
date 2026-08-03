@@ -57,6 +57,11 @@ export function InlineAiOverlay() {
   return (
     <div
       className="absolute z-30 w-[26rem] max-w-[85%] rounded-xl border border-(--stroke-nous) bg-(--dt-popover) shadow-nous"
+      // A stable hook for the probes. Selecting this bubble by its Tailwind
+      // classes made a probe silently match nothing and then fall back to
+      // searching the whole page, where the sidebar's own words let a broken
+      // run report itself as fine.
+      data-inline-ai={state.status}
       style={{ top: state.top, left: state.left }}
     >
       {state.status === 'prompt' ? (

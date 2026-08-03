@@ -15,6 +15,8 @@ import { activeGateway } from '@/store/gateway'
 import { $editorView } from '../vault/editor-bridge'
 import { $activeNote, $vaultInfo, flushActiveNote } from '../vault/store'
 
+import { TURN_SILENCE_TIMEOUT_MS } from './agent-turn'
+
 export const inlineAiInsert = Annotation.define<boolean>()
 
 export interface InlineAiState {
@@ -415,6 +417,43 @@ export async function runInlineAi(task: string): Promise<void> {
     await flushActiveNote()
   }
 
+  /** End the run and put the reason where the user will actually see it. */
+  const failWith = async (message: string) => {
+    await finish(false)
+    $inlineAi.set({
+      ...$inlineAi.get(),
+      status: 'prompt',
+      anchor: state.anchor,
+      range: state.range,
+      selected: state.selected,
+      top: state.top,
+      left: state.left,
+      error: message
+    })
+  }
+
+  /** Restart the silence watchdog. Any frame from the gateway counts as life. */
+  const heardFromTheModel = () => {
+    if (finished) {
+      return
+    }
+
+    if (graceTimer) {
+      clearTimeout(graceTimer)
+    }
+
+    graceTimer = setTimeout(() => {
+      // Text already on the page is the answer; keep it and close quietly.
+      // Nothing on the page means the user watched a spinner for five minutes
+      // and is owed a reason.
+      if (streamed > 0) {
+        void finish(true)
+      } else {
+        void failWith('The assistant stopped responding.')
+      }
+    }, TURN_SILENCE_TIMEOUT_MS)
+  }
+
   /** One insertion point for both paths, so the two can't drift apart. */
   const write = (text: string) => {
     view.dispatch({
@@ -431,6 +470,8 @@ export async function runInlineAi(task: string): Promise<void> {
     if (event.session_id !== sessionId) {
       return
     }
+
+    heardFromTheModel()
 
     if (event.type === 'message.delta') {
       const payload = event.payload as { text?: unknown } | undefined
@@ -456,7 +497,12 @@ export async function runInlineAi(task: string): Promise<void> {
     }
 
     if (event.type === 'error') {
-      void finish(false)
+      // Silently closing the overlay makes a failed run look identical to a run
+      // that decided to change nothing. Say what went wrong.
+      const payload = event.payload as { message?: unknown } | undefined
+      const message = typeof payload?.message === 'string' ? payload.message : 'Generation failed.'
+
+      void failWith(message)
     }
   })
 
@@ -495,27 +541,16 @@ export async function runInlineAi(task: string): Promise<void> {
   try {
     await gateway.request('prompt.submit', { session_id: sessionId, text: buildPrompt(task) }, PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
 
-    // The request resolving does not guarantee the last delta has arrived, so
-    // let message.complete terminate normally and only force the issue if it
-    // never comes — tearing down immediately truncated the output.
-    if (!finished) {
-      graceTimer = setTimeout(() => void finish(true), 1500)
-    }
+    // This resolving means the turn STARTED, not that the model has spoken —
+    // the gateway answers {"status": "streaming"} immediately. Reading it as
+    // "nearly done" and closing the run 1.5s later is what made Rewrite and
+    // Make shorter appear to do nothing: the answer landed after the
+    // subscription was already gone. message.complete ends the run; this only
+    // guards against a turn that never answers at all.
+    heardFromTheModel()
   } catch (error) {
     // Read the message before finish() resets the store, or the user is shown
     // nothing at all.
-    const message = error instanceof Error ? error.message : 'Generation failed.'
-
-    await finish(false)
-    $inlineAi.set({
-      ...$inlineAi.get(),
-      status: 'prompt',
-      anchor: state.anchor,
-      range: state.range,
-      selected: state.selected,
-      top: state.top,
-      left: state.left,
-      error: message
-    })
+    await failWith(error instanceof Error ? error.message : 'Generation failed.')
   }
 }

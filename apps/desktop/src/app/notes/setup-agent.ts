@@ -16,11 +16,12 @@
 
 import { atom } from 'nanostores'
 
-import { getProfileSoul, PROMPT_SUBMIT_REQUEST_TIMEOUT_MS, updateProfileSoul } from '@/hermes'
+import { getProfileSoul, updateProfileSoul } from '@/hermes'
 import { activeGateway } from '@/store/gateway'
 
 import { $vaultInfo, $vaultNotes, refreshVaultNotes } from '../vault/store'
 
+import { submitAndAwaitTurn } from './agent-turn'
 import type { Persona } from './personas'
 
 export interface SetupStep {
@@ -205,25 +206,21 @@ export async function answerQuestion(persona: Persona, answer: string): Promise<
 
   update({ status: 'working', error: null, activity: null })
 
-  try {
-    await gateway.request(
-      'prompt.submit',
-      {
-        session_id: sessionId,
-        text:
-          `The user was asked: "${question.ask}"\nThey answered: "${answer}"\n\n` +
-          `${question.instruction}\n\n` +
-          'Do the work now. Do not ask follow-up questions and do not explain — this runs behind a fixed ' +
-          'setup screen and your prose is not shown. Never invent a detail the user did not give.'
-      },
-      PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
-    )
-  } catch (error) {
-    update({
-      status: 'asking',
-      activity: null,
-      error: error instanceof Error ? error.message : 'The assistant stopped responding.'
-    })
+  // Wait for the turn to END, not merely to start. Submitting and moving on
+  // listed the created notes before the agent had written any (always none),
+  // and left the next question's submit racing a turn that was still running —
+  // which the gateway rejects outright as "session busy".
+  const turn = await submitAndAwaitTurn(
+    gateway,
+    sessionId,
+    `The user was asked: "${question.ask}"\nThey answered: "${answer}"\n\n` +
+      `${question.instruction}\n\n` +
+      'Do the work now. Do not ask follow-up questions and do not explain — this runs behind a fixed ' +
+      'setup screen and your prose is not shown. Never invent a detail the user did not give.'
+  )
+
+  if (turn.error) {
+    update({ status: 'asking', activity: null, error: turn.error })
 
     return
   }

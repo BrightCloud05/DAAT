@@ -6,37 +6,36 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 import { WiredPane } from '@/app/contrib/context'
+import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
+import { cn } from '@/lib/utils'
 import { submitAgentPrompt } from '@/store/quick-entry'
 
-import { AgentSessions } from './agent-sessions'
+import { VaultEditorPane } from '../vault/editor-pane'
+import { $activeNote, $vaultNotes, createNote, newUntitledPath } from '../vault/store'
 
+import { AgentSessions } from './agent-sessions'
+import { CalendarView } from './calendar-view'
+import { GraphView } from './graph-view'
+import { HomeView } from './home-view'
+import { MailView } from './mail-view'
+import { MeetingsView } from './meetings-view'
+import { MoneyView } from './money-view'
+import { OnboardingWizard } from './onboarding-wizard'
 import {
   $agentPanelOpen,
   $notesSidebarOpen,
   setAgentPanelOpen,
   toggleAgentPanel
 } from './panes-store'
-import { Button } from '@/components/ui/button'
-import { Codicon } from '@/components/ui/codicon'
-import { cn } from '@/lib/utils'
-
-import { VaultEditorPane } from '../vault/editor-pane'
-import { $activeNote, $vaultNotes, createNote } from '../vault/store'
-import { CalendarView } from './calendar-view'
-import { MeetingsView } from './meetings-view'
-import { GraphView } from './graph-view'
-import { HomeView } from './home-view'
-import { OnboardingWizard } from './onboarding-wizard'
 import { $onboarded } from './persona-store'
 import { NotesSidebar } from './sidebar'
 import { TableView } from './table-view'
-import { TodoView } from './todo-view'
-import { MailView } from './mail-view'
-import { MoneyView } from './money-view'
 import { openDailyNote } from './templates'
+import { TodoView } from './todo-view'
 import { DocTopbar } from './topbar'
 import { $canvasView } from './view-store'
 
@@ -55,12 +54,9 @@ export function NotesShell() {
   // pipeline, opening the panel so the user sees it happen.
   const askAgent = (prompt: string) => {
     setAgentOpen(true)
-    // Let the panel mount before the prompt lands in it.
-    setTimeout(() => {
-      if (!submitAgentPrompt(prompt)) {
-        setTimeout(() => submitAgentPrompt(prompt), 400)
-      }
-    }, 120)
+    // No timers: the prompt is held until the panel registers its handler, so
+    // a slow mount delays the send instead of losing it.
+    submitAgentPrompt(prompt)
   }
 
   useEffect(() => {
@@ -80,14 +76,7 @@ export function NotesShell() {
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
 
-        const existing = new Set($vaultNotes.get().map(note => note.path))
-        let name = 'Untitled.md'
-
-        for (let i = 2; existing.has(name); i++) {
-          name = `Untitled ${i}.md`
-        }
-
-        void createNote(name)
+        void createNote(newUntitledPath($vaultNotes.get()))
       }
     }
 
@@ -145,12 +134,12 @@ export function NotesShell() {
         {agentOpen && (
           <>
             <div className="flex h-9 shrink-0 items-center gap-2 border-b border-(--stroke-nous) px-3">
-              <Codicon name="sparkle" className="text-(--dt-primary)" />
+              <Codicon className="text-(--dt-primary)" name="sparkle" />
               <span className="min-w-0 flex-1 truncate text-xs font-medium">
                 Agent{active ? ` · ${active.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '')}` : ''}
               </span>
               <AgentSessions />
-              <Button size="icon-xs" variant="ghost" title="Close (⌘J)" onClick={() => setAgentOpen(false)}>
+              <Button onClick={() => setAgentOpen(false)} size="icon-xs" title="Close (⌘J)" variant="ghost">
                 <Codicon name="close" />
               </Button>
             </div>

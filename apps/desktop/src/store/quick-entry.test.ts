@@ -7,7 +7,9 @@ import {
   type QuickComposerEvent,
   quickComposerReducer,
   type QuickComposerState,
-  type QuickEntrySubmitPayload
+  type QuickEntrySubmitPayload,
+  setQuickEntrySubmitHandler,
+  submitAgentPrompt
 } from './quick-entry'
 
 // Drive the reducer like the window does, collecting every send it asked for.
@@ -212,5 +214,58 @@ describe('quickComposerReducer', () => {
 
     expect(first.sent).toEqual([{ target: QUICK_TARGET_CURRENT, text: 'one' }])
     expect(second.sent).toEqual([{ target: QUICK_TARGET_CURRENT, text: 'two' }])
+  })
+})
+
+describe('submitAgentPrompt', () => {
+  // "Ask the agent about this" fires the instant the panel is told to open, so
+  // the handler it needs does not exist yet. The prompt used to be submitted on
+  // a 120ms guess with one 400ms retry and then dropped in silence — on a cold
+  // start the button simply did nothing.
+  it('holds a prompt that arrives before the panel has mounted, then delivers it', () => {
+    setQuickEntrySubmitHandler(null)
+
+    expect(submitAgentPrompt('summarise this inbox')).toBe(true)
+
+    const sent: QuickEntrySubmitPayload[] = []
+
+    setQuickEntrySubmitHandler(payload => sent.push(payload))
+
+    expect(sent).toEqual([{ target: QUICK_TARGET_CURRENT, text: 'summarise this inbox' }])
+  })
+
+  it('delivers straight away once a handler is registered', () => {
+    const sent: QuickEntrySubmitPayload[] = []
+
+    setQuickEntrySubmitHandler(payload => sent.push(payload))
+
+    expect(submitAgentPrompt('what did I spend on coffee?')).toBe(true)
+    expect(sent).toHaveLength(1)
+  })
+
+  it('refuses empty text instead of queueing it', () => {
+    setQuickEntrySubmitHandler(null)
+
+    expect(submitAgentPrompt('   ')).toBe(false)
+
+    const sent: QuickEntrySubmitPayload[] = []
+
+    setQuickEntrySubmitHandler(payload => sent.push(payload))
+
+    expect(sent).toEqual([])
+  })
+
+  it('a held prompt is delivered once, not on every later mount', () => {
+    setQuickEntrySubmitHandler(null)
+    submitAgentPrompt('only once')
+
+    const first: QuickEntrySubmitPayload[] = []
+    const second: QuickEntrySubmitPayload[] = []
+
+    setQuickEntrySubmitHandler(payload => first.push(payload))
+    setQuickEntrySubmitHandler(payload => second.push(payload))
+
+    expect(first).toHaveLength(1)
+    expect(second).toEqual([])
   })
 })
