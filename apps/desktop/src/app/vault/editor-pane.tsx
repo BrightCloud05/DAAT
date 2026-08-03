@@ -8,48 +8,47 @@
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { foldGutter, foldKeymap } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
-import { Compartment, EditorState } from '@codemirror/state'
+import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 
-import { foldGutter, foldKeymap } from '@codemirror/language'
-
+import { AiUndoBar, SelectionHint } from '../notes/ai-affordances'
 import { BacklinksSection } from '../notes/backlinks-section'
 import { BlockHandlesOverlay } from '../notes/block-handles-overlay'
-import { AiUndoBar, SelectionHint } from '../notes/ai-affordances'
 import { InlineAiOverlay } from '../notes/inline-ai-overlay'
 import { PageIcon } from '../notes/page-icon'
-import { openDailyNote } from '../notes/templates'
 import { PropertiesPanel } from '../notes/properties-panel'
+import { $productLocale, productStrings } from '../notes/strings'
 import { TemplateSuggestions } from '../notes/template-suggestions'
+import { openDailyNote } from '../notes/templates'
 
 import { blockHandles } from './cm/block-handles'
 import { callouts } from './cm/callouts'
 import { inlineAiTrigger } from './cm/inline-ai-trigger'
-import { selectionHint } from './cm/selection-hint'
-import { bumpDocEpoch, setEditorView } from './editor-bridge'
 import { livePreview } from './cm/live-preview'
 import { markdownStyling } from './cm/markdown-style'
+import { selectionHint } from './cm/selection-hint'
 import { slashSource } from './cm/slash-menu'
 import { vaultCompletions } from './cm/wikilink-complete'
 import { wikiLinkExtension } from './cm/wikilink-language'
-import { $productLocale, productStrings } from '../notes/strings'
+import { bumpDocEpoch, setEditorView } from './editor-bridge'
 import {
   $activeDirty,
   $activeNote,
   $vaultConflicts,
+  $vaultNotes,
   $vaultSaveError,
   createNote,
   dismissConflict,
   flushActiveNote,
-  noteEdited,
-  openNote,
   newUntitledPath,
-  $vaultNotes
+  noteEdited,
+  openNote
 } from './store'
 
 async function openWikilink(target: string): Promise<void> {
@@ -74,7 +73,17 @@ const MEASURE = '38rem'
 
 const editorTheme = EditorView.theme({
   '&': {
-    height: '100%',
+    // Grow with the document instead of filling the pane.
+    //
+    // height:100% made CodeMirror its own scroll container, which is why the
+    // title and the properties could never scroll away: they were fixed flex
+    // items above a box that scrolled by itself. On a page with eight
+    // properties that header ate a third of the window and never gave it back.
+    //
+    // Letting the editor size to its content hands the scrolling to the pane,
+    // so title, properties, backlinks and body move together — one document,
+    // the way Notion reads.
+    height: 'auto',
     // Design 2a: body copy 14px / 1.65.
     fontSize: '14px',
     backgroundColor: 'transparent'
@@ -119,7 +128,12 @@ const editorTheme = EditorView.theme({
   '.cm-scroller': {
     fontFamily: 'inherit',
     lineHeight: '1.7',
-    padding: '0.25rem 2.5rem 40vh'
+    padding: '0.25rem 2.5rem 40vh',
+    // The base theme sets overflow-x:auto, and a box that scrolls on one axis
+    // silently becomes a scroll container on both — which would quietly put the
+    // inner scrollbar back and undo the height:auto above. Lines wrap, so there
+    // is no horizontal overflow to preserve.
+    overflow: 'visible'
   },
   '.cm-content': {
     maxWidth: MEASURE,
@@ -299,7 +313,11 @@ export function VaultEditorPane() {
     )
   }
 
-  const title = active.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '') ?? active.path
+  const title =
+    active.path
+      .split('/')
+      .pop()
+      ?.replace(/\.(md|markdown)$/i, '') ?? active.path
 
   return (
     /**
@@ -312,7 +330,7 @@ export function VaultEditorPane() {
      * Two hairline stops give it its edges.
      */
     <div
-      className="flex h-full flex-col bg-(--ui-bg-sidebar)"
+      className="relative h-full bg-(--ui-bg-sidebar)"
       style={{
         backgroundImage:
           'linear-gradient(to right,' +
@@ -323,74 +341,85 @@ export function VaultEditorPane() {
           ' transparent calc(50% + var(--sheet-w) / 2))'
       }}
     >
-      {/* Notion-style document header: emoji icon + big title (design 2a). */}
-      <div className="group shrink-0 px-10 pt-16 pb-2">
-        <div className="mx-auto max-w-[38rem]">
-          <PageIcon />
+      {/* One scroll for the whole page. Title, properties, backlinks and body
+          are a single document that scrolls together, so a note with a long
+          property list gives all of that room back as soon as you scroll. */}
+      <div className="h-full overflow-y-auto">
+        {/* Notion-style document header: emoji icon + big title (design 2a). */}
+        <div className="group shrink-0 px-10 pt-16 pb-2">
+          <div className="mx-auto max-w-[38rem]">
+            <PageIcon />
+          </div>
+          <div className="mx-auto flex max-w-[38rem] items-baseline gap-3">
+            <h1 className="min-w-0 flex-1 truncate text-[28px] font-(--dt-font-serif) font-medium leading-tight tracking-[-0.01em]">
+              {title}
+            </h1>
+            {active.dataless ? (
+              <span className="flex items-center gap-1 text-[10px] opacity-60">
+                <Codicon name="cloud-download" /> {s.downloadingFromICloud}
+              </span>
+            ) : null}
+            <span
+              className="size-1.5 shrink-0 self-center rounded-full transition-opacity"
+              style={{ backgroundColor: 'var(--ui-accent)', opacity: dirty ? 1 : 0 }}
+              title={dirty ? s.unsavedChanges : s.saved}
+            />
+          </div>
         </div>
-        <div className="mx-auto flex max-w-[38rem] items-baseline gap-3">
-          <h1 className="min-w-0 flex-1 truncate text-[28px] font-(--dt-font-serif) font-medium leading-tight tracking-[-0.01em]">{title}</h1>
-          {active.dataless ? (
-            <span className="flex items-center gap-1 text-[10px] opacity-60">
-              <Codicon name="cloud-download" /> {s.downloadingFromICloud}
-            </span>
-          ) : null}
-          <span
-            className="size-1.5 shrink-0 self-center rounded-full transition-opacity"
-            style={{ backgroundColor: 'var(--ui-accent)', opacity: dirty ? 1 : 0 }}
-            title={dirty ? s.unsavedChanges : s.saved}
-          />
-        </div>
-      </div>
-      <PropertiesPanel />
-      <BacklinksSection />
-      <TemplateSuggestions />
+        <PropertiesPanel />
+        <BacklinksSection />
+        <TemplateSuggestions />
 
-      {/* A save that keeps failing must be visible. The text is still in the
+        {/* A save that keeps failing must be visible. The text is still in the
           editor and still being retried, but silence here is how people lose
           an afternoon's writing to a full disk or an offline volume. */}
-      {saveError ? (
-        <div className="flex items-center gap-2 border-b border-(--stroke-nous) bg-(--sem-late-wash) px-4 py-1.5 text-xs">
-          <Codicon name="warning" />
-          <span className="min-w-0 flex-1 truncate">
-            {s.saveFailed(saveError)}
-          </span>
-          <button className="underline opacity-80 hover:opacity-100" onClick={() => void flushActiveNote()}>
-            {s.retryNow}
-          </button>
-        </div>
-      ) : null}
+        {saveError ? (
+          <div className="flex items-center gap-2 border-b border-(--stroke-nous) bg-(--sem-late-wash) px-4 py-1.5 text-xs">
+            <Codicon name="warning" />
+            <span className="min-w-0 flex-1 truncate">{s.saveFailed(saveError)}</span>
+            <button className="underline opacity-80 hover:opacity-100" onClick={() => void flushActiveNote()}>
+              {s.retryNow}
+            </button>
+          </div>
+        ) : null}
 
-      {conflicts.map(conflict => (
-        <div
-          key={conflict.conflictPath}
-          className="flex items-center gap-2 border-b border-(--stroke-nous) bg-(--ui-control-hover-background) px-4 py-1.5 text-xs"
-        >
-          <Codicon name="warning" />
-          <span className="min-w-0 flex-1 truncate">
-            {s.conflictNotice}
-          </span>
-          <button
-            className="underline opacity-80 hover:opacity-100"
-            onClick={() => {
-              void openNote(conflict.conflictPath)
-              dismissConflict(conflict.conflictPath)
-            }}
+        {conflicts.map(conflict => (
+          <div
+            className="flex items-center gap-2 border-b border-(--stroke-nous) bg-(--ui-control-hover-background) px-4 py-1.5 text-xs"
+            key={conflict.conflictPath}
           >
-            Open copy
-          </button>
-          <button className="opacity-60 hover:opacity-100" onClick={() => dismissConflict(conflict.conflictPath)}>
-            <Codicon name="close" />
-          </button>
+            <Codicon name="warning" />
+            <span className="min-w-0 flex-1 truncate">{s.conflictNotice}</span>
+            <button
+              className="underline opacity-80 hover:opacity-100"
+              onClick={() => {
+                void openNote(conflict.conflictPath)
+                dismissConflict(conflict.conflictPath)
+              }}
+            >
+              Open copy
+            </button>
+            <button className="opacity-60 hover:opacity-100" onClick={() => dismissConflict(conflict.conflictPath)}>
+              <Codicon name="close" />
+            </button>
+          </div>
+        ))}
+        {/* The editor sizes to its content; the pane above owns the scrolling.
+          These overlays place themselves against the editor's own box, so
+          living inside it means they travel with the text instead of drifting
+          away from the line they point at. */}
+        <div className="relative">
+          <div ref={attachHost} />
+          <BlockHandlesOverlay />
+          <SelectionHint />
+          <InlineAiOverlay />
         </div>
-      ))}
-      <div className="relative min-h-0 flex-1">
-        <div ref={attachHost} className="h-full overflow-hidden" />
-        <BlockHandlesOverlay />
-        <SelectionHint />
-        <InlineAiOverlay />
-        <AiUndoBar />
       </div>
+
+      {/* Outside the scroller on purpose: "undo that rewrite" is only useful
+          where the eye already is. Inside, `bottom` would mean the bottom of a
+          document that may be thousands of lines long. */}
+      <AiUndoBar />
     </div>
   )
 }
