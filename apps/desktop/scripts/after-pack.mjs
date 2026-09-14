@@ -22,8 +22,16 @@
 import path from 'node:path'
 
 import { stampExeIdentity } from './set-exe-identity.mjs'
+import { stageDaatCat } from './stage-daatcat.mjs'
 
 export default async function afterPack(context) {
+  if (context.electronPlatformName === 'darwin') {
+    // Bundle the DAAT Cat menu bar helper (best-effort, see stage-daatcat.mjs).
+    stageDaatCat(context)
+
+    return
+  }
+
   if (context.electronPlatformName !== 'win32') {
     return
   }

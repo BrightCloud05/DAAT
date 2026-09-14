@@ -17,6 +17,7 @@ import { setSidebarAgentsGrouped } from '@/store/layout'
 import { notify } from '@/store/notifications'
 import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
 import { $selectedStoredSessionId, $sessions, sessionMatchesStoredId, workspaceCwdForNewSession } from '@/store/session'
+import { vaultSessionCwd } from '@/store/vault-root'
 import type { ProjectInfo, ProjectsPayload } from '@/types/hermes'
 
 // First-class, per-profile Projects (named, multi-folder workspaces). State is
@@ -168,6 +169,17 @@ export function exitProjectScope(): void {
 // drifted into. Outside a project it falls back to the plain default (detached),
 // so a bare new chat shows no branch.
 export function resolveNewSessionCwd(): string {
+  // Daat's agent belongs in the vault. Its working directory is written into
+  // the system prompt, so a session rooted at the home folder hands the model
+  // `/Users/<name>` — which is how a fresh install came to greet its owner by
+  // the name of their home directory. Standing in the vault is also simply
+  // where a notes assistant should stand.
+  const rooted = vaultSessionCwd()
+
+  if (rooted) {
+    return rooted
+  }
+
   const scope = $projectScope.get()
 
   // Inside Home, "no folder" is the point: a new chat must stay detached rather

@@ -24,7 +24,10 @@ import type { ParsedNote } from './vault-parser'
 export const SNIPPET_START = ''
 export const SNIPPET_END = ''
 
-const SCHEMA_VERSION = 1
+// v2: internal markdown links join wikilinks in `links` (vault-parser), so
+// existing rows are stale — the bump wipes indexed data to force a reparse.
+// Table shapes are unchanged; the Python read-only consumers keep working.
+const SCHEMA_VERSION = 2
 
 function linkKey(raw: string): string {
   // "Note Name#heading" targets the note; strip the heading fragment.
@@ -105,9 +108,16 @@ export class VaultIndex {
         body,
         tokenize = 'unicode61 remove_diacritics 2'
       );
-
-      PRAGMA user_version = ${SCHEMA_VERSION};
     `)
+
+    if (version > 0) {
+      // Parsing rules changed under an existing index: drop the derived data
+      // so the next scan re-reads every note. The files themselves are the
+      // source of truth; nothing user-owned lives here.
+      this.db.exec('DELETE FROM links; DELETE FROM tags; DELETE FROM frontmatter; DELETE FROM notes; DELETE FROM notes_fts;')
+    }
+
+    this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`)
   }
 
   upsertNote(
@@ -187,12 +197,15 @@ export class VaultIndex {
     this.removeNote(fromPath)
   }
 
-  getNote(relPath: string): { hash: string; mtimeMs: number } | null {
-    const row = this.db.prepare('SELECT hash, mtime_ms as mtimeMs FROM notes WHERE path = ?').get(relPath) as
-      | { hash: string; mtimeMs: number }
-      | undefined
+  getNote(relPath: string): { hash: string; mtimeMs: number; dataless: boolean } | null {
+    // `dataless` comes back too: a row indexed while iCloud still had the
+    // contents is a row with an empty body, and the caller has to know not to
+    // trust its mtime as evidence that nothing changed.
+    const row = this.db
+      .prepare('SELECT hash, mtime_ms as mtimeMs, dataless FROM notes WHERE path = ?')
+      .get(relPath) as { hash: string; mtimeMs: number; dataless: number } | undefined
 
-    return row ?? null
+    return row ? { ...row, dataless: Boolean(row.dataless) } : null
   }
 
   noteCount(): number {
@@ -323,16 +336,28 @@ export class VaultIndex {
       byKey.set(note.path_key, note.path)
     }
 
-    const rows = this.db.prepare('SELECT source, target_key FROM links').all() as Array<{
+    const rows = this.db.prepare('SELECT source, target_raw, target_key FROM links').all() as Array<{
       source: string
+      target_raw: string
       target_key: string
     }>
 
     const seen = new Set<string>()
     const edges: VaultGraphEdge[] = []
+    // Unresolved targets become ghost nodes (Obsidian's "note that doesn't
+    // exist yet"); keyed so five links to [[Same Idea]] make one ghost.
+    const ghosts = new Map<string, string>()
 
     for (const row of rows) {
-      const target = byKey.get(row.target_key)
+      let target = byKey.get(row.target_key)
+
+      if (!target && row.target_key) {
+        target = `ghost:${row.target_key}`
+
+        if (!ghosts.has(target)) {
+          ghosts.set(target, row.target_raw.split('#')[0].trim() || row.target_key)
+        }
+      }
 
       if (!target || target === row.source) {
         continue
@@ -349,6 +374,29 @@ export class VaultIndex {
       edges.push({ source: row.source, target })
     }
 
+    // Tag hubs: notes sharing #tag cluster around it, like Obsidian's
+    // "Tags" graph filter. The renderer decides whether to draw them.
+    const tagRows = this.db.prepare('SELECT path, tag FROM tags').all() as Array<{ path: string; tag: string }>
+    const tagNames = new Set<string>()
+    const notePaths = new Set(notes.map(note => note.path))
+
+    for (const row of tagRows) {
+      if (!notePaths.has(row.path)) {
+        continue
+      }
+
+      const tagNode = `tag:${row.tag}`
+      const key = `${row.path}>${tagNode}`
+
+      if (seen.has(key)) {
+        continue
+      }
+
+      seen.add(key)
+      tagNames.add(row.tag)
+      edges.push({ source: row.path, target: tagNode })
+    }
+
     const degree = new Map<string, number>()
 
     for (const edge of edges) {
@@ -357,11 +405,25 @@ export class VaultIndex {
     }
 
     return {
-      nodes: notes.map(note => ({
-        path: note.path,
-        title: note.title,
-        degree: degree.get(note.path) ?? 0
-      })),
+      nodes: [
+        ...notes.map(note => ({
+          path: note.path,
+          title: note.title,
+          degree: degree.get(note.path) ?? 0
+        })),
+        ...[...ghosts.entries()].map(([ghostPath, label]) => ({
+          path: ghostPath,
+          title: label,
+          degree: degree.get(ghostPath) ?? 0,
+          kind: 'ghost' as const
+        })),
+        ...[...tagNames].map(tag => ({
+          path: `tag:${tag}`,
+          title: `#${tag}`,
+          degree: degree.get(`tag:${tag}`) ?? 0,
+          kind: 'tag' as const
+        }))
+      ],
       edges
     }
   }

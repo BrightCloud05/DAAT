@@ -17,7 +17,11 @@ export function inlineAiTrigger(): Extension {
       run: view => {
         const { head, empty } = view.state.selection.main
 
-        if (!empty) {
+        // A note whose contents are still coming down from iCloud opens as an
+        // empty document — which is exactly the shape this gesture fires on.
+        // Offering to write into it invites the model to fill a page whose
+        // real text is elsewhere, and the save will be refused anyway.
+        if (view.state.readOnly || !empty) {
           return false
         }
 
@@ -35,6 +39,10 @@ export function inlineAiTrigger(): Extension {
     {
       key: 'Mod-i',
       run: view => {
+        if (view.state.readOnly) {
+          return false
+        }
+
         const { from, to } = view.state.selection.main
 
         // With text selected this is "rewrite this", not "write something

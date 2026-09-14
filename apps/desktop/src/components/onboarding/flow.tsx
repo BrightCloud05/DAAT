@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { ModelPickerDialog } from '@/components/model-picker'
 import { Button } from '@/components/ui/button'
@@ -119,11 +119,33 @@ export function FlowPanel({
     return null
   }
 
+  return <PollingStep code={flow.start.user_code} copied={flow.copied} title={title} url={flow.start.verification_url} />
+}
+
+/**
+ * The device-code wait.
+ *
+ * The code is put on the clipboard the moment this appears, rather than
+ * waiting for the user to discover that the row is a button. Copying eight
+ * characters across a window boundary — read, hold in your head, switch app,
+ * type — is where this flow actually loses people, and it is the one part of
+ * signing in that the app can simply do for them.
+ *
+ * The row stays clickable, because a clipboard can be overwritten by anything
+ * between here and the browser.
+ */
+function PollingStep({ code, copied, title, url }: { code: string; copied: boolean; title: string; url: string }) {
+  const { t } = useI18n()
+
+  useEffect(() => {
+    void copyDeviceCode()
+  }, [code])
+
   return (
     <Step title={t.onboarding.signInWith(title)}>
       <p className="text-sm text-muted-foreground">{t.onboarding.deviceCodeOpened(title)}</p>
-      <DeviceCode code={flow.start.user_code} copied={flow.copied} onCopy={() => void copyDeviceCode()} />
-      <FlowFooter left={<DocsLink href={flow.start.verification_url}>{t.onboarding.reopenVerification}</DocsLink>}>
+      <DeviceCode code={code} copied={copied} onCopy={() => void copyDeviceCode()} />
+      <FlowFooter left={<DocsLink href={url}>{t.onboarding.reopenVerification}</DocsLink>}>
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="size-3 animate-spin" />
           {t.onboarding.waitingAuthorize}

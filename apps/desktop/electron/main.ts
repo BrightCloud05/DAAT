@@ -32,9 +32,7 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime } from './active-runtime-state'
-import { initMailIpc } from './mail/mail-ipc'
-import { initVaultIpc } from './vault/vault-ipc'
-import type { VaultService } from './vault/vault-service'
+import { refreshAgentSource } from './agent-source'
 import { stopBackendChild as stopBackendChildImpl } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -126,7 +124,9 @@ import {
   TEXT_PREVIEW_SOURCE_MAX_BYTES
 } from './hardening'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
+import { initMailIpc } from './mail/mail-ipc'
 import { ensureMainWindow } from './main-window-lifecycle'
+import { ensureMenubarCat } from './menubar-cat'
 import {
   oauthGuardMayHardFail,
   oauthSessionIsLive,
@@ -190,6 +190,8 @@ import {
 } from './update-relaunch'
 import { isOfficialSshRemote, OFFICIAL_REPO_HTTPS_URL } from './update-remote'
 import { spawnUpdaterProcess } from './updater-process'
+import { initVaultIpc } from './vault/vault-ipc'
+import type { VaultService } from './vault/vault-service'
 import { fetchMarketplaceThemes, searchMarketplaceThemes } from './vscode-marketplace'
 import {
   computeWindowOptions,
@@ -3147,6 +3149,41 @@ function shellQuote(value) {
 // (`hermes desktop --build-only`), then atomically swap the running .app bundle
 // with the freshly built one and relaunch. Degrades to "backend updated,
 // restart to load the new GUI" if the swap can't be performed.
+/**
+ * Update ~/.daat/hermes-agent from the source inside this app, when it is safe.
+ *
+ * Best-effort by design: an update that cannot happen must never stop the app
+ * launching on the agent already installed, so every outcome is logged and none
+ * of them throws.
+ */
+function refreshInstalledAgentSource(): void {
+  try {
+    const bundle = [
+      path.join(process.resourcesPath || '', 'app.asar.unpacked', 'dist', 'agent-src'),
+      path.join(process.resourcesPath || '', 'app', 'dist', 'agent-src'),
+      path.join(app.getAppPath(), 'dist', 'agent-src')
+    ].find(candidate => fs.existsSync(path.join(candidate, 'pyproject.toml')))
+
+    if (!bundle) {
+      return
+    }
+
+    const outcome = refreshAgentSource(ACTIVE_HERMES_ROOT, bundle)
+
+    if (outcome.action === 'updated') {
+      rememberLog(
+        `[agent-source] updated ${outcome.files} file(s) (${outcome.removed} removed) ` +
+          `from ${outcome.from} to ${outcome.to}` +
+          (outcome.depsChanged ? ' — dependencies changed, the venv needs a refresh' : '')
+      )
+    } else if (outcome.action === 'declined') {
+      rememberLog(`[agent-source] left alone (${outcome.why}): ${outcome.detail}`)
+    }
+  } catch (err) {
+    rememberLog(`[agent-source] refresh skipped: ${(err as Error).message}`)
+  }
+}
+
 async function applyUpdatesPosixInApp(opts: any) {
   const updateRoot = resolveUpdateRoot()
   const hermes = resolveHermesCliBinary(updateRoot)
@@ -3764,6 +3801,13 @@ function resolveHermesBackend(backendArgs) {
   const activeRuntime = activeRuntimeState()
 
   if (activeRuntime.shouldUseActiveRuntime && !bootstrapRepairRequested) {
+    // The app and the agent live in two places, and only one of them is
+    // replaced by dragging a new build over the old. Before launching an
+    // existing agent, bring its source up to the one inside this app —
+    // refuses on a git checkout, an install of unknown origin, or one the
+    // user has edited. See electron/agent-source.ts.
+    refreshInstalledAgentSource()
+
     if (!activeRuntime.hasValidMarker) {
       rememberLog(
         `[bootstrap] Active Daat runtime at ${ACTIVE_HERMES_ROOT} is usable but the bootstrap marker is missing or stale; skipping first-run bootstrap.`
@@ -11455,6 +11499,7 @@ app.whenReady().then(() => {
   // it without the renderer visiting Settings. A failed registration is logged
   // here and surfaced in Settings via the IPC state (never silent).
   applyQuickEntrySettings(readQuickEntrySettings())
+  ensureMenubarCat()
   createWindow()
 
   // Win/Linux cold start: the launching hermes:// URL is in our own argv.

@@ -7,9 +7,16 @@
 
 import { atom } from 'nanostores'
 
+import { setVaultRoot } from '@/store/vault-root'
+
 const vault = () => window.hermesDesktop.vault
 
 export const $vaultInfo = atom<VaultInfo | null>(null)
+
+// Publish the root down into the store layer, where the session machinery can
+// read it without importing app code. See store/vault-root.ts for why the
+// agent's working directory matters beyond path resolution.
+$vaultInfo.subscribe(info => setVaultRoot(info?.root ?? ''))
 export const $vaultNotes = atom<VaultNote[]>([])
 export const $activeNote = atom<VaultReadResult | null>(null)
 export const $activeDirty = atom(false)
@@ -19,6 +26,52 @@ export const $vaultIndexing = atom<{ indexed: number; total: number } | null>(nu
 export const $vaultConflicts = atom<VaultConflictEvent[]>([])
 /** Set when a save failed; the editor keeps the text and retries. */
 export const $vaultSaveError = atom<string | null>(null)
+
+/**
+ * Shown while a save waits on iCloud to finish downloading the note it would
+ * overwrite. Not really an error — the text is safe in the buffer and the
+ * retry loop is running — but the user has to know why the dot is still amber.
+ */
+export const ICLOUD_DOWNLOAD_PENDING = 'Waiting for iCloud to finish downloading this note.'
+
+/**
+ * Text that could not be saved, kept by note path.
+ *
+ * Every switch away from a note drops `pendingContent` — it has to, or the old
+ * note's text follows the user into the new note's file. But the drain before
+ * it is allowed to fail (read-only volume, unplugged drive, a note iCloud has
+ * not finished sending), and then dropping the buffer was dropping writing the
+ * user had done and never saw saved. There was no message: the dirty dot moved
+ * on with the new note.
+ *
+ * So the buffer is parked here instead. Reopening the note puts it back in the
+ * editor, marked unsaved, and the ordinary save path takes it from there.
+ */
+const rescued = new Map<string, string>()
+
+/** Paths holding text that never reached disk. The UI has to say so. */
+export const $vaultRescued = atom<string[]>([])
+
+function publishRescued(): void {
+  $vaultRescued.set([...rescued.keys()])
+}
+
+function rescue(relPath: string, content: string): void {
+  rescued.set(relPath, content)
+  publishRescued()
+}
+
+function releaseRescue(relPath: string): void {
+  if (rescued.delete(relPath)) {
+    publishRescued()
+  }
+}
+
+/** The unsaved text held for a note, if any. The editor seeds its doc from it. */
+export function rescuedText(relPath: string): string | undefined {
+  return rescued.get(relPath)
+}
+
 /**
  * Coarse "the vault changed" counter for panels that run an IPC query.
  *
@@ -63,15 +116,6 @@ function clearSaveTimer(): void {
 }
 
 /**
- * Flush until nothing is pending.
- *
- * A single `flushActiveNote()` can return the promise of a write that started
- * BEFORE the newest keystrokes, so awaiting it once and concluding "saved"
- * dropped whatever arrived in between. Bounded, because a genuinely failing
- * write (read-only volume, offline iCloud) would otherwise spin forever; the
- * retry timer keeps trying in the background either way.
- */
-/**
  * Drop every buffered edit and stop the retry loop.
  *
  * Used when switching vaults — a pending edit must never follow the user into
@@ -81,6 +125,10 @@ function clearSaveTimer(): void {
 export function resetSaveState(): void {
   clearSaveTimer()
   pendingContent = null
+  // A full reset, including across a vault switch: the parked paths belong to
+  // the vault being left and mean nothing in the next one.
+  rescued.clear()
+  publishRescued()
   flushInFlight = null
   saveFailures = 0
   openToken++
@@ -88,6 +136,15 @@ export function resetSaveState(): void {
   $vaultSaveError.set(null)
 }
 
+/**
+ * Flush until nothing is pending.
+ *
+ * A single `flushActiveNote()` can return the promise of a write that started
+ * BEFORE the newest keystrokes, so awaiting it once and concluding "saved"
+ * dropped whatever arrived in between. Bounded, because a genuinely failing
+ * write (read-only volume, offline iCloud) would otherwise spin forever; the
+ * retry timer keeps trying in the background either way.
+ */
 async function drainPendingWrites(attempts = 4): Promise<void> {
   for (let attempt = 0; attempt < attempts; attempt++) {
     await flushActiveNote()
@@ -165,12 +222,26 @@ function adoptNote(result: VaultReadResult, token: number): void {
   $activeNote.set(result)
 }
 
+/**
+ * Hold onto text the drain could not get to disk, under the note it belongs
+ * to. Called at every point that is about to drop `pendingContent`.
+ */
+function parkPending(): void {
+  const active = $activeNote.get()
+
+  if (pendingContent !== null && active) {
+    rescue(active.path, pendingContent)
+  }
+}
+
 export async function openNote(relPath: string): Promise<void> {
   await drainPendingWrites()
 
   const token = ++openToken
 
-  // Nothing from the previous note may survive into the read below.
+  // Nothing from the previous note may survive into the read below — but a
+  // failed drain leaves real writing here, and dropping it is losing it.
+  parkPending()
   clearSaveTimer()
   pendingContent = null
 
@@ -182,6 +253,7 @@ export async function createNote(relPath: string): Promise<(VaultReadResult & { 
 
   const token = ++openToken
 
+  parkPending()
   clearSaveTimer()
   pendingContent = null
 
@@ -195,6 +267,43 @@ export async function createNote(relPath: string): Promise<(VaultReadResult & { 
   await refreshVaultNotes()
 
   return result
+}
+
+/**
+ * Move a note to the OS trash.
+ *
+ * The pending-autosave state for the note must be dropped BEFORE the trash
+ * call: writeNote() skips every conflict guard when the file is gone, so a
+ * debounced autosave landing after the trash would silently recreate it.
+ */
+export async function deleteNote(relPath: string): Promise<void> {
+  const active = $activeNote.get()
+
+  if (active?.path === relPath) {
+    clearSaveTimer()
+    pendingContent = null
+    openToken++
+    $activeDirty.set(false)
+    $activeNote.set(null)
+  }
+
+  // Rescued text for a note the user chose to delete is meaningless now.
+  rescued.delete(relPath)
+  publishRescued()
+
+  await vault().trash(relPath)
+  await refreshVaultNotes()
+}
+
+/** Rename (move) a note; the open editor follows it to the new path. */
+export async function renameNote(fromRel: string, toRel: string): Promise<void> {
+  await drainPendingWrites()
+  await vault().rename(fromRel, toRel)
+  await refreshVaultNotes()
+
+  if ($activeNote.get()?.path === fromRel) {
+    await openNote(toRel)
+  }
 }
 
 /** Editor calls this on every doc change; the actual write is debounced 1s. */
@@ -251,13 +360,30 @@ export function flushActiveNote(): Promise<void> {
       // The text is still in pendingContent — never drop it. Retry with
       // backoff and tell the user, rather than failing silently forever.
       saveFailures++
+      rescue(active.path, content)
       $vaultSaveError.set(error instanceof Error ? error.message : String(error))
       saveTimer = setTimeout(() => void flushActiveNote(), Math.min(30_000, 1000 * 2 ** saveFailures))
 
       return
     }
 
+    if (!result.ok && result.reason === 'unreadable') {
+      // The note's text is still coming down from iCloud, so the write was
+      // refused rather than run against bytes nobody has seen. Treat it like
+      // any other transient failure: keep pendingContent, back off, retry.
+      // It resolves itself once the download lands.
+      saveFailures++
+      rescue(active.path, content)
+      $vaultSaveError.set(ICLOUD_DOWNLOAD_PENDING)
+      saveTimer = setTimeout(() => void flushActiveNote(), Math.min(30_000, 1000 * 2 ** saveFailures))
+
+      return
+    }
+
     saveFailures = 0
+    // It reached disk — as the note itself, or as a conflict copy beside it.
+    // Either way there is nothing left to hold.
+    releaseRescue(active.path)
     $vaultSaveError.set(null)
 
     // The user may have switched notes while the write was in flight; the
@@ -391,11 +517,17 @@ export function initVaultStore(): void {
 
             // Most of these events are the watcher echoing our own save.
             // Re-setting an identical note would churn the editor for nothing.
+            //
+            // `!fresh.dataless` guards the other direction: an evicted read
+            // comes back as empty content, and adopting it would blank the
+            // open note on screen. Keep showing what we have and wait for the
+            // download — the same event fires again with the real text.
             if (
               token === openToken &&
               current &&
               current.path === fresh.path &&
               current.content !== fresh.content &&
+              !fresh.dataless &&
               !$activeDirty.get()
             ) {
               $activeNote.set(fresh)

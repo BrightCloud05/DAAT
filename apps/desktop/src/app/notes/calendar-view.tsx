@@ -22,6 +22,7 @@ import {
   type TableLikeRow
 } from './calendar'
 import { applyTemplateToActive, listTemplates } from './templates'
+import { EntryDateButton, QuickAddRow, SubscriptionsPanel } from './quick-event'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView } from './view-store'
 import { $productLocale, productStrings } from './strings'
@@ -45,6 +46,7 @@ export function CalendarView() {
   })
   const [rows, setRows] = useState<TableLikeRow[]>([])
   const [selected, setSelected] = useState<string | null>(null)
+  const [showSubscriptions, setShowSubscriptions] = useState(false)
   const s = productStrings(useStore($productLocale))
 
   initTodosStore()
@@ -91,7 +93,7 @@ export function CalendarView() {
     const daily = (await listTemplates()).find(template => template.name.toLowerCase() === 'daily')
 
     if (daily) {
-      await applyTemplateToActive(daily.path, date)
+      await applyTemplateToActive(daily.path, date, relPath)
     }
   }
 
@@ -130,8 +132,24 @@ export function CalendarView() {
             >
               <Codicon name="chevron-right" className="text-[13px]" />
             </button>
+            <button
+              className={cn(
+                'grid size-7 place-items-center rounded-md opacity-60 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100',
+                showSubscriptions && 'bg-(--ui-control-active-background) opacity-100'
+              )}
+              onClick={() => setShowSubscriptions(value => !value)}
+              title={s.subscriptions}
+            >
+              <Codicon name="rss" className="text-[13px]" />
+            </button>
           </div>
         </div>
+
+        {showSubscriptions ? (
+          <div className="mb-4">
+            <SubscriptionsPanel />
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-7 border-l border-t border-(--stroke-nous)">
           {WEEKDAYS.map(day => (
@@ -204,6 +222,8 @@ export function CalendarView() {
               </button>
             </div>
 
+            <QuickAddRow date={selected} />
+
             {selectedEntries.length ? (
               <div className="flex flex-col">
                 {selectedEntries.map(entry => (
@@ -260,6 +280,7 @@ export function CalendarView() {
                       {entry.label}
                     </button>
 
+                    <EntryDateButton entry={entry} />
                     <span className="shrink-0 text-[11.5px] opacity-40">{entry.path.split('/')[0]}</span>
                   </div>
                 ))}

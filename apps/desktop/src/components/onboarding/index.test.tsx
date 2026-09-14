@@ -85,13 +85,13 @@ describe('onboarding Picker', () => {
     const labels = screen
       .getAllByRole('button')
       .map(el => el.textContent ?? '')
-      .filter(text => /Nous Portal|Fireworks AI|OpenAI OAuth|MiniMax|OpenRouter/.test(text))
+      .filter(text => /Nous Portal|Fireworks AI|ChatGPT|MiniMax|OpenRouter/.test(text))
 
     const indexOf = (needle: string) => labels.findIndex(text => text.includes(needle))
     expect(indexOf('Nous Portal')).toBeGreaterThanOrEqual(0)
     expect(indexOf('Fireworks AI')).toBeGreaterThan(indexOf('Nous Portal'))
-    expect(indexOf('OpenAI OAuth')).toBeGreaterThan(indexOf('Fireworks AI'))
-    expect(indexOf('MiniMax')).toBeGreaterThan(indexOf('OpenAI OAuth'))
+    expect(indexOf('ChatGPT')).toBeGreaterThan(indexOf('Fireworks AI'))
+    expect(indexOf('MiniMax')).toBeGreaterThan(indexOf('ChatGPT'))
   })
 
   it('shows every provider directly when Nous Portal is absent', () => {
@@ -100,7 +100,11 @@ describe('onboarding Picker', () => {
 
     expect(screen.getByText('Fireworks AI')).toBeTruthy()
     expect(screen.getByText('Anthropic API Key')).toBeTruthy()
-    expect(screen.getByText('OpenAI OAuth (ChatGPT)')).toBeTruthy()
+    // Named for the product the reader pays for, not the protocol they do not
+    // know: nobody can answer "choose a model provider", everybody can answer
+    // "do you pay for ChatGPT?".
+    expect(screen.getByText('ChatGPT')).toBeTruthy()
+    expect(screen.getByText(/Choose this if you pay for ChatGPT/)).toBeTruthy()
     expect(screen.queryByText('Other sign-in options')).toBeNull()
     expect(screen.queryByText('Recommended')).toBeNull()
   })

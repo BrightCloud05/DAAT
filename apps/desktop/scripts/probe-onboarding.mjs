@@ -107,7 +107,18 @@ check(
 )
 
 await page.locator('button', { hasText: 'Set up my pages' }).first().click()
-await page.waitForTimeout(4000)
+
+// Wait for the question, not for a stopwatch. Four seconds was usually enough
+// and sometimes was not — this step applies the persona and writes SOUL.md, and
+// persona-store.ts notes the Python backend may still be starting on first run.
+// A probe that fails one run in five teaches people to re-run it rather than
+// read it, which is worse than not having it.
+await page
+  .locator('textarea')
+  .last()
+  .waitFor({ state: 'visible', timeout: 30_000 })
+  .catch(() => undefined)
+await page.waitForTimeout(500)
 
 console.log('--- step 3: the assistant takes over ---')
 

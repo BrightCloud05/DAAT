@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       ipcRenderer.invoke('hermes:vault:write', relPath, content, expectedMtimeMs, expectedContent),
     createNote: relPath => ipcRenderer.invoke('hermes:vault:createNote', relPath),
     createDir: relPath => ipcRenderer.invoke('hermes:vault:createDir', relPath),
+    appendBinary: (relPath, data) => ipcRenderer.invoke('hermes:vault:appendBinary', relPath, data),
     writeBinary: (relPath, data) => ipcRenderer.invoke('hermes:vault:writeBinary', relPath, data),
     rename: (fromRel, toRel) => ipcRenderer.invoke('hermes:vault:rename', fromRel, toRel),
     trash: relPath => ipcRenderer.invoke('hermes:vault:trash', relPath),
@@ -174,6 +175,10 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     todos: limit => ipcRenderer.invoke('hermes:vault:todos', limit),
     reportContext: payload => ipcRenderer.send('hermes:vault:context', payload),
     toggleTodo: (relPath, line, text) => ipcRenderer.invoke('hermes:vault:toggleTodo', relPath, line, text),
+    icsSubscriptions: () => ipcRenderer.invoke('hermes:vault:icsSubscriptions'),
+    icsAdd: (url, name) => ipcRenderer.invoke('hermes:vault:icsAdd', url, name),
+    icsRemove: id => ipcRenderer.invoke('hermes:vault:icsRemove', id),
+    icsSync: () => ipcRenderer.invoke('hermes:vault:icsSync'),
     onIndexEvent: callback => {
       const listener = (_event, payload) => callback(payload)
       ipcRenderer.on('hermes:vault:index-event', listener)
@@ -193,7 +198,10 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     status: () => ipcRenderer.invoke('hermes:mail:status'),
     list: opts => ipcRenderer.invoke('hermes:mail:list', opts),
     read: opts => ipcRenderer.invoke('hermes:mail:read', opts),
-    folders: opts => ipcRenderer.invoke('hermes:mail:folders', opts)
+    folders: opts => ipcRenderer.invoke('hermes:mail:folders', opts),
+    flag: opts => ipcRenderer.invoke('hermes:mail:flag', opts),
+    move: opts => ipcRenderer.invoke('hermes:mail:move', opts),
+    search: opts => ipcRenderer.invoke('hermes:mail:search', opts)
   },
   readDir: dirPath => ipcRenderer.invoke('hermes:fs:readDir', dirPath),
   gitRoot: startPath => ipcRenderer.invoke('hermes:fs:gitRoot', startPath),

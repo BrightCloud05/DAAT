@@ -48,10 +48,50 @@ const TAG_RE = /(^|[^\w#&])#([\p{L}\p{N}_][\p{L}\p{N}_/-]*)/gu
 interface MdastNode {
   type: string
   value?: string
+  url?: string
   depth?: number
   children?: MdastNode[]
   position?: { start?: { line?: number } }
   data?: { alias?: string; permalink?: string }
+}
+
+/**
+ * An internal markdown link's target, normalized to resolve through the same
+ * path/name keys wikilinks use — or null when the link leaves the vault.
+ * `[Note](Other%20Note.md)` is how agents and exporters commonly link notes;
+ * counting only `[[wikilinks]]` made those vaults look unlinked in the graph.
+ */
+function internalLinkTarget(url: string): string | null {
+  const raw = url.trim()
+
+  // Schemes (http:, mailto:, obsidian:…) and bare anchors leave the vault.
+  if (!raw || raw.startsWith('#') || /^[a-z][a-z0-9+.-]*:/i.test(raw)) {
+    return null
+  }
+
+  let decoded = raw
+
+  try {
+    decoded = decodeURIComponent(raw)
+  } catch {
+    // Malformed escapes — use the raw text.
+  }
+
+  const withoutFragment = decoded.split('#')[0].replace(/^\.\//, '')
+
+  if (!withoutFragment) {
+    return null
+  }
+
+  const lastSegment = withoutFragment.split('/').pop() ?? ''
+
+  if (/\.(md|markdown)$/i.test(lastSegment)) {
+    return withoutFragment.replace(/\.(md|markdown)$/i, '')
+  }
+
+  // Extensionless relative targets are note links; anything with another
+  // extension (images, PDFs) is an embed, not a graph edge.
+  return lastSegment.includes('.') ? null : withoutFragment
 }
 
 function walk(node: MdastNode, visit: (node: MdastNode, insideCode: boolean) => void, insideCode = false): void {
@@ -110,6 +150,14 @@ export function parseNote(content: string, fallbackTitle: string): ParsedNote {
         targetRaw: String(node.value ?? ''),
         line: node.position?.start?.line ?? 0
       })
+    }
+
+    if (node.type === 'link' && !insideCode && node.url) {
+      const target = internalLinkTarget(node.url)
+
+      if (target) {
+        links.push({ targetRaw: target, line: node.position?.start?.line ?? 0 })
+      }
     }
 
     if (node.type === 'heading') {

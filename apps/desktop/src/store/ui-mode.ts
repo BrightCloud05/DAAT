@@ -18,7 +18,26 @@ const KEY = 'daat.desktop.uiMode.v1'
 
 export type UiMode = 'simple' | 'advanced'
 
-const read = (): UiMode => (storedString(KEY) === 'advanced' ? 'advanced' : 'simple')
+/**
+ * Session windows are always the full shell.
+ *
+ * `openSessionWindow` pops one conversation into its own OS window, at the
+ * route `#/<sessionId>`. Simple mode renders NotesShell there — a notes
+ * surface that ignores the session route entirely — so a popped-out chat came
+ * up showing the notebook and no chat at all. The window kind already says
+ * what the window is for; it does not need a stored preference to say it
+ * again, and it must not be able to contradict it.
+ */
+function isSessionWindow(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('win') === 'secondary'
+  } catch {
+    return false
+  }
+}
+
+const read = (): UiMode =>
+  isSessionWindow() || storedString(KEY) === 'advanced' ? 'advanced' : 'simple'
 
 export const $uiMode = atom<UiMode>(typeof window === 'undefined' ? 'simple' : read())
 

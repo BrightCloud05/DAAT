@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { test } from 'vitest'
 
-import { declaredModules, declaredPackages } from '../scripts/stage-agent-source.mjs'
+import { declaredModules, declaredPackages, OPTIONAL_SKILL_CATEGORIES } from '../scripts/stage-agent-source.mjs'
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../../..')
 const pyproject = () => fs.readFileSync(path.join(REPO_ROOT, 'pyproject.toml'), 'utf8')
@@ -41,4 +41,24 @@ test('a module missing from the repo is a build failure, not a silent omission',
     /could not read .* py-modules/,
     'pyproject without py-modules must fail loudly — shipping a bundle with no root modules is worse'
   )
+})
+
+test('every optional skill category that ships actually exists', () => {
+  for (const category of OPTIONAL_SKILL_CATEGORIES) {
+    const dir = path.join(REPO_ROOT, 'optional-skills', category)
+
+    assert.ok(fs.existsSync(dir), `ships optional-skills/${category}, which is not in the repo`)
+  }
+})
+
+test('the categories deliberately left out stay out', () => {
+  // mlops alone is 31 skills of model registries and training pipelines. The
+  // cost is not disk — it is the skill index the model reads every turn, which
+  // gets worse at surfacing the right tool the more wrong ones sit beside it.
+  for (const excluded of ['mlops', 'creative', 'blockchain', 'payments', 'gaming']) {
+    assert.ok(
+      !OPTIONAL_SKILL_CATEGORIES.includes(excluded),
+      `${excluded} is not for Daat's readers; adding it needs a reason in the comment above the list`
+    )
+  }
 })

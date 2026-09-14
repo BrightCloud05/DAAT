@@ -11,6 +11,17 @@ import type { QuickEntryStatePush, QuickEntryStatus, QuickEntrySubmitPayload } f
 export {}
 
 declare global {
+  /** A calendar feed (ICS URL) synced into Calendar/Sync as notes. */
+  interface IcsSubscription {
+    id: string
+    name: string
+    url: string
+    addedAt: number
+    lastSyncAt?: number
+    lastEventCount?: number
+    lastError?: string
+  }
+
   // Vault shapes — structural mirrors of electron/vault/vault-types.ts (the
   // renderer can't import from electron/, so keep the two in sync by hand).
   interface VaultInfo {
@@ -42,6 +53,7 @@ declare global {
   type VaultWriteResult =
     | { ok: true; mtimeMs: number }
     | { ok: false; reason: 'conflict'; conflictPath: string }
+    | { ok: false; reason: 'unreadable' }
   interface VaultSearchHit {
     path: string
     title: string
@@ -82,6 +94,23 @@ declare global {
         list: (opts?: { account?: string; folder?: string; limit?: number }) => Promise<MailEnvelope[]>
         read: (opts: { id: string; account?: string; folder?: string }) => Promise<string>
         folders: (opts?: { account?: string }) => Promise<string[]>
+        /** Add or remove an IMAP flag (Seen, Flagged, Answered, Draft). */
+        flag: (opts: {
+          id: string
+          flag: string
+          remove?: boolean
+          folder?: string
+          account?: string
+        }) => Promise<boolean>
+        /** Move a message between folders — this is how archive and trash work. */
+        move: (opts: { id: string; target: string; folder?: string; account?: string }) => Promise<boolean>
+        /** Himalaya's filter grammar: `from dana`, `subject "invoice 42"`, `not flag seen`. */
+        search: (opts: {
+          query: string
+          folder?: string
+          limit?: number
+          account?: string
+        }) => Promise<MailEnvelope[]>
       }
       // Markdown vault (Daat second brain). All paths vault-relative POSIX.
       vault: {
@@ -102,6 +131,7 @@ declare global {
         ) => Promise<VaultWriteResult>
         createNote: (relPath: string) => Promise<VaultReadResult & { created: boolean }>
         createDir: (relPath: string) => Promise<void>
+        appendBinary: (relPath: string, data: Uint8Array) => Promise<{ path: string; bytes: number }>
         writeBinary: (relPath: string, data: Uint8Array) => Promise<{ path: string; bytes: number }>
         rename: (fromRel: string, toRel: string) => Promise<void>
         trash: (relPath: string) => Promise<void>
@@ -112,12 +142,16 @@ declare global {
         noteNames: () => Promise<Array<{ path: string; title: string; name: string }>>
         propertiesTable: () => Promise<Array<{ path: string; title: string; mtimeMs: number; props: Record<string, unknown> }>>
       linkGraph: () => Promise<{
-        nodes: Array<{ path: string; title: string; degree: number }>
+        nodes: Array<{ path: string; title: string; degree: number; kind?: 'note' | 'ghost' | 'tag' }>
         edges: Array<{ source: string; target: string }>
       }>
         todos: (limit?: number) => Promise<Array<{ path: string; line: number; text: string; done: boolean }>>
         reportContext: (payload: { activeNote: string | null; selection: string }) => void
         toggleTodo: (relPath: string, line: number, text?: string) => Promise<boolean>
+        icsSubscriptions: () => Promise<IcsSubscription[]>
+        icsAdd: (url: string, name?: string) => Promise<IcsSubscription[]>
+        icsRemove: (id: string) => Promise<IcsSubscription[]>
+        icsSync: () => Promise<{ events: number; written: number; removed: number; errors: string[] }>
         onIndexEvent: (callback: (event: VaultIndexEvent) => void) => () => void
         onConflict: (callback: (event: VaultConflictEvent) => void) => () => void
       }

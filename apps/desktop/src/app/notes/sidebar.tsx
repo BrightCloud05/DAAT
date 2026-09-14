@@ -22,7 +22,9 @@ import {
   chooseVault,
   createNote,
   createVault,
+  deleteNote,
   openNote as openNoteInStore,
+  renameNote,
   runVaultSearch,
   newUntitledPath
 } from '../vault/store'
@@ -47,6 +49,20 @@ import {
 async function openNote(relPath: string): Promise<void> {
   closeTableView()
   await openNoteInStore(relPath)
+}
+
+/**
+ * Making a page is opening a page.
+ *
+ * createNote adopts the new note as active but does not touch the canvas, so
+ * pressing New page from Graph, Todo or the table left the user on that screen
+ * with nothing visibly different. The note existed; it was simply not on
+ * screen. People pressed it again — which is where the `Untitled 2`,
+ * `Untitled 3` trail in real vaults comes from.
+ */
+async function createPage(relPath: string): Promise<void> {
+  closeTableView()
+  await createNote(relPath)
 }
 
 interface TreeEntry {
@@ -126,6 +142,39 @@ export function NotesSidebar() {
   const view = useStore($canvasView)
   const todos = useStore($vaultTodos)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+
+  const commitRename = async (fromPath: string) => {
+    setRenaming(null)
+
+    const clean = renameDraft.trim().replace(/[/\\]/g, ' ')
+    const dir = fromPath.split('/').slice(0, -1).join('/')
+    const ext = /\.(md|markdown)$/i.exec(fromPath)?.[0] ?? '.md'
+    const toPath = (dir ? `${dir}/` : '') + clean + ext
+
+    if (!clean || toPath === fromPath) {
+      return
+    }
+
+    try {
+      await renameNote(fromPath, toPath)
+    } catch {
+      // Target exists or the volume said no — the note keeps its old name.
+    }
+  }
+
+  const removeNote = async (relPath: string, name: string) => {
+    if (!window.confirm(s.deleteConfirm(name))) {
+      return
+    }
+
+    try {
+      await deleteNote(relPath)
+    } catch {
+      // Already gone (other Mac, external editor) — the refresh sorts it out.
+    }
+  }
   const navigate = useNavigate()
 
   initTodosStore()
@@ -179,7 +228,7 @@ export function NotesSidebar() {
         </span>
         <button
           className="opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
-          onClick={() => void createNote(newUntitledPath(notes))}
+          onClick={() => void createPage(newUntitledPath(notes))}
           title="New page"
         >
           <Codicon className="text-[14px]" name="new-file" />
@@ -270,19 +319,64 @@ export function NotesSidebar() {
                 <Codicon className="shrink-0 text-[13px] opacity-55" name="folder" />
                 <span className="truncate">{entry.name}</span>
               </button>
-            ) : (
-              <button
-                className={cn(
-                  ROW,
-                  active?.path === entry.path && 'bg-(--ui-control-active-background) font-medium'
-                )}
+            ) : renaming === entry.path ? (
+              <div
+                className={cn(ROW)}
                 key={entry.path}
-                onClick={() => void openNote(entry.path)}
                 style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
               >
                 <Codicon className="shrink-0 text-[13px] opacity-55" name="note" />
-                <span className="truncate">{entry.name}</span>
-              </button>
+                <input
+                  autoFocus
+                  className="w-full min-w-0 border-b border-(--dt-primary) bg-transparent text-[13px] outline-none"
+                  value={renameDraft}
+                  onChange={event => setRenameDraft(event.target.value)}
+                  onBlur={() => void commitRename(entry.path)}
+                  onKeyDown={event => {
+                    if (event.key === 'Enter') {
+                      event.currentTarget.blur()
+                    } else if (event.key === 'Escape') {
+                      setRenaming(null)
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              // Hover-revealed rename/delete, following the sidebar's Notion
+              // grammar. A wrapper div because buttons cannot nest.
+              <div className="group/note relative" key={entry.path} style={{ height: TREE_ROW_PX }}>
+                <button
+                  className={cn(
+                    ROW,
+                    'h-full',
+                    active?.path === entry.path && 'bg-(--ui-control-active-background) font-medium'
+                  )}
+                  onClick={() => void openNote(entry.path)}
+                  style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
+                >
+                  <Codicon className="shrink-0 text-[13px] opacity-55" name="note" />
+                  <span className="truncate">{entry.name}</span>
+                </button>
+                <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-px rounded-sm bg-(--ui-control-hover-background) group-hover/note:flex">
+                  <button
+                    className="grid size-[20px] place-items-center rounded-sm opacity-60 hover:opacity-100"
+                    onClick={() => {
+                      setRenaming(entry.path)
+                      setRenameDraft(entry.name)
+                    }}
+                    title={s.renameNote}
+                  >
+                    <Codicon className="text-[12px]" name="edit" />
+                  </button>
+                  <button
+                    className="grid size-[20px] place-items-center rounded-sm opacity-60 hover:opacity-100"
+                    onClick={() => void removeNote(entry.path, entry.name)}
+                    title={s.deleteNoteAction}
+                  >
+                    <Codicon className="text-[12px]" name="trash" />
+                  </button>
+                </div>
+              </div>
             )
           )
           ]
@@ -339,7 +433,7 @@ export function NotesSidebar() {
 
       {/* Bottom-anchored actions — Notion's New / Settings grammar. */}
       <div className="mt-2 border-t border-(--stroke-nous) py-2">
-        <button className={ROW} onClick={() => void createNote(newUntitledPath(notes))}>
+        <button className={ROW} onClick={() => void createPage(newUntitledPath(notes))}>
           <Codicon className="text-[13px] opacity-55" name="add" />
           <span>New page</span>
           <span className="ml-auto text-[11px] opacity-40">⌘N</span>

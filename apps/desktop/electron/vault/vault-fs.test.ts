@@ -89,6 +89,126 @@ test('writeNote skips rewriting unchanged content', async () => {
   assert.equal(again.mtimeMs, first.mtimeMs)
 })
 
+/*
+ * The default configuration is an iCloud vault with "Optimize Mac Storage" on,
+ * which evicts note contents and leaves a file that still stats fine but whose
+ * bytes will not come back until iCloud downloads them.
+ *
+ * readNote hands such a note to the editor as EMPTY with its real mtime. Both
+ * of writeNote's guards then used to pass vacuously — the mtime matched, and
+ * the byte comparison had nothing to compare — so the empty document was
+ * written over a year of writing, and iCloud carried that to every device.
+ *
+ * chmod 000 stands in for the eviction: the cause of the failed read (blocked
+ * open vs. refused open) does not matter, only that the current bytes are
+ * unknown. It is instant, where a real blocking read costs the 4s timeout.
+ */
+test('an evicted note is not overwritten by the emptiness the editor was given', async ({ skip }) => {
+  skip(process.getuid?.() === 0, 'root reads mode-000 files, so nothing is unreadable')
+
+  const root = await tmpVault()
+  const file = path.join(root, 'Note.md')
+  const real = '# Real\n\nA year of writing.\n'
+
+  await fs.writeFile(file, real, 'utf8')
+
+  // Exactly what readNote returns for an evicted note, and therefore exactly
+  // what the editor holds and hands back on the next autosave.
+  const { mtimeMs, content } = { mtimeMs: (await fs.stat(file)).mtimeMs, content: '' }
+
+  await fs.chmod(file, 0o000)
+
+  const result = await writeNote(file, content, mtimeMs, content)
+
+  await fs.chmod(file, 0o644)
+
+  assert.equal(result.ok, false)
+  assert.equal(result.unreadable, true)
+  assert.equal(await fs.readFile(file, 'utf8'), real, 'the note is still there')
+
+  await fs.rm(root, { force: true, recursive: true })
+})
+
+test('a knowing overwrite of an unreadable file is still allowed', async ({ skip }) => {
+  // `expectedMtimeMs === null` is a caller saying it does not care what is
+  // there — seeding a template, restoring a file. Refusing those would break
+  // legitimate writes; the refusal is only for callers editing on top of
+  // something they believe they read.
+  skip(process.getuid?.() === 0, 'root reads mode-000 files, so nothing is unreadable')
+
+  const root = await tmpVault()
+  const file = path.join(root, 'Note.md')
+
+  await fs.writeFile(file, 'old', 'utf8')
+  await fs.chmod(file, 0o000)
+
+  const result = await writeNote(file, 'deliberate', null)
+
+  await fs.chmod(file, 0o644).catch(() => undefined)
+
+  assert.equal(result.ok, true)
+  assert.equal(await fs.readFile(file, 'utf8'), 'deliberate')
+
+  await fs.rm(root, { force: true, recursive: true })
+})
+
+test('a legacy .icloud placeholder is not paved over with a fresh file', async () => {
+  // The older eviction form: `Note.md` is absent under its own name and only
+  // `.Note.md.icloud` is on disk. stat() fails, so the write used to sail past
+  // every guard and create a new file — replacing a note that still exists.
+  const root = await tmpVault()
+
+  await fs.writeFile(path.join(root, '.Note.md.icloud'), 'plist', 'utf8')
+
+  const result = await writeNote(path.join(root, 'Note.md'), 'replacement', 0, '')
+
+  assert.equal(result.ok, false)
+  assert.equal(result.unreadable, true)
+  assert.equal(await fs.readFile(path.join(root, 'Note.md'), 'utf8').catch(() => null), null)
+
+  await fs.rm(root, { force: true, recursive: true })
+})
+
+test('two conflicts in the same minute get two files', async () => {
+  // The stamp used to be minute-resolution with no existence check, so a save
+  // loop retrying against a file iCloud keeps touching overwrote the previous
+  // conflict copy — losing the writing the copy existed to preserve.
+  const root = await tmpVault()
+  const file = path.join(root, 'Note.md')
+
+  await fs.writeFile(file, 'disk', 'utf8')
+
+  const stale = (await fs.stat(file)).mtimeMs - 10_000
+
+  const first = await writeNote(file, 'mine one', stale, 'mine one')
+  const second = await writeNote(file, 'mine two', stale, 'mine two')
+
+  assert.equal(first.ok, false)
+  assert.equal(second.ok, false)
+  assert.notEqual(first.conflictPath, second.conflictPath)
+  assert.equal(await fs.readFile(first.conflictPath!, 'utf8'), 'mine one')
+  assert.equal(await fs.readFile(second.conflictPath!, 'utf8'), 'mine two')
+
+  await fs.rm(root, { force: true, recursive: true })
+})
+
+test('a failed write leaves no temp file behind', async () => {
+  // The temp files are dot-files, so they accumulate unseen — and iCloud syncs
+  // every one of them to every device.
+  const root = await tmpVault()
+  const target = path.join(root, 'Note.md')
+
+  await fs.mkdir(target)
+
+  await assert.rejects(writeNote(target, 'content', null))
+
+  const left = (await fs.readdir(root)).filter(name => name.includes('.tmp-'))
+
+  assert.deepEqual(left, [])
+
+  await fs.rm(root, { force: true, recursive: true })
+})
+
 test('contentHash is stable per content', () => {
   assert.equal(contentHash('abc'), contentHash('abc'))
   assert.notEqual(contentHash('abc'), contentHash('abd'))

@@ -10,7 +10,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { foldGutter, foldKeymap } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
-import { EditorState } from '@codemirror/state'
+import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -42,13 +42,15 @@ import {
   $activeNote,
   $vaultConflicts,
   $vaultNotes,
+  $vaultRescued,
   $vaultSaveError,
   createNote,
   dismissConflict,
   flushActiveNote,
   newUntitledPath,
   noteEdited,
-  openNote
+  openNote,
+  rescuedText
 } from './store'
 
 async function openWikilink(target: string): Promise<void> {
@@ -155,15 +157,36 @@ function bodyStart(content: string): number {
   return match ? Math.min(match[0].length, content.length) : 0
 }
 
+/*
+ * An evicted note reads back as empty while iCloud brings its text down. If
+ * that empty document is editable, one keystroke makes it dirty, autosave
+ * fires, and the note becomes what the user just typed — the rest of it gone
+ * from every device. The store refuses such a write now, but the honest UI is
+ * not to accept the typing in the first place.
+ */
+const readOnlyLock = new Compartment()
+
 export function VaultEditorPane() {
   const s = productStrings(useStore($productLocale))
   const active = useStore($activeNote)
   const dirty = useStore($activeDirty)
   const conflicts = useStore($vaultConflicts)
   const saveError = useStore($vaultSaveError)
+  // Notes other than this one still holding text that never reached disk.
+  const elsewhere = useStore($vaultRescued).filter(path => path !== active?.path)
   const viewRef = useRef<EditorView | null>(null)
   const pathRef = useRef<string | null>(null)
   const [hostReady, setHostReady] = useState(0)
+
+  const locked = Boolean(active?.dataless)
+
+  // `dataless` flips to false under the same open note once the download
+  // lands, and the same-note path below patches the document rather than
+  // rebuilding the state — so the lock has to be reconfigured in place or the
+  // editor stays read-only for the rest of the session.
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: readOnlyLock.reconfigure(EditorState.readOnly.of(locked)) })
+  }, [locked, hostReady])
 
   // Callback ref, NOT a mount effect: the host div only exists while a note is
   // open, so an effect with [] deps would run once against a null ref and no
@@ -232,14 +255,27 @@ export function VaultEditorPane() {
       return
     }
 
+    /*
+     * Text this note carried away from a failed save comes back here, not
+     * from `active` — the store keeps that as disk truth because it is the
+     * guard the next write compares against. `noteEdited` below re-declares
+     * it as an edit, which is what it still is.
+     */
+    const held = rescuedText(active.path)
+    const doc = held ?? active.content
+
     view.setState(
       EditorState.create({
-        doc: active.content,
+        doc,
         // Start in the body, past any frontmatter: offset 0 sits inside the
         // YAML block, which keeps it unfolded and drops the user into
         // metadata instead of their writing.
-        selection: { anchor: bodyStart(active.content) },
+        selection: { anchor: bodyStart(doc) },
         extensions: [
+          // Seeded with the note's current state, not a default: setState
+          // rebuilds the compartment, so a note opened while still evicted
+          // would come up editable if this started at false.
+          readOnlyLock.of(EditorState.readOnly.of(active.dataless)),
           history(),
           inlineAiTrigger(),
           selectionHint(),
@@ -281,6 +317,20 @@ export function VaultEditorPane() {
     )
 
     view.focus()
+
+    /*
+     * setState swaps the document without producing a `docChanged` update, so
+     * nothing bumps the doc epoch — and everything that derives from the live
+     * document keeps deriving from the note the user just left. The properties
+     * panel is the visible one: open a meeting note after a course note and it
+     * showed the course's `course:` and `semester:` under the meeting's title,
+     * until the first keystroke corrected it.
+     */
+    bumpDocEpoch()
+
+    if (held !== undefined && held !== active.content) {
+      noteEdited(held)
+    }
   }, [active, hostReady])
 
   if (!active) {
@@ -379,6 +429,21 @@ export function VaultEditorPane() {
             <span className="min-w-0 flex-1 truncate">{s.saveFailed(saveError)}</span>
             <button className="underline opacity-80 hover:opacity-100" onClick={() => void flushActiveNote()}>
               {s.retryNow}
+            </button>
+          </div>
+        ) : null}
+
+        {/* Text parked from a note the user has since left. Without this the
+          only sign is a note that quietly differs from what they wrote. */}
+        {elsewhere.length ? (
+          <div className="flex items-center gap-2 border-b border-(--stroke-nous) bg-(--sem-late-wash) px-4 py-1.5 text-xs">
+            <Codicon name="warning" />
+            <span className="min-w-0 flex-1 truncate">{s.unsavedElsewhere(elsewhere.length)}</span>
+            <button
+              className="underline opacity-80 hover:opacity-100"
+              onClick={() => void openNote(elsewhere[0])}
+            >
+              {s.openUnsaved}
             </button>
           </div>
         ) : null}

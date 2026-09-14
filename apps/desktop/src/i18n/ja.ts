@@ -2049,6 +2049,8 @@ export const ja = defineLocale({
       'すでに実行している Daat ゲートウェイに接続するか、このコンピューターに Daat をローカルインストールします。',
     connectExistingTitle: '既存の Daat に接続',
     connectExistingShort: '既存環境に接続',
+    connectExistingLink: 'Daat を別の場所で実行していますか？',
+    installLocalStarting: '開始しています…',
     connectExistingDesc:
       'セッショントークンまたはブラウザーサインインでリモートバックエンドを使用します。ローカルインストールは開始されません。',
     installLocalTitle: 'Daat をローカルにインストール',

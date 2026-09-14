@@ -2372,6 +2372,8 @@ export const zh: Translations = {
     setupChoiceDesc: '将此应用连接到你已运行的 Daat 网关，或在这台电脑上本地安装 Daat。',
     connectExistingTitle: '连接到现有 Daat',
     connectExistingShort: '连接现有环境',
+    connectExistingLink: '已经在别处运行 Daat？',
+    installLocalStarting: '正在启动…',
     connectExistingDesc: '使用会话令牌或浏览器登录连接远程后端。不会启动本地安装。',
     installLocalTitle: '本地安装 Daat',
     installLocalDesc: '下载 Daat，创建 Python 环境，并在这台电脑上运行后端。',

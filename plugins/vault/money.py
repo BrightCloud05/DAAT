@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 from .tools import _resolve, _vault_root, vault_write
@@ -17,6 +18,7 @@ from .tools import _resolve, _vault_root, vault_write
 HEADER = "| Date | Description | Category | Amount |"
 DIVIDER = "| --- | --- | --- | --- |"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MONTH_RE = re.compile(r"\d{4}-\d{2}")
 
 
 def _month_path(date: str) -> str:
@@ -27,8 +29,16 @@ def _empty_note(month: str) -> str:
     return f"---\ntype: money\nmonth: {month}\n---\n\n# {month}\n\n{HEADER}\n{DIVIDER}\n"
 
 
-def _existing_keys(content: str) -> set[str]:
-    keys = set()
+def _existing_counts(content: str) -> Counter[str]:
+    """How many times each transaction already appears in the note.
+
+    Counted, not a set. Two $4.50 coffees at the same cafe on the same day are
+    one key and two transactions; presence-only matching dropped the second and
+    reported it as a duplicate, so the month's spend was quietly short and the
+    user had nothing to reconcile against. The desktop's port of this function
+    already counts (app/notes/money.ts) — this is the writer that actually runs.
+    """
+    counts: Counter[str] = Counter()
 
     for line in content.splitlines():
         stripped = line.strip()
@@ -46,9 +56,9 @@ def _existing_keys(content: str) -> set[str]:
         except ValueError:
             continue
 
-        keys.add(f"{cells[0]}|{amount:.2f}|{cells[1].lower()}")
+        counts[f"{cells[0]}|{amount:.2f}|{cells[1].lower()}"] += 1
 
-    return keys
+    return counts
 
 
 def money_add_transactions(rows_json: str, source: str = "") -> str:
@@ -79,7 +89,7 @@ def money_add_transactions(rows_json: str, source: str = "") -> str:
             continue
 
         date = str(row.get("date", "")).strip()
-        description = str(row.get("description", "")).strip()
+        description = " ".join(str(row.get("description", "")).split())
 
         try:
             amount = float(str(row.get("amount", "")).replace("$", "").replace(",", ""))
@@ -95,7 +105,9 @@ def money_add_transactions(rows_json: str, source: str = "") -> str:
             {
                 "date": date,
                 "description": description.replace("|", "/"),
-                "category": (str(row.get("category", "")).strip() or "Uncategorized").replace("|", "/"),
+                "category": (" ".join(str(row.get("category", "")).split()) or "Uncategorized").replace(
+                    "|", "/"
+                ),
                 "amount": amount,
             }
         )
@@ -106,46 +118,84 @@ def money_add_transactions(rows_json: str, source: str = "") -> str:
     added_total = 0
     skipped_total = 0
     touched = []
+    failed = []
 
     for rel_path, month_rows in by_month.items():
         absolute = _resolve(root, rel_path)
 
         if not absolute:
+            failed.append(f"{rel_path} (path escapes the vault)")
             continue
 
         month = Path(rel_path).stem
-        content = absolute.read_text(encoding="utf-8") if absolute.exists() else _empty_note(month)
+
+        try:
+            content = absolute.read_text(encoding="utf-8") if absolute.exists() else _empty_note(month)
+        except OSError as error:
+            # An iCloud-evicted month note, or a volume that went away. Writing
+            # over it would replace a month of transactions with this import.
+            failed.append(f"{rel_path} ({error})")
+            continue
 
         if HEADER not in content:
             content = content.rstrip() + f"\n\n{HEADER}\n{DIVIDER}\n"
 
-        keys = _existing_keys(content)
+        existing = _existing_counts(content)
+        seen: Counter[str] = Counter()
+        month_added = 0
+        month_skipped = 0
         lines = []
 
         for row in sorted(month_rows, key=lambda item: item["date"]):
             key = f'{row["date"]}|{row["amount"]:.2f}|{row["description"].lower()}'
+            seen[key] += 1
 
-            if key in keys:
-                skipped_total += 1
+            # Skip only as many copies as the note already holds. Re-importing
+            # the same statement still adds nothing; a genuine second identical
+            # purchase still lands.
+            if seen[key] <= existing[key]:
+                month_skipped += 1
                 continue
 
-            keys.add(key)
-            added_total += 1
+            month_added += 1
             lines.append(
                 f'| {row["date"]} | {row["description"]} | {row["category"]} | {row["amount"]:.2f} |'
             )
 
-        if lines:
-            content = content.rstrip() + "\n" + "\n".join(lines) + "\n"
+        if not lines:
+            skipped_total += month_skipped
+            continue
 
-            if source:
-                marker = f"\n<!-- imported from: {source} -->\n"
+        # Provenance goes ABOVE the table. Appended below it, the next import's
+        # rows land under the comment, where the blank line has already ended
+        # the table — so they render as literal pipes instead of cells.
+        if source:
+            marker = f"<!-- imported from: {source} -->"
 
-                if marker.strip() not in content:
-                    content = content.rstrip() + "\n" + marker
+            if marker not in content:
+                content = content.replace(HEADER, f"{marker}\n\n{HEADER}", 1)
 
-            vault_write(rel_path, content)
-            touched.append(rel_path)
+        content = content.rstrip() + "\n" + "\n".join(lines) + "\n"
+
+        # vault_write reports failure by RETURNING a string, not by raising. The
+        # bare call here meant a write refused for a closed vault or a read-only
+        # volume was reported to the user as a completed import, and the
+        # statement they then filed away was the only copy.
+        # Caught, so one unwritable month does not abandon the others: an
+        # exception here used to escape with earlier months already on disk and
+        # later ones never attempted, and no summary of either.
+        try:
+            result = vault_write(rel_path, content)
+        except Exception as error:  # noqa: BLE001 — report it, don't lose the rest
+            result = f"Could not write {rel_path}: {error}"
+
+        if not result.startswith("Wrote "):
+            failed.append(f"{rel_path} ({result})")
+            continue
+
+        added_total += month_added
+        skipped_total += month_skipped
+        touched.append(rel_path)
 
     summary = [f"Added {added_total} transaction(s)"]
 
@@ -156,6 +206,14 @@ def money_add_transactions(rows_json: str, source: str = "") -> str:
         summary.append(f"ignored {rejected} unusable row(s)")
 
     summary.append(f'in {", ".join(touched) if touched else "no files"}')
+
+    if failed:
+        return (
+            " · ".join(summary)
+            + ". WRITE FAILED for "
+            + "; ".join(failed)
+            + " — those transactions were NOT saved. Tell the user, and do not say the statement is recorded."
+        )
 
     return " · ".join(summary) + ". The user can review the table in the Money screen."
 
@@ -172,10 +230,19 @@ def money_summary(month: str = "") -> str:
     if not money_dir.is_dir():
         return "No money notes yet. Drop a bank statement into the chat and I'll extract the transactions."
 
-    if month.strip():
-        target = money_dir / f"{month.strip()}.md"
+    wanted = month.strip()
+
+    if wanted and not MONTH_RE.fullmatch(wanted):
+        # Interpolated straight into a path below, and the model supplies it.
+        return "Month must be YYYY-MM."
+
+    if wanted:
+        target = money_dir / f"{wanted}.md"
     else:
-        notes = sorted(money_dir.glob("*.md"))
+        # Month notes only. An unfiltered glob sorts letters after digits, so a
+        # hand-written Money/Budget.md became "the latest month" and its planned
+        # figures were reported as actual spend.
+        notes = sorted(path for path in money_dir.glob("*.md") if MONTH_RE.fullmatch(path.stem))
         target = notes[-1] if notes else None
 
     if not target or not target.exists():

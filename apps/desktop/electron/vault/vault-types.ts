@@ -68,6 +68,15 @@ export type VaultWriteResult =
       /** Where the caller's content was preserved instead. */
       conflictPath: string
     }
+  | {
+      /**
+       * The note's contents are still coming down from iCloud, so there was
+       * nothing safe to write against. Nothing was written and nothing was
+       * preserved — the caller still holds the text and should retry.
+       */
+      ok: false
+      reason: 'unreadable'
+    }
 
 /** Pushed to the renderer over `hermes:vault:index-event`. */
 export type VaultIndexEvent =
@@ -87,6 +96,12 @@ export interface VaultGraphNode {
   path: string
   title: string
   degree: number
+  /**
+   * 'note' (default) — a real file, clickable.
+   * 'ghost' — an unresolved link target, Obsidian-style; `path` is synthetic.
+   * 'tag' — a #tag hub connecting the notes that carry it.
+   */
+  kind?: 'note' | 'ghost' | 'tag'
 }
 
 export interface VaultGraphEdge {

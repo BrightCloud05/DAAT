@@ -1,0 +1,45 @@
+{
+  "questionKinds": [
+    {
+      "id": "student",
+      "kinds": [
+        "preferences"
+      ]
+    },
+    {
+      "id": "accounting",
+      "kinds": [
+        "preferences"
+      ]
+    },
+    {
+      "id": "office",
+      "kinds": [
+        "preferences"
+      ]
+    },
+    {
+      "id": "programming",
+      "kinds": [
+        "preferences"
+      ]
+    },
+    {
+      "id": "secretary",
+      "kinds": [
+        "preferences"
+      ]
+    },
+    {
+      "id": "general",
+      "kinds": [
+        "preferences"
+      ]
+    }
+  ],
+  "savedSoul": {
+    "profile": "default",
+    "content": "Original assistant instructions\n\n## How I like to work\n\nI've given you these files: \"/tmp/example-syllabus.pdf\" (example-syllabus.pdf). Read them — if a file is an image or a PDF, read it visually — and use what they say.\n"
+  },
+  "status": "done"
+}

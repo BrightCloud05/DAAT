@@ -135,6 +135,27 @@ CATALOG: List[AutomationBlueprint] = [
         tags=("daily", "briefing"),
     ),
     AutomationBlueprint(
+        key="vault-briefing",
+        title="Morning briefing, written into your notes",
+        description="Reads your vault first, then mail, markets and the news — "
+        "and files the result in today's note so it is still there next month.",
+        category="daily",
+        schedule_template="{minute} {hour} * * *",
+        # The method lives in the daily-briefing skill, not here. A cron prompt
+        # and a skill that both describe how to write a briefing are two things
+        # to keep in step, and they will not stay in step. This says WHEN; the
+        # skill says HOW.
+        prompt_template=(
+            "Run the daily-briefing skill now and follow it exactly. This is an "
+            "unattended run: never ask a question — decide, or say what you "
+            "could not determine and why. Write the briefing into today's daily "
+            "note and reply with the short digest the skill describes."
+        ),
+        slots=[_TIME("08:00"), _DELIVER],
+        skills=("daily-briefing",),
+        tags=("daily", "briefing", "vault"),
+    ),
+    AutomationBlueprint(
         key="important-mail",
         title="Important-mail monitor",
         description="Check your inbox periodically and ping you ONLY about mail "

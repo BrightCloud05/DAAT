@@ -66,6 +66,58 @@ function himalayaBinary(): string | null {
   return candidates.find(candidate => fs.existsSync(candidate)) ?? null
 }
 
+/**
+ * Folder, account, flag and message-id values, checked before they reach argv.
+ *
+ * Mirrors safe_name() in plugins/mail/himalaya.py. A leading dash turns the
+ * value into a flag, and himalaya's `-c/--config` will load an arbitrary TOML
+ * whose `auth.cmd` runs a shell command. These arrive over IPC, so they are
+ * exactly as trustworthy as the renderer — which is to say, not.
+ */
+export function safeName(value: string, what: string): string {
+  const clean = String(value ?? '').trim()
+
+  if (!clean || clean.startsWith('-') || /[\r\n\0]/.test(clean)) {
+    throw new Error(`invalid-${what.replace(/\s+/g, '-')}`)
+  }
+
+  return clean
+}
+
+/**
+ * Split a search box into himalaya filter terms.
+ *
+ * Quoted phrases survive as one term: `subject "invoice 42"` is three words to
+ * str.split and one condition to himalaya, and shredding it produces a query
+ * that silently matches the wrong thing rather than failing.
+ */
+export function searchTerms(query: string): string[] {
+  const terms: string[] = []
+
+  for (const [, quoted, bare] of String(query ?? '').matchAll(/"([^"]*)"|(\S+)/g)) {
+    const term = quoted ?? bare
+
+    if (term) {
+      terms.push(term)
+    }
+  }
+
+  // A term that starts with a dash would be read as a flag even after `--` is
+  // consumed by the first one, so drop them rather than guess an escape.
+  return terms.filter(term => !term.startsWith('-'))
+}
+
+/** Run himalaya for its exit code; organise commands print no JSON. */
+async function runHimalayaRaw(args: string[], timeout = LIST_TIMEOUT_MS): Promise<void> {
+  const exe = himalayaBinary()
+
+  if (!exe) {
+    throw new Error('himalaya-not-installed')
+  }
+
+  await execFileAsync(exe, args, { timeout, maxBuffer: 1024 * 1024, env: { ...process.env, NO_COLOR: '1' } })
+}
+
 async function runHimalaya(args: string[], timeout = LIST_TIMEOUT_MS): Promise<unknown> {
   const exe = himalayaBinary()
 
@@ -174,6 +226,84 @@ export function initMailIpc(): void {
       })
 
       return stdout
+    }
+  )
+
+  /*
+   * Organise: flag, move, search.
+   *
+   * The agent has had mail_flag/mail_move/mail_search since the plugin was
+   * written; the person looking at their own inbox had none of them. That is
+   * the wrong way round — the human is the one accountable for what happens to
+   * their mail, and they were the one who could only look at it.
+   *
+   * Still nothing here leaves the machine. Composing and sending stay with the
+   * agent, where the approval gate lives.
+   */
+
+  ipcMain.handle(
+    'hermes:mail:flag',
+    async (_event, opts: { id: string; flag: string; remove?: boolean; folder?: string; account?: string }) => {
+      const args = ['flag', opts.remove ? 'remove' : 'add', '-f', safeName(opts.folder || 'INBOX', 'folder')]
+
+      if (opts.account) {
+        args.push('-a', safeName(opts.account, 'account'))
+      }
+
+      // Positionals go after every flag: himalaya folds anything following a
+      // positional into it, so a flag placed last is silently swallowed.
+      args.push('--', safeName(opts.id, 'message id'), safeName(opts.flag, 'flag'))
+
+      await runHimalayaRaw(args)
+
+      return true
+    }
+  )
+
+  ipcMain.handle(
+    'hermes:mail:move',
+    async (_event, opts: { id: string; target: string; folder?: string; account?: string }) => {
+      const args = ['message', 'move', '-f', safeName(opts.folder || 'INBOX', 'folder')]
+
+      if (opts.account) {
+        args.push('-a', safeName(opts.account, 'account'))
+      }
+
+      args.push('--', safeName(opts.target, 'target folder'), safeName(opts.id, 'message id'))
+
+      await runHimalayaRaw(args)
+
+      return true
+    }
+  )
+
+  ipcMain.handle(
+    'hermes:mail:search',
+    async (_event, opts: { query: string; folder?: string; limit?: number; account?: string }) => {
+      const terms = searchTerms(opts.query)
+
+      if (!terms.length) {
+        return []
+      }
+
+      const args = [
+        'envelope',
+        'list',
+        '-f',
+        safeName(opts.folder || 'INBOX', 'folder'),
+        '-s',
+        String(Math.min(Math.max(opts.limit || 30, 1), 100))
+      ]
+
+      if (opts.account) {
+        args.push('-a', safeName(opts.account, 'account'))
+      }
+
+      args.push('-o', 'json', '--', ...terms)
+
+      const data = (await runHimalaya(args)) as Array<Record<string, unknown>>
+
+      return (Array.isArray(data) ? data : []).map(toEnvelope)
     }
   )
 

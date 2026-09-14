@@ -200,7 +200,14 @@ def vault_write(rel: str, content: str) -> str:
     except OSError as error:
         return f"Could not write {rel}: {error}"
 
-    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=f".{target.name}.tmp-")
+    # Inside a try like every other step: this raises on a read-only volume or a
+    # full disk, and it sat outside one — so the single function documented to
+    # report failure by returning a string threw instead, and callers that
+    # checked the string never got to run.
+    try:
+        fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=f".{target.name}.tmp-")
+    except OSError as error:
+        return f"Could not write {rel}: {error}"
 
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:

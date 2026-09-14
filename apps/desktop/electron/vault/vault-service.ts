@@ -410,7 +410,32 @@ export class VaultService {
     try {
       stat = await fsp.stat(absolute)
     } catch {
-      index.removeNote(relPath)
+      /*
+       * Absent under its own name is not the same as gone.
+       *
+       * The legacy eviction form replaces `Note.md` with `.Note.md.icloud`, and
+       * everything else in the vault already knows that: scanMarkdownFiles maps
+       * the placeholder back to the real name, listDir reports the note as
+       * present-but-dataless, and writeNote refuses to clobber it. Only this
+       * catch treated it as a deletion — so the note vanished from search, the
+       * tree and the graph the moment iCloud reclaimed its bytes, and the
+       * watcher event announcing the placeholder deleted it again.
+       */
+      const placeholder = path.join(path.dirname(absolute), `.${path.basename(absolute)}.icloud`)
+
+      try {
+        const stub = await fsp.stat(placeholder)
+        const title = path.posix.basename(relPath).replace(/\.(md|markdown)$/i, '')
+
+        index.upsertNote(
+          relPath,
+          { title, links: [], tags: [], headings: [], frontmatter: {}, plainText: '' },
+          { mtimeMs: stub.mtimeMs, size: 0, hash: contentHash(''), dataless: true }
+        )
+      } catch {
+        // Neither the note nor a placeholder for it. Now it is gone.
+        index.removeNote(relPath)
+      }
 
       return
     }
@@ -418,7 +443,12 @@ export class VaultService {
     if (opts.skipUnchanged) {
       const existing = index.getNote(relPath)
 
-      if (existing && Math.abs(existing.mtimeMs - stat.mtimeMs) < 1) {
+      // `!existing.dataless`: a note indexed while its contents were still in
+      // iCloud holds an empty body, and materializing it does not change the
+      // mtime — so this fast path skipped it on every reindex afterwards and
+      // the note stayed permanently unsearchable. A dataless row always falls
+      // through to the read below.
+      if (existing && !existing.dataless && Math.abs(existing.mtimeMs - stat.mtimeMs) < 1) {
         return
       }
     }
@@ -523,6 +553,12 @@ export class VaultService {
     const absolute = resolveInVault(root, relPath)
     const result = await writeNote(absolute, content, expectedMtimeMs, expectedContent)
 
+    if (result.unreadable) {
+      // Do not index: nothing changed on disk, and re-indexing an evicted note
+      // would just record it as empty.
+      return { ok: false, reason: 'unreadable' }
+    }
+
     if (!result.ok && result.conflictPath) {
       const conflictRel = toVaultRelative(root, result.conflictPath)
 
@@ -572,6 +608,28 @@ export class VaultService {
     await fsp.writeFile(absolute, data)
 
     return { path: relPath, bytes: data.byteLength }
+  }
+
+  /**
+   * Append bytes to a file, creating it if needed.
+   *
+   * The recorder needs this: a meeting lives in renderer memory until stop(),
+   * so quitting or losing the microphone mid-meeting threw the whole thing
+   * away. Appending each 5s chunk as it arrives makes the timeslice actually
+   * durable — what has been captured is on disk, always.
+   *
+   * Deliberately not the atomic temp+rename that notes use: rewriting a
+   * gigabyte-scale recording every five seconds would be its own bug, and a
+   * truncated final chunk still leaves a playable file.
+   */
+  async appendBinary(relPath: string, data: Uint8Array): Promise<{ path: string; bytes: number }> {
+    const { root } = this.requireOpen()
+    const absolute = resolveInVault(root, relPath)
+
+    await fsp.mkdir(path.dirname(absolute), { recursive: true })
+    await fsp.appendFile(absolute, data)
+
+    return { path: relPath, bytes: (await fsp.stat(absolute)).size }
   }
 
   async createDir(relPath: string): Promise<void> {

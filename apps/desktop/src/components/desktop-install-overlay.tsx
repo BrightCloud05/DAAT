@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { installHint } from '@/components/install-hint'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ErrorIcon } from '@/components/ui/error-state'
@@ -406,21 +407,16 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
             </div>
           </div>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <button
-              className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-4 text-left transition hover:bg-(--chrome-action-hover)"
-              onClick={() => setRemoteOpen(true)}
-              type="button"
-            >
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Globe className="size-4 text-muted-foreground" />
-                <span>{copy.connectExistingTitle}</span>
-              </div>
-              <p className="mt-2 text-sm leading-5 text-muted-foreground">{copy.connectExistingDesc}</p>
-            </button>
+          {/* One button, one link.
 
+              Both paths used to be cards of equal weight, and the app started
+              nothing until one was chosen. But almost nobody arriving here has
+              a Daat gateway running somewhere else, and someone who does will
+              go looking for it — so the common path is the button and the rare
+              one is a line of text under it. */}
+          <div className="mt-6">
             <button
-              className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-4 text-left transition hover:bg-(--chrome-action-hover) disabled:cursor-wait disabled:opacity-60"
+              className="w-full rounded-lg bg-(--dt-primary) px-4 py-3 text-[15px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
               disabled={localStarting}
               onClick={async () => {
                 setLocalStart({ root: activeRoot, starting: true, error: null })
@@ -439,16 +435,25 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
               }}
               type="button"
             >
-              <div className="flex items-center gap-2 text-sm font-medium">
-                {localStarting ? (
-                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                ) : (
-                  <Monitor className="size-4 text-muted-foreground" />
-                )}
-                <span>{copy.installLocalTitle}</span>
-              </div>
-              <p className="mt-2 text-sm leading-5 text-muted-foreground">{copy.installLocalDesc}</p>
+              <span className="flex items-center justify-center gap-2">
+                {localStarting ? <Loader2 className="size-4 animate-spin" /> : <Monitor className="size-4" />}
+                {localStarting ? copy.installLocalStarting : copy.installLocalTitle}
+              </span>
             </button>
+            <p className="mt-2 text-center text-xs text-muted-foreground">{copy.installLocalDesc}</p>
+
+            <div className="mt-5 text-center">
+              <button
+                className="text-xs text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground"
+                onClick={() => setRemoteOpen(true)}
+                type="button"
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  <Globe className="size-3" />
+                  {copy.connectExistingLink}
+                </span>
+              </button>
+            </div>
           </div>
 
           {localStartError ? (
@@ -559,6 +564,31 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
 
         {/* Scrollable middle: progress, stages, error block, log */}
         <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-2">
+          {/* What is happening, in front of the disclosure rather than behind
+              it. The installer already logs a line before every long wait; the
+              worst of them is a fifteen-minute poll while an Apple dialog waits
+              for an answer, possibly behind this window. See install-hint.ts. */}
+          {(() => {
+            const hint = failed ? null : installHint(state.log)
+
+            if (!hint) {
+              return null
+            }
+
+            return (
+              <div
+                className={cn(
+                  'mb-4 rounded-md border px-3 py-2.5',
+                  hint.needsYou
+                    ? 'border-(--dt-primary) bg-(--dt-primary)/[0.06]'
+                    : 'border-(--stroke-nous) bg-(--ui-control-hover-background)'
+                )}
+              >
+                <p className="m-0 text-[13.5px] font-medium">{hint.title}</p>
+                {hint.body ? <p className="mt-1 mb-0 text-[12.5px] leading-5 opacity-70">{hint.body}</p> : null}
+              </div>
+            )
+          })()}
           {totalCount > 0 && (
             <div className="mb-4">
               <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">

@@ -14,11 +14,11 @@ import { useMemo, useState } from 'react'
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
-import { $editorView } from '../vault/editor-bridge'
-import { $vaultNotes, createNote, openNote } from '../vault/store'
+import { $activeNote, $vaultNotes, createNote, openNote } from '../vault/store'
 
 import { $recorder, cancelRecording, formatElapsed, startRecording, stopRecording } from './recorder'
 import { $productLocale, productStrings } from './strings'
+import { waitForEditor } from './templates'
 import { closeTableView } from './view-store'
 
 const MEETINGS_DIR = 'Meetings'
@@ -51,15 +51,30 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
 
     const notePath = `${result.folder}/Notes.md`
     const heading = title.trim() || result.folder.split('/').pop() || 'Meeting'
+
+    // Before createNote, not after: VaultEditorPane only exists in the
+    // `canvasView !== 'meetings'` arm of the shell, so while this screen is up
+    // there is no editor at all.
+    closeTableView()
+
     const created = await createNote(notePath)
 
     setTitle('')
-    closeTableView()
 
-    // Seed the note so it reads as a real page even before the agent answers.
-    const view = $editorView.get()
+    /*
+     * `await waitForEditor()`, not `$editorView.get()`.
+     *
+     * closeTableView only writes a nanostore; React's re-render — and with it
+     * the callback ref that republishes the view — is scheduled, never
+     * synchronous. So this read was null every single time and the seed below
+     * has never once run. What landed was createNote's bare `# Notes`, and the
+     * agent was then told to "keep the frontmatter" and "keep the recording
+     * link" on a note that had neither, so finished meeting notes routinely
+     * had no date, no duration, and no way back to the audio.
+     */
+    const view = await waitForEditor()
 
-    if (created?.created && view) {
+    if (created?.created && view && $activeNote.get()?.path === notePath) {
       const stamp = new Date().toISOString().slice(0, 10)
 
       view.dispatch({
@@ -102,7 +117,9 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
                 style={{ animation: 'daat-pulse 1.4s ease-in-out infinite' }}
               />
               <span className="text-[15px] font-semibold tabular-nums">{formatElapsed(recorder.elapsed)}</span>
-              <span className="text-[13px] opacity-60">{s.recording}</span>
+              <span className="text-[13px] opacity-60">
+                {recorder.interrupted ? `${recorder.interrupted} ${s.stopToKeep}` : s.recording}
+              </span>
 
               <button
                 className="ml-auto rounded-lg bg-(--dt-primary) px-3.5 py-1.5 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-90"
@@ -112,7 +129,7 @@ export function MeetingsView({ onAskAgent }: { onAskAgent?: (prompt: string) => 
               </button>
               <button
                 className="rounded-lg px-2.5 py-1.5 text-[13px] opacity-60 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100"
-                onClick={cancelRecording}
+                onClick={() => void cancelRecording()}
               >
                 {s.discard}
               </button>

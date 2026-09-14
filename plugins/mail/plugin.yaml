@@ -13,4 +13,5 @@ provides_tools:
   - mail_move
   - mail_flag
   - mail_draft
+  - mail_reply
   - mail_send

@@ -11,6 +11,7 @@ import { BrowserWindow, app, dialog, ipcMain } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { initIcsIpc } from './vault-ics'
 import { VaultService, defaultICloudVaultDir, defaultLocalVaultDir } from './vault-service'
 import type { VaultConflictEvent, VaultIndexEvent } from './vault-types'
 
@@ -130,6 +131,10 @@ export function initVaultIpc(): VaultService {
   )
 
   ipcMain.handle('hermes:vault:createNote', (_event, relPath: string) => service.createNote(relPath))
+  ipcMain.handle('hermes:vault:appendBinary', (_event, relPath: string, data: Uint8Array) =>
+    service.appendBinary(relPath, data)
+  )
+
   ipcMain.handle('hermes:vault:writeBinary', (_event, relPath: string, data: Uint8Array) =>
     service.writeBinary(relPath, data)
   )
@@ -156,6 +161,9 @@ export function initVaultIpc(): VaultService {
   ipcMain.handle('hermes:vault:toggleTodo', (_event, relPath: string, line: number, text?: string) =>
     service.toggleTodo(relPath, line, text)
   )
+
+  // Calendar subscriptions (ICS feeds → Calendar/Sync notes).
+  initIcsIpc(service)
 
   return service
 }

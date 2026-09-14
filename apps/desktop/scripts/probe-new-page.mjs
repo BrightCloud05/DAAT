@@ -114,6 +114,35 @@ const names = new Set(files)
 
 check('the names do not collide', names.size === files.length)
 
+/*
+ * A new page has to APPEAR, not merely exist.
+ *
+ * createNote adopts the note as active but does not touch the canvas, so New
+ * page pressed from Graph or Todo used to leave the user on that screen with
+ * nothing visibly different. The note was made; it was just not on screen. The
+ * `Untitled 2`, `Untitled 3` trail in real vaults is people pressing it again.
+ */
+console.log('\n--- and it lands on screen, from a screen that is not the editor ---')
+
+for (const [from, press] of [
+  ['Graph', () => page.keyboard.press('ControlOrMeta+n')],
+  ['Todo', () => page.locator('aside button', { hasText: 'New page' }).first().click()]
+]) {
+  await page.locator('aside button', { hasText: from }).last().click()
+  await page.waitForTimeout(1200)
+
+  await press()
+  await page.waitForTimeout(2000)
+
+  const editorShowing = await page
+    .locator('.cm-content')
+    .first()
+    .isVisible()
+    .catch(() => false)
+
+  check(`New page from ${from} shows the page`, editorShowing)
+}
+
 await app.close()
 fs.rmSync(tmp, { recursive: true, force: true })
 

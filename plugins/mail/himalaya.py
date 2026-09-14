@@ -120,6 +120,17 @@ def run(args: list[str], *, account: str | None = None, json_out: bool = True, t
         raise MailError(f"Email command failed: {tail or 'unknown error'}")
 
     output = (proc.stdout or "").strip()
+    stderr = (proc.stderr or "").strip()
+
+    # himalaya can refuse a command and still exit 0. An unparseable search
+    # query prints "Error: cannot parse search emails query `…`" on stderr,
+    # writes nothing to stdout, and returns 0 — so the caller saw an empty
+    # result and told the user "No matches", which is a confident lie about
+    # what is in their mailbox. Nothing was searched at all.
+    if not output and "Error:" in stderr:
+        detail = " ".join(line for line in stderr.splitlines()[-4:] if "WARN" not in line)
+
+        raise MailError(f"Email command failed: {detail or 'unknown error'}")
 
     if not json_out:
         return output

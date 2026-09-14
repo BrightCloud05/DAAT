@@ -146,7 +146,7 @@ def register(ctx):
         toolset="mail",
         schema={
             "name": "mail_flag",
-            "description": "Add or remove a flag on a message: Seen, Flagged, Answered, Draft, Deleted.",
+            "description": "Add or remove a flag on a message: Seen, Flagged, Answered, Draft.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -202,6 +202,41 @@ def register(ctx):
         ),
         description="Save a draft",
         emoji="📝",
+    )
+
+    ctx.register_tool(
+        name="mail_reply",
+        toolset="mail",
+        schema={
+            "name": "mail_reply",
+            "description": (
+                "Draft a reply to a message, threaded under the original. USE THIS instead of "
+                "mail_draft when replying — a hand-composed reply reads correctly but arrives as a "
+                "new conversation. Saved to Drafts; never sent."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message_id": {"type": "string", "description": "Id from mail_list"},
+                    "body": {"type": "string", "description": "Your reply, plain text"},
+                    "folder": {"type": "string"},
+                    "reply_all": {"type": "boolean", "description": "Keep the original To/Cc"},
+                    "quote_original": {"type": "boolean", "description": "Quote the message (default true)"},
+                    "account": {"type": "string"},
+                },
+                "required": ["message_id", "body"],
+            },
+        },
+        handler=lambda args, **kw: tools.mail_reply(
+            args.get("message_id", ""),
+            args.get("body", ""),
+            args.get("folder", "INBOX"),
+            bool(args.get("reply_all")),
+            args.get("account"),
+            args.get("quote_original", True),
+        ),
+        description="Draft a reply",
+        emoji="↩️",
     )
 
     ctx.register_tool(

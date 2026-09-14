@@ -15,9 +15,13 @@ import { beforeEach, test } from 'vitest'
 import {
   $activeDirty,
   $activeNote,
+  $vaultRescued,
+  $vaultSaveError,
   flushActiveNote,
+  ICLOUD_DOWNLOAD_PENDING,
   noteEdited,
   openNote,
+  rescuedText,
   resetSaveState
 } from './store'
 
@@ -36,7 +40,7 @@ let releaseWrite: (() => void) | null = null
  * on the wire while the user keeps typing; later saves must run normally or
  * the test can never observe the recovery.
  */
-function installBridge(options: { holdFirstWrite?: boolean; failWrites?: boolean } = {}) {
+function installBridge(options: { holdFirstWrite?: boolean; failWrites?: boolean; unreadable?: boolean } = {}) {
   disk = {
     'A.md': { content: 'A original', mtimeMs: 1 },
     'B.md': { content: 'IMPORTANT NOTE B', mtimeMs: 1 }
@@ -66,6 +70,12 @@ function installBridge(options: { holdFirstWrite?: boolean; failWrites?: boolean
 
       if (options.failWrites) {
         throw new Error('EACCES: read-only volume')
+      }
+
+      // The note's text is still coming down from iCloud, so the main process
+      // refused rather than write over bytes nobody has read.
+      if (options.unreadable) {
+        return { ok: false as const, reason: 'unreadable' as const }
       }
 
       const existing = disk[path]
@@ -127,6 +137,11 @@ test("one note's unsaved text is never written into another note", async () => {
       !writes.some(write => write.path === 'B.md' && write.content.includes('A typed')),
       `A's text was written to B: ${JSON.stringify(writes)}`
     )
+
+    // Not landing in B is only half of it. It has to still exist somewhere —
+    // this assertion is what was missing, and the buffer was simply dropped.
+    assert.deepEqual($vaultRescued.get(), ['A.md'])
+    assert.equal(rescuedText('A.md'), 'A typed something')
   } finally {
     unsubscribe()
   }
@@ -199,4 +214,83 @@ test('a conflict reloads disk truth instead of looping', async () => {
 
   assert.equal($activeNote.get()?.content, 'their version')
   assert.equal($activeDirty.get(), false)
+})
+
+test('a save refused while iCloud downloads keeps the text and says why', async () => {
+  /*
+   * The main process refuses to write over a note whose current bytes it could
+   * not read — otherwise the empty document an evicted note opens as replaces
+   * the real one on every device.
+   *
+   * That refusal is transient, so it must not be handled like a conflict: no
+   * conflict copy was made and nothing was written, so reloading disk truth
+   * here would throw the user's typing away. Hold it and retry.
+   */
+  installBridge({ unreadable: true })
+
+  await openNote('A.md')
+  noteEdited('what I just typed')
+
+  await flushActiveNote()
+
+  assert.equal($activeDirty.get(), true, 'the text is still unsaved, and must still count as such')
+  assert.equal($vaultSaveError.get(), ICLOUD_DOWNLOAD_PENDING)
+  assert.equal($activeNote.get()?.content, 'A original', 'nothing was adopted from disk')
+  assert.equal(disk['A.md'].content, 'A original', 'and nothing was written')
+
+  // iCloud finishes; the retry that was already armed now lands.
+  installBridge()
+  await flushActiveNote()
+
+  assert.equal(disk['A.md'].content, 'what I just typed')
+  assert.equal($vaultSaveError.get(), null)
+})
+
+test('text that could not be saved comes back when the note is reopened', async () => {
+  /*
+   * The whole loss took four steps and no error: type into A, the save fails
+   * (offline volume, unplugged drive), click B, and the buffer that still held
+   * A's text was cleared on the way. The dirty dot moved on with B, so nothing
+   * on screen suggested anything had been lost.
+   */
+  installBridge({ failWrites: true })
+
+  await openNote('A.md')
+  noteEdited('the paragraph I actually wrote')
+  await flushActiveNote()
+
+  await openNote('B.md')
+
+  assert.deepEqual($vaultRescued.get(), ['A.md'], 'the text has to be held somewhere')
+
+  // The volume comes back.
+  const saved = { ...disk }
+
+  installBridge()
+  disk = saved
+
+  await openNote('A.md')
+
+  assert.equal($activeNote.get()?.content, 'A original', 'the store still tracks disk truth')
+  assert.equal(rescuedText('A.md'), 'the paragraph I actually wrote', 'and the editor is handed the real text')
+})
+
+test('a note whose save finally lands stops being held', async () => {
+  installBridge({ failWrites: true })
+
+  await openNote('A.md')
+  noteEdited('eventually saved')
+  await flushActiveNote()
+
+  assert.deepEqual($vaultRescued.get(), ['A.md'])
+
+  const saved = { ...disk }
+
+  installBridge()
+  disk = saved
+
+  await flushActiveNote()
+
+  assert.equal(disk['A.md'].content, 'eventually saved')
+  assert.deepEqual($vaultRescued.get(), [], 'nothing left to hold once it is on disk')
 })

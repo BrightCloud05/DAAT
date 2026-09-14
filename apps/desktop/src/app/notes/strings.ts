@@ -80,6 +80,12 @@ const EN = {
   notAPropertyList: "This note's frontmatter isn't a property list.",
   saveFailed: (reason: string) => `Couldn't save this note — ${reason}. Your text is still here and Daat keeps retrying.`,
   retryNow: 'Retry now',
+  popOutAgent: 'Open in its own window',
+  unsavedElsewhere: (count: number) =>
+    count === 1
+      ? 'One other note has changes that never reached disk.'
+      : `${count} other notes have changes that never reached disk.`,
+  openUnsaved: 'Open',
 
   // First run
   onboardingQuestion: 'What will you use Daat for?',
@@ -108,11 +114,26 @@ const EN = {
       : '') +
     'Press ⌘J any time to ask the assistant for something — it can read and write your notes, and use your Mac.',
 
+  // Sidebar note actions
+  renameNote: 'Rename',
+  deleteNoteAction: 'Delete',
+  deleteConfirm: (name: string) => `Delete "${name}"? It moves to the system Trash.`,
+
   // Calendar
   openThisDaysNote: "Open this day's note",
   previousMonth: 'Previous month',
   nextMonth: 'Next month',
   moreEntries: (count: number) => `+${count} more`,
+  quickAddPlaceholder: 'Add an event — type a title and press Enter',
+  changeDate: 'Change date',
+  subscriptions: 'Subscriptions',
+  subscribeUrlPlaceholder: 'Paste an ICS address (Google Calendar → Settings → Secret address in iCal format)',
+  addSubscription: 'Add',
+  syncNow: 'Sync now',
+  removeSubscription: 'Remove',
+  subscriptionHint:
+    'Events from subscribed calendars land in Calendar/Sync as ordinary notes and refresh every 30 minutes.',
+  syncedEvents: (count: number) => `${count} events`,
 
   // Money
   dropStatement: 'Drop a bank statement here',
@@ -127,6 +148,7 @@ const EN = {
 
   // Meetings
   startRecording: 'Record',
+  stopToKeep: 'Stop to keep what was captured.',
   stopAndSummarize: 'Stop & summarize',
   discard: 'Discard',
   recording: 'Recording…',
@@ -153,6 +175,8 @@ const EN = {
     `${notes} page${notes === 1 ? '' : 's'} · ${links} link${links === 1 ? '' : 's'}`,
   graphLinkCount: (n: number) => `${n} link${n === 1 ? '' : 's'}`,
   graphRecenter: 'Recentre',
+  graphGhosts: 'Unresolved',
+  graphTags: 'Tags',
   graphEmptyTitle: 'Nothing linked yet.',
   graphEmptyBody:
     'Type [[ in any page to link to another. Every link you make shows up here as a line between them.',
@@ -243,6 +267,9 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   saveFailed: (reason: string) =>
     `노트를 저장하지 못했습니다 — ${reason}. 입력한 내용은 그대로 있고 계속 다시 시도합니다.`,
   retryNow: '다시 시도',
+  popOutAgent: '별도 창으로 열기',
+  unsavedElsewhere: (count: number) => `저장되지 않은 노트가 ${count}개 더 있습니다.`,
+  openUnsaved: '열기',
 
   onboardingQuestion: 'Daat를 어떤 일에 사용하시나요?',
   onboardingSubtitle: '선택에 맞춰 몇 개의 페이지와 assistant의 말투를 설정합니다. 나중에 언제든 바꿀 수 있습니다.',
@@ -267,10 +294,23 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
     (seeded > 0 ? `사이드바에 시작용 페이지 ${seeded}개를 만들어 두었습니다. ` : '') +
     '언제든 ⌘J 를 눌러 assistant에게 부탁해 보세요 — 노트를 읽고 쓰는 것은 물론 Mac도 직접 조작할 수 있습니다.',
 
+  renameNote: '이름 변경',
+  deleteNoteAction: '삭제',
+  deleteConfirm: (name: string) => `"${name}" 노트를 삭제할까요? 시스템 휴지통으로 이동합니다.`,
+
   openThisDaysNote: '이 날의 노트 열기',
   previousMonth: '이전 달',
   nextMonth: '다음 달',
   moreEntries: (count: number) => `+${count}개 더`,
+  quickAddPlaceholder: '이벤트 추가 — 제목 입력 후 Enter',
+  changeDate: '날짜 변경',
+  subscriptions: '구독',
+  subscribeUrlPlaceholder: 'ICS 주소 붙여넣기 (Google Calendar → 설정 → iCal 형식 비공개 주소)',
+  addSubscription: '추가',
+  syncNow: '지금 동기화',
+  removeSubscription: '삭제',
+  subscriptionHint: '구독한 캘린더의 이벤트는 Calendar/Sync 폴더에 일반 노트로 저장되고 30분마다 새로고침됩니다.',
+  syncedEvents: (count: number) => `이벤트 ${count}개`,
 
   dropStatement: '은행 명세서를 여기에 올려놓으세요',
   dropStatementHint:
@@ -283,6 +323,7 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   openTheNote: '노트 열기',
 
   startRecording: '녹음 시작',
+  stopToKeep: '중지를 누르면 지금까지 녹음된 내용이 저장됩니다.',
   stopAndSummarize: '중지하고 요약',
   discard: '삭제',
   recording: '녹음 중…',
@@ -307,6 +348,8 @@ const KO: Partial<Record<keyof ProductStrings, ProductStrings[keyof ProductStrin
   graphCount: (notes: number, links: number) => `페이지 ${notes}개 · 링크 ${links}개`,
   graphLinkCount: (n: number) => `링크 ${n}개`,
   graphRecenter: '가운데로',
+  graphGhosts: '미생성 노트',
+  graphTags: '태그',
   graphEmptyTitle: '아직 이어진 게 없습니다.',
   graphEmptyBody: '아무 페이지에서나 [[ 를 입력하면 다른 페이지로 이어집니다. 이어질 때마다 여기에 선으로 나타납니다.',
   emptyEditorTitle: '아직 열어 둔 게 없습니다.',

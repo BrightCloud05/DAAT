@@ -20,7 +20,7 @@
 
 import { execFile } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import fs from 'node:fs'
+import type fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -144,15 +144,33 @@ export async function readNote(absolutePath: string): Promise<ReadNoteResult> {
   }
 }
 
-function conflictCopyPath(absolutePath: string): string {
+/**
+ * A free name for a conflict copy, to the second and checked for collisions.
+ *
+ * Both matter. A save loop retrying against a file iCloud keeps touching
+ * produces several conflicts inside one minute, and a name that already exists
+ * would be overwritten — losing the very writing this branch exists to save.
+ */
+async function conflictCopyPath(absolutePath: string): Promise<string> {
   const dir = path.dirname(absolutePath)
   const ext = path.extname(absolutePath)
   const base = path.basename(absolutePath, ext)
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, '0')
-  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}`
+  const day = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  const stamp = `${day} ${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
 
-  return path.join(dir, `${base} (conflict ${stamp})${ext}`)
+  for (let n = 0; n < 100; n += 1) {
+    const candidate = path.join(dir, `${base} (conflict ${stamp}${n ? ` ${n + 1}` : ''})${ext}`)
+
+    try {
+      await fsp.access(candidate)
+    } catch {
+      return candidate
+    }
+  }
+
+  return path.join(dir, `${base} (conflict ${stamp} ${randomBytes(3).toString('hex')})${ext}`)
 }
 
 async function atomicWrite(absolutePath: string, content: string): Promise<number> {
@@ -161,22 +179,25 @@ async function atomicWrite(absolutePath: string, content: string): Promise<numbe
 
   await fsp.mkdir(dir, { recursive: true })
 
-  // rename() is atomic with respect to the *name*, but the bytes may still be
-  // in the page cache. Without the fsync, a crash or power loss between write
-  // and flush leaves a note that exists and is empty — the one failure mode a
-  // notes app must not have.
-  const handle = await fsp.open(tmp, 'w')
-
   try {
-    await handle.writeFile(content, 'utf8')
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
+    // rename() is atomic with respect to the *name*, but the bytes may still be
+    // in the page cache. Without the fsync, a crash or power loss between write
+    // and flush leaves a note that exists and is empty — the one failure mode a
+    // notes app must not have.
+    const handle = await fsp.open(tmp, 'w')
 
-  try {
+    try {
+      await handle.writeFile(content, 'utf8')
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+
     await fsp.rename(tmp, absolutePath)
   } catch (error) {
+    // Every failure path removes the temp file, not just a failed rename. A
+    // full disk fails at writeFile, and the leftovers are dot-files nobody
+    // sees — but iCloud does, and syncs each one to every device.
     await fsp.rm(tmp, { force: true })
     throw error
   }
@@ -184,10 +205,35 @@ async function atomicWrite(absolutePath: string, content: string): Promise<numbe
   return (await fsp.stat(absolutePath)).mtimeMs
 }
 
+/**
+ * The legacy eviction form: `Note.md` is absent under its own name and a
+ * `.Note.md.icloud` plist stands in its place. The note is real and its text
+ * is in iCloud, so a fresh file written at that name is a write against bytes
+ * we have never seen.
+ */
+async function hasICloudPlaceholder(absolutePath: string): Promise<boolean> {
+  const placeholder = path.join(path.dirname(absolutePath), `.${path.basename(absolutePath)}.icloud`)
+
+  try {
+    await fsp.stat(placeholder)
+
+    return true
+  } catch {
+    return false
+  }
+}
+
 export interface WriteNoteResult {
   ok: boolean
   mtimeMs: number
+  /** The caller's content was diverted here; the file on disk is untouched. */
   conflictPath?: string
+  /**
+   * Nothing was written and nothing was preserved: the file exists but its
+   * current bytes could not be read, so there was nothing safe to write
+   * against. The caller still holds its text and should retry.
+   */
+  unreadable?: boolean
 }
 
 /**
@@ -201,6 +247,10 @@ export interface WriteNoteResult {
  *
  * Unchanged content is never rewritten — sync engines treat every write as a
  * new version, so no-op saves would churn iCloud for nothing.
+ *
+ * A file whose current bytes cannot be read is never written over when the
+ * caller supplied an expectation: `unreadable` comes back instead, and the
+ * caller keeps its text.
  */
 export async function writeNote(
   absolutePath: string,
@@ -216,6 +266,10 @@ export async function writeNote(
     existing = null
   }
 
+  if (!existing && (await hasICloudPlaceholder(absolutePath))) {
+    return { ok: false, mtimeMs: 0, unreadable: true }
+  }
+
   if (existing) {
     // Timed: every other read here is, because open() blocks indefinitely on
     // an iCloud-evicted file. This one runs inside the write IPC on every
@@ -229,20 +283,41 @@ export async function writeNote(
       return { ok: true, mtimeMs: existing.mtimeMs }
     }
 
-    // mtime alone is not enough to detect a concurrent edit: HFS+, SMB and
-    // some iCloud paths report whole-second granularity, so an edit landing in
-    // the same second as our read is invisible and would be clobbered. When
-    // the caller told us what it expected to be replacing, verify the bytes.
-    const movedOn =
-      expectedMtimeMs !== null &&
-      (Math.abs(existing.mtimeMs - expectedMtimeMs) > 1 ||
-        (expectedContent !== undefined && current !== null && current !== expectedContent))
+    if (current === null) {
+      /*
+       * The file is there but we could not read it — "Optimize Mac Storage"
+       * evicted the contents and iCloud has not brought them back yet.
+       *
+       * Every guard below compares against bytes we do not have, so all of
+       * them pass vacuously: the mtime matches (an evicted file still stats
+       * fine, and that is the mtime the caller was handed), and the content
+       * check has nothing to compare. The write then went through — and what
+       * the editor holds for an evicted note is the empty string. That is a
+       * note replaced by nothing, in the default iCloud configuration, synced
+       * out to every device.
+       *
+       * A caller that supplied an expectation is editing on top of something
+       * it read. Refuse, and let it keep its text and retry.
+       */
+      if (expectedMtimeMs !== null || expectedContent !== undefined) {
+        return { ok: false, mtimeMs: existing.mtimeMs, unreadable: true }
+      }
+    } else {
+      // mtime alone is not enough to detect a concurrent edit: HFS+, SMB and
+      // some iCloud paths report whole-second granularity, so an edit landing in
+      // the same second as our read is invisible and would be clobbered. When
+      // the caller told us what it expected to be replacing, verify the bytes.
+      const movedOn =
+        expectedMtimeMs !== null &&
+        (Math.abs(existing.mtimeMs - expectedMtimeMs) > 1 ||
+          (expectedContent !== undefined && current !== expectedContent))
 
-    if (movedOn) {
-      const conflictPath = conflictCopyPath(absolutePath)
-      const mtimeMs = await atomicWrite(conflictPath, content)
+      if (movedOn) {
+        const conflictPath = await conflictCopyPath(absolutePath)
+        const mtimeMs = await atomicWrite(conflictPath, content)
 
-      return { ok: false, mtimeMs, conflictPath }
+        return { ok: false, mtimeMs, conflictPath }
+      }
     }
   }
 

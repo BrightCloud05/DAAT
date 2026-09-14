@@ -7,8 +7,9 @@
 
 import type { EditorView } from '@codemirror/view'
 
-import { createNote, refreshVaultNotes } from '../vault/store'
 import { $editorView } from '../vault/editor-bridge'
+import { $activeNote, createNote, refreshVaultNotes } from '../vault/store'
+
 import { closeTableView } from './view-store'
 
 const vault = () => window.hermesDesktop.vault
@@ -59,7 +60,7 @@ export function isTemplateNote(relPath: string | null | undefined): boolean {
  * template would otherwise read a null view on the same tick and silently do
  * nothing — the "Start today's plan" button that created a blank note.
  */
-async function waitForEditor(timeoutMs = 2000): Promise<EditorView | null> {
+export async function waitForEditor(timeoutMs = 2000): Promise<EditorView | null> {
   const existing = $editorView.get()
 
   if (existing) {
@@ -83,8 +84,21 @@ async function waitForEditor(timeoutMs = 2000): Promise<EditorView | null> {
   })
 }
 
-/** Replace the whole current document with a filled template (undoable). */
-export async function applyTemplateToActive(templatePath: string, title: string): Promise<void> {
+/**
+ * Replace the whole current document with a filled template (undoable).
+ *
+ * `expectedPath` is the note the caller meant. It matters because this is a
+ * full-document replace sitting behind two awaits — waitForEditor alone allows
+ * two seconds — and a click on another note in that window used to land the
+ * template on whatever was open by then, wiping it. Callers with their own
+ * awaits before this one should pass the path explicitly; the default covers
+ * the rest.
+ */
+export async function applyTemplateToActive(
+  templatePath: string,
+  title: string,
+  expectedPath = $activeNote.get()?.path
+): Promise<void> {
   const view = await waitForEditor()
 
   if (!view) {
@@ -92,6 +106,11 @@ export async function applyTemplateToActive(templatePath: string, title: string)
   }
 
   const template = await vault().read(templatePath)
+
+  if ($activeNote.get()?.path !== expectedPath) {
+    return
+  }
+
   const filled = fillTemplate(template.content, title)
 
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: filled } })
@@ -124,7 +143,7 @@ export async function openDailyNote(): Promise<void> {
   const daily = templates.find(template => template.name.toLowerCase() === 'daily')
 
   if (daily) {
-    await applyTemplateToActive(daily.path, stamp)
+    await applyTemplateToActive(daily.path, stamp, relPath)
   }
 
   await refreshVaultNotes()

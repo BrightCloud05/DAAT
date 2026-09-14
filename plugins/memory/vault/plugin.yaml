@@ -1,0 +1,8 @@
+name: vault
+version: 0.1.0
+description: "Files what a conversation produced into the user's vault at session end, and mirrors built-in memory writes into notes the user can actually read."
+requires_env:
+  - VAULT_PATH
+hooks:
+  - on_session_end
+  - on_memory_write
