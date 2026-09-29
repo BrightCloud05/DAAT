@@ -53,6 +53,7 @@ async function launch(fresh = false) {
     headers: { Authorization: `Bearer ${connection.token}` }, signal: AbortSignal.timeout(30_000),
   })
   assert.equal(health.status, 200, 'Real backend health must succeed')
+  assert.equal((await health.json()).ok, true, 'Health response must be the backend JSON')
   report.checks.push('Installed app connected to a healthy local Python backend')
   return page
 }
@@ -93,6 +94,8 @@ try {
   report.error = String(error)
   if (page && !page.isClosed()) {
     await page.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {})
+    const bootstrap = await page.evaluate(() => window.hermesDesktop.getBootstrapState()).catch(() => null)
+    if (bootstrap) report.bootstrap = { active: bootstrap.active, error: bootstrap.error, stages: bootstrap.stages, log: bootstrap.log?.slice(-80) }
     report.screen = (await page.locator('body').innerText().catch(() => '')).slice(0, 12000)
   }
   process.exitCode = 1

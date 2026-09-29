@@ -1,7 +1,7 @@
 name: DAAT Windows x64 internal pilot
 
-# Manual build only. This produces an unsigned candidate, not a public release
-# and not evidence that installation/first launch passed on a clean machine.
+# Isolated CI branch/manual builds only. Produces an unsigned candidate.
+# Acceptance is on Windows Server; consumer Windows remains a separate gate.
 on:
   push:
     branches: [codex/daat-windows-ci]
@@ -34,7 +34,7 @@ jobs:
       - name: Typecheck desktop
         run: npm run typecheck --workspace apps/desktop
       - name: Build unsigned x64 NSIS candidate without publishing
-        run: npm run dist:win:nsis --workspace apps/desktop -- --x64 --publish never -c.win.signAndEditExecutable=true -c.win.signExecutable=false
+        run: npm run dist:win:nsis --workspace apps/desktop -- --x64 --publish never '-c.win.signAndEditExecutable=true' '-c.win.signExecutable=false'
       - name: Packaging regression tests on native Windows
         run: npm run test --workspace apps/desktop -- --project electron scripts/electron-dist-target.test.mjs scripts/platform-payload-cleanup.test.mjs scripts/stage-native-deps.test.mjs scripts/before-pack.test.mjs
       - name: Install the generated NSIS package
