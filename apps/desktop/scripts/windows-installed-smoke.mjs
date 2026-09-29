@@ -31,13 +31,17 @@ const report = { platform: process.platform, arch: process.arch, checks: [], sta
 let app
 let page
 const errors = []
-async function launch() {
+async function launch(fresh = false) {
   app = await electron.launch({ executablePath, args: [], cwd: root, env, timeout: 90_000 })
   page = await app.firstWindow({ timeout: 90_000 })
   page.on('pageerror', error => errors.push(error.message))
   // First boot must use the actual bundled installer and real Python backend.
   // No BOOT_FAKE, source-root override, preinstalled venv or hidden overlay.
   await page.waitForFunction(() => Boolean(window.hermesDesktop), null, { timeout: 60_000 })
+  if (fresh) {
+    await page.getByRole('button', { name: 'Set up Daat on this computer', exact: true }).click({ timeout: 90_000 })
+    report.checks.push('First-run local setup button started installation')
+  }
   const connection = await Promise.race([
     page.evaluate(() => window.hermesDesktop.getConnection()),
     new Promise((_, reject) => setTimeout(() => reject(new Error('Fresh bootstrap exceeded 20 minutes')), 20 * 60_000).unref()),
@@ -53,7 +57,7 @@ async function launch() {
   return page
 }
 try {
-  await launch()
+  await launch(true)
   await page.screenshot({ path: path.join(output, 'first-launch.png') })
   // Provider setup is deliberately not exercised without a user account.
   // Record the onboarding screen, then select the existing offline notes path.

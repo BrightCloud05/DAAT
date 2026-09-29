@@ -2188,7 +2188,7 @@ export const en: Translations = {
     connectExistingShort: 'Connect existing',
     connectExistingDesc: 'Use a remote backend with a session token or browser sign-in. No local install will start.',
     connectExistingLink: 'Already running Daat somewhere else?',
-    installLocalTitle: 'Set up Daat on this Mac',
+    installLocalTitle: 'Set up Daat on this computer',
     installLocalDesc: 'Everything stays on this computer.',
     installLocalStarting: 'Starting…',
     localStartUnavailable: 'Local installation could not start. Restart Daat Desktop and try again.',
