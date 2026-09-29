@@ -28,9 +28,14 @@ jobs:
           pwsh -NoProfile -File scripts/tests/test-daat-install-paths.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pwsh -NoProfile -File scripts/tests/test-install-ps1-longpath.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File scripts/tests/test-daat-bundled-source.ps1
       - name: Installer path contracts (Windows PowerShell 5.1)
         shell: powershell
-        run: powershell -NoProfile -File scripts/tests/test-daat-install-paths.ps1
+        run: |
+          powershell -NoProfile -File scripts/tests/test-daat-install-paths.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          powershell -NoProfile -File scripts/tests/test-daat-bundled-source.ps1
       - name: Typecheck desktop
         run: npm run typecheck --workspace apps/desktop
       - name: Build unsigned x64 NSIS candidate without publishing

@@ -2133,6 +2133,27 @@ function Install-SystemPackages {
 function Install-Repository {
     Write-Info "Installing to $InstallDir..."
 
+    # Desktop bundles own their source independently of Git. Never park or
+    # clone over a seeded runtime; Electron handles source refresh separately.
+    $bundleIdPath = Join-Path $InstallDir '.daat-bundle-id'
+    $bundleStampPath = Join-Path $InstallDir '.daat-bundle-stamp'
+    if (-not (Test-Path -LiteralPath (Join-Path $InstallDir '.git')) -and
+        ((Test-Path -LiteralPath $bundleIdPath) -or (Test-Path -LiteralPath $bundleStampPath))) {
+        try {
+            $bundleId = (Get-Content -LiteralPath $bundleIdPath -Raw).Trim()
+            $stamp = Get-Content -LiteralPath $bundleStampPath -Raw | ConvertFrom-Json
+            if (-not $bundleId -or $stamp.version -notin @(1, 2) -or $stamp.bundle -ne $bundleId -or
+                -not (Test-Path -LiteralPath (Join-Path $InstallDir 'pyproject.toml')) -or
+                -not (Test-Path -LiteralPath (Join-Path $InstallDir 'hermes_cli/main.py'))) {
+                throw 'Incomplete or mismatched bundled source'
+            }
+        } catch {
+            throw "Bundled DAAT source could not be validated; files were preserved. Reinstall the desktop app. $_"
+        }
+        Write-Success 'Using the Python source included with DAAT (no Git download needed)'
+        return
+    }
+
     $didUpdate = $false
 
     if (Test-Path $InstallDir) {
