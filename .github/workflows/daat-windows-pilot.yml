@@ -22,6 +22,14 @@ jobs:
           cache: npm
       - name: Install locked workspace dependencies
         run: npm ci
+      - name: Audit locked dependencies
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force apps/desktop/release/acceptance | Out-Null
+          npm audit --audit-level=moderate --json | Set-Content apps/desktop/release/acceptance/npm-audit.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: TUI gateway transport regressions
+        run: npm run test --workspace ui-tui -- src/__tests__/gatewayClient.test.ts
       - name: Installer path contracts (PowerShell 7)
         shell: pwsh
         run: |
