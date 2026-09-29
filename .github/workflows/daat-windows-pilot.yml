@@ -49,7 +49,7 @@ jobs:
       - name: Build unsigned x64 NSIS candidate without publishing
         run: npm run dist:win:nsis --workspace apps/desktop -- --x64 --publish never '-c.win.signAndEditExecutable=true' '-c.win.signExecutable=false'
       - name: Packaging regression tests on native Windows
-        run: npm run test --workspace apps/desktop -- --project electron scripts/electron-dist-target.test.mjs scripts/platform-payload-cleanup.test.mjs scripts/stage-native-deps.test.mjs scripts/before-pack.test.mjs electron/bootstrap-runner.test.ts
+        run: npm run test --workspace apps/desktop -- --project electron scripts/electron-dist-target.test.mjs scripts/platform-payload-cleanup.test.mjs scripts/stage-native-deps.test.mjs scripts/before-pack.test.mjs electron/bootstrap-runner.test.ts electron/agent-source.test.ts
       - name: Install the generated NSIS package
         shell: pwsh
         run: |
@@ -64,6 +64,10 @@ jobs:
         working-directory: apps/desktop
         shell: pwsh
         run: node scripts/windows-installed-smoke.mjs "$env:DAAT_INSTALLED_EXE"
+      - name: Recover interrupted source copy in Korean runtime path
+        working-directory: apps/desktop
+        shell: pwsh
+        run: node scripts/windows-installed-smoke.mjs "$env:DAAT_INSTALLED_EXE" --partial
       - name: Uninstall the tested app
         shell: pwsh
         run: |

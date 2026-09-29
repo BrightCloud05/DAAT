@@ -331,7 +331,39 @@ async function refreshSource(installed: string, bundle: string, deps: RefreshDep
 
     if (stamp?.bundle === incomingId) {return { action: 'current' }}
 
-    if (!stamp) {return { action: 'declined', why: 'no-stamp', detail: 'the existing source has unknown ownership' }}
+    if (!stamp) {
+      // A stopped initial copy can leave the bundle id but no ownership stamp.
+      // Only adopt files proven identical to this exact bundle, never user edits.
+      const idPath = path.join(installed, BUNDLE_ID_NAME)
+      if (!safeInstalledPath(installed, BUNDLE_ID_NAME) || !fs.existsSync(idPath) ||
+          fs.readFileSync(idPath, 'utf8').trim() !== incomingId ||
+          fs.existsSync(path.join(installed, STAMP_NAME))) {
+        return { action: 'declined', why: 'no-stamp', detail: 'the existing source has unknown ownership' }
+      }
+      const incoming = ownedFiles(bundle)
+      const expected = describe(bundle, incoming)
+      for (const rel of [...incoming, STAMP_NAME]) {
+        if (!safeInstalledPath(installed, rel)) {
+          return { action: 'declined', why: 'path-conflict', detail: `Unsafe recovery path: ${rel}` }
+        }
+        if (fs.existsSync(path.join(installed, rel)) &&
+            describe(installed, [rel])[rel] !== expected[rel]) {
+          return { action: 'declined', why: 'locally-modified', detail: `Recovery preserved a changed file: ${rel}` }
+        }
+      }
+      for (const rel of incoming) {
+        if (expected[rel] === 'missing') {throw new Error(`Unreadable bundled source: ${rel}`)}
+        const target = path.join(installed, rel)
+        if (!fs.existsSync(target)) {
+          fs.mkdirSync(path.dirname(target), { recursive: true })
+          fs.copyFileSync(path.join(bundle, rel), target, fs.constants.COPYFILE_EXCL)
+        }
+      }
+      const copied = describe(installed, incoming)
+      if (incoming.some(rel => copied[rel] !== expected[rel])) {throw new Error('Recovered source verification failed')}
+      writeStamp(installed, incomingId, incoming)
+      return { action: 'seeded', files: incoming.length }
+    }
     const incoming = ownedFiles(bundle)
     const previousFiles = Object.keys(stamp.files)
 

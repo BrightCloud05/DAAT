@@ -360,3 +360,35 @@ test('legacy polluted ownership is migrated without deleting ambiguous user file
   await refreshAgentSource(installed, tree({ 'cli.py': 'newer' }))
   assert.equal(read(installed, 'personal.txt'), 'mine')
 })
+
+
+test('an interrupted matching bundle is completed without claiming user files', async () => {
+  const bundle = tree({ 'cli.py': 'bundled', 'agent/core.py': 'core' })
+  const id = computeBundleId(bundle)
+  fs.writeFileSync(path.join(bundle, BUNDLE_ID_NAME), id)
+  const installed = tree({ [BUNDLE_ID_NAME]: id, 'cli.py': 'bundled', 'notes.txt': 'mine', 'venv/keep': 'environment' })
+  const result = await refreshAgentSource(installed, bundle)
+  assert.equal(result.action, 'seeded')
+  assert.equal(read(installed, 'agent/core.py'), 'core')
+  assert.equal(read(installed, 'notes.txt'), 'mine')
+  assert.equal(read(installed, 'venv/keep'), 'environment')
+  assert.deepEqual(Object.keys(readStamp(installed)!.files).sort(), ownedFiles(bundle))
+  assert.equal((await refreshAgentSource(installed, bundle)).action, 'current')
+})
+
+test('missing-stamp recovery refuses edited files and linked paths before writing', async () => {
+  const bundle = tree({ 'cli.py': 'bundled', 'agent/core.py': 'core' })
+  const id = computeBundleId(bundle)
+  fs.writeFileSync(path.join(bundle, BUNDLE_ID_NAME), id)
+  for (const linked of [false, true]) {
+    const installed = tree({ [BUNDLE_ID_NAME]: id, 'cli.py': linked ? 'bundled' : 'my edit' })
+    const external = tree({ 'core.py': 'core' })
+    if (linked) fs.symlinkSync(external, path.join(installed, 'agent'), process.platform === 'win32' ? 'junction' : 'dir')
+    const result = await refreshAgentSource(installed, bundle)
+    assert.equal(result.action, 'declined')
+    assert.equal(readStamp(installed), null)
+    assert.equal(read(installed, 'cli.py'), linked ? 'bundled' : 'my edit')
+    if (!linked) assert.equal(fs.existsSync(path.join(installed, 'agent')), false)
+    assert.equal(read(external, 'core.py'), 'core')
+  }
+})

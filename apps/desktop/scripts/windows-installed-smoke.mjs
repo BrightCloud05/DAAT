@@ -11,11 +11,21 @@ assert.equal(process.env.GITHUB_ACTIONS, 'true', 'Use an isolated Actions runner
 const executablePath = process.argv[2]
 assert.ok(executablePath && fs.existsSync(executablePath), 'Installed executable is required')
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'daat-acceptance-'))
-const home = path.join(root, 'runtime')
+const partial = process.argv.includes('--partial')
+const home = path.join(root, '사용자 이름', 'AppData', 'Local', 'daat')
 const userData = path.join(root, 'user-data')
 const vault = path.join(root, 'Test vault 한글')
-const output = path.resolve('release/acceptance')
+const output = path.resolve('release/acceptance', partial ? 'recovery' : 'fresh')
 for (const dir of [home, userData, vault, output]) fs.mkdirSync(dir, { recursive: true })
+if (partial) {
+  const bundle = path.join(path.dirname(executablePath), 'resources', 'app.asar.unpacked', 'dist', 'agent-src')
+  const installed = path.join(home, 'hermes-agent')
+  fs.mkdirSync(installed, { recursive: true })
+  for (const name of ['.daat-bundle-id', 'pyproject.toml']) {
+    fs.copyFileSync(path.join(bundle, name), path.join(installed, name))
+  }
+  fs.writeFileSync(path.join(installed, 'user-note.txt'), 'Preserve my file.')
+}
 fs.writeFileSync(path.join(userData, 'vault.json'), JSON.stringify({ root: vault }))
 fs.writeFileSync(path.join(vault, 'Trial.md'), '# Windows trial\n\nDisposable note.\n')
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) =>
@@ -59,6 +69,15 @@ async function launch(fresh = false) {
 }
 try {
   await launch(true)
+  const installed = path.join(home, 'hermes-agent')
+  assert.ok(fs.existsSync(path.join(installed, '.daat-bundle-stamp')))
+  if (partial) {
+    assert.equal(fs.readFileSync(path.join(installed, 'user-note.txt'), 'utf8'), 'Preserve my file.')
+    const stamp = JSON.parse(fs.readFileSync(path.join(installed, '.daat-bundle-stamp'), 'utf8'))
+    assert.ok(!Object.hasOwn(stamp.files, 'user-note.txt'))
+    report.checks.push('Interrupted source copy recovered; user file preserved and excluded from ownership')
+  }
+  report.checks.push('Bootstrap succeeded with Korean characters and spaces in runtime home')
   await page.screenshot({ path: path.join(output, 'first-launch.png') })
   // Provider setup is deliberately not exercised without a user account.
   // Record the onboarding screen, then select the existing offline notes path.

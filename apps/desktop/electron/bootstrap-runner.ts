@@ -271,21 +271,13 @@ function seedAgentSource(activeRoot, appRoot, emit) {
     // later app has no way to tell an install it may safely replace from one
     // someone made themselves — so it replaced neither, and every update
     // shipped a new interface onto an old agent. See electron/agent-source.ts.
-    try {
-      writeStamp(activeRoot, bundleFingerprint(source))
-    } catch (stampErr) {
-      // A missing stamp costs future updates, not this install.
-      emit?.(`[bootstrap] could not stamp the seeded source (${stampErr.message})`)
-    }
-
-    emit?.(`[bootstrap] using the source that ships with the app (no clone needed)`)
-
+    writeStamp(activeRoot, bundleFingerprint(source))
+    emit?.({ type: 'log', line: '[bootstrap] using the source that ships with the app (no clone needed)' })
     return true
   } catch (err) {
-    // Fall through to the normal clone path — a failed seed must not be fatal.
-    emit?.(`[bootstrap] could not use the bundled source (${err.message}); falling back to clone`)
-
-    return false
+    // Preserve the partial copy for verified recovery on retry. Do not hide the
+    // original filesystem error behind a later missing-stamp installer error.
+    throw new Error(`Could not prepare bundled source at ${activeRoot}: ${err.message}. Files were preserved; retry setup.`)
   }
 }
 
@@ -1011,19 +1003,23 @@ async function runBootstrap(opts) {
         if (bundle) {
           const outcome = await refreshBundledRuntime(seedRoot || activeRoot, bundle, hermesHome, line => emit({ type: 'log', line }))
 
-          if (outcome.action === 'updated') {
-            emit?.(
+          if (outcome.action === 'seeded') {
+            emit({ type: 'log', line: '[bootstrap] verified and completed the interrupted bundled source copy' })
+          } else if (outcome.action === 'failed') {
+            throw new Error(outcome.why)
+          } else if (outcome.action === 'updated') {
+            emit?.({ type: 'log', line:
               `[bootstrap] updated the agent source from ${outcome.from} to ${outcome.to}` +
                 (outcome.depsChanged ? ' (dependencies changed)' : '')
-            )
+            })
           } else if (outcome.action === 'declined') {
-            emit?.(`[bootstrap] left the existing source alone (${outcome.why}): ${outcome.detail}`)
+            emit?.({ type: 'log', line: `[bootstrap] left the existing source alone (${outcome.why}): ${outcome.detail}` })
           } else if (outcome.action === 'unavailable' && outcome.why === 'another agent update is in progress') {
             throw new Error('Another Daat window is updating the agent. Retry after it finishes.')
           }
         }
       } catch (refreshErr) {
-        emit?.(`[bootstrap] source refresh could not safely finish: ${refreshErr.message}`)
+        emit?.({ type: 'log', line: `[bootstrap] source refresh could not safely finish: ${refreshErr.message}` })
         throw refreshErr
       }
     }
