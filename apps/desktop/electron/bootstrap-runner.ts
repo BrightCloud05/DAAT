@@ -534,6 +534,13 @@ function resolveWindowsPowerShell() {
   return 'powershell.exe'
 }
 
+/** PowerShell 7 module paths can break the Windows PowerShell 5.1 built-ins. */
+export function powershellInstallerEnvironment(parent: NodeJS.ProcessEnv, hermesHome?: string): NodeJS.ProcessEnv {
+  const env = Object.fromEntries(Object.entries(parent).filter(([key]) => key.toLowerCase() !== 'psmodulepath'))
+
+  return { ...env, HERMES_HOME: hermesHome || parent.HERMES_HOME || '' }
+}
+
 function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, hermesHome }: any = {}) {
   return new Promise<any>((resolve, reject) => {
     const ps = process.platform === 'win32' ? resolveWindowsPowerShell() : 'pwsh'
@@ -544,12 +551,7 @@ function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, herme
       fullArgs,
       hiddenWindowsChildOptions({
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          // Pass HERMES_HOME through so install.ps1 respects the caller's
-          // choice rather than re-computing the default.
-          HERMES_HOME: hermesHome || process.env.HERMES_HOME || ''
-        }
+        env: powershellInstallerEnvironment(process.env, hermesHome)
       })
     )
 

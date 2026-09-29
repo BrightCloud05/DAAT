@@ -15,7 +15,8 @@ import {
   isPinnedCommit,
   resolveInstallScript,
   resolveMarkerPinnedCommit,
-  runBootstrap
+  runBootstrap,
+  powershellInstallerEnvironment
 } from './bootstrap-runner'
 
 const SCRIPT_NAME = process.platform === 'win32' ? 'install.ps1' : 'install.sh'
@@ -271,4 +272,13 @@ test('resolveInstallScript rethrows when the 404 fallback is unavailable', async
   } finally {
     fs.rmSync(home, { recursive: true, force: true })
   }
+})
+
+
+test('installer shell uses its own module defaults without mutating the parent environment', () => {
+  const parent = { PSModulePath: 'PowerShell7/modules', psmodulepath: 'other/modules', PATH: 'tools', HERMES_HOME: 'old-home' }
+  const env = powershellInstallerEnvironment(parent, 'chosen-home')
+  assert.deepEqual(env, { PATH: 'tools', HERMES_HOME: 'chosen-home' })
+  assert.equal(parent.PSModulePath, 'PowerShell7/modules')
+  assert.equal(powershellInstallerEnvironment({ HERMES_HOME: 'existing-home' }).HERMES_HOME, 'existing-home')
 })
