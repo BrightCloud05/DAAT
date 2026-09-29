@@ -13,20 +13,13 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
 import { $vaultRevision, createNote, openNote } from '../vault/store'
-import {
-  type CalendarEntry,
-  collectEntries,
-  monthGrid,
-  monthLabel,
-  stampOf,
-  type TableLikeRow
-} from './calendar'
+
+import { type CalendarEntry, collectEntries, monthGrid, stampOf, type TableLikeRow } from './calendar'
+import { EntryDateButton, QuickAddRow, SubscriptionsPanel } from './quick-event'
+import { $productLocale, productStrings } from './strings'
 import { applyTemplateToActive, listTemplates } from './templates'
 import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
 import { closeTableView } from './view-store'
-import { $productLocale, productStrings } from './strings'
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const KIND_TONE: Record<CalendarEntry['kind'], string> = {
   task: 'var(--sem-soon-wash)',
@@ -38,19 +31,32 @@ export function CalendarView() {
   const revision = useStore($vaultRevision)
   const todos = useStore($vaultTodos)
   const today = stampOf(new Date())
+
   const [cursor, setCursor] = useState(() => {
     const now = new Date()
 
     return { year: now.getFullYear(), month: now.getMonth() }
   })
+
   const [rows, setRows] = useState<TableLikeRow[]>([])
   const [selected, setSelected] = useState<string | null>(null)
-  const s = productStrings(useStore($productLocale))
+  const [showSubscriptions, setShowSubscriptions] = useState(false)
+  const locale = useStore($productLocale)
+  const s = productStrings(locale)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [retry, setRetry] = useState(0)
+
+  const weekdays = Array.from({ length: 7 }, (_, day) =>
+    new Date(2024, 0, 7 + day).toLocaleDateString(locale, { weekday: 'short' })
+  )
 
   initTodosStore()
 
   useEffect(() => {
     let cancelled = false
+    setLoading(true)
+    setError(null)
 
     void window.hermesDesktop.vault
       .propertiesTable()
@@ -59,12 +65,17 @@ export function CalendarView() {
           setRows(data)
         }
       })
-      .catch(() => undefined)
+      .catch(cause => {
+        if (!cancelled) {setError(cause instanceof Error ? cause.message : String(cause))}
+      })
+      .finally(() => {
+        if (!cancelled) {setLoading(false)}
+      })
 
     return () => {
       cancelled = true
     }
-  }, [revision])
+  }, [revision, retry])
 
   const entries = useMemo(() => collectEntries(rows, todos), [rows, todos])
   const weeks = useMemo(() => monthGrid(cursor.year, cursor.month, today), [cursor, today])
@@ -91,7 +102,7 @@ export function CalendarView() {
     const daily = (await listTemplates()).find(template => template.name.toLowerCase() === 'daily')
 
     if (daily) {
-      await applyTemplateToActive(daily.path, date)
+      await applyTemplateToActive(daily.path, date, relPath, date)
     }
   }
 
@@ -101,7 +112,9 @@ export function CalendarView() {
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto flex w-full max-w-[64rem] flex-col px-6 pb-12 pt-8">
         <div className="mb-5 flex items-center gap-3">
-          <h1 className="text-[28px] font-(--dt-font-serif) font-medium tracking-[-0.01em]">{monthLabel(cursor.year, cursor.month)}</h1>
+          <h1 className="text-[28px] font-(--dt-font-serif) font-medium tracking-[-0.01em]">
+            {new Date(cursor.year, cursor.month, 1).toLocaleDateString(locale, { year: 'numeric', month: 'long' })}
+          </h1>
 
           <div className="ml-auto flex items-center gap-1">
             <button
@@ -109,17 +122,17 @@ export function CalendarView() {
               onClick={() => step(-1)}
               title={s.previousMonth}
             >
-              <Codicon name="chevron-left" className="text-[13px]" />
+              <Codicon className="text-[13px]" name="chevron-left" />
             </button>
             <button
               className="rounded-md px-2 py-1 text-[12.5px] opacity-70 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100"
-              title="Jump to today"
               onClick={() => {
                 const now = new Date()
 
                 setCursor({ year: now.getFullYear(), month: now.getMonth() })
                 setSelected(today)
               }}
+              title={s.today}
             >
               {s.today}
             </button>
@@ -128,16 +141,45 @@ export function CalendarView() {
               onClick={() => step(1)}
               title={s.nextMonth}
             >
-              <Codicon name="chevron-right" className="text-[13px]" />
+              <Codicon className="text-[13px]" name="chevron-right" />
+            </button>
+            <button
+              className={cn(
+                'grid size-7 place-items-center rounded-md opacity-60 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-100',
+                showSubscriptions && 'bg-(--ui-control-active-background) opacity-100'
+              )}
+              onClick={() => setShowSubscriptions(value => !value)}
+              title={s.subscriptions}
+            >
+              <Codicon className="text-[13px]" name="rss" />
             </button>
           </div>
         </div>
 
+        {loading ? (
+          <p className="mb-3 text-sm opacity-60" role="status">
+            {s.loading}
+          </p>
+        ) : null}
+        {error ? (
+          <p className="mb-3 text-sm" role="alert">
+            {error}{' '}
+            <button className="underline" onClick={() => setRetry(value => value + 1)}>
+              {s.retryNow}
+            </button>
+          </p>
+        ) : null}
+        {showSubscriptions ? (
+          <div className="mb-4">
+            <SubscriptionsPanel />
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-7 border-l border-t border-(--stroke-nous)">
-          {WEEKDAYS.map(day => (
+          {weekdays.map(day => (
             <div
-              key={day}
               className="border-b border-r border-(--stroke-nous) px-2 py-1 text-[11.5px] font-medium opacity-50"
+              key={day}
             >
               {day}
             </div>
@@ -149,9 +191,9 @@ export function CalendarView() {
 
             return (
               <button
-                key={cell.date}
-                onClick={() => setSelected(cell.date)}
-                onDoubleClick={() => void openDay(cell.date)}
+                aria-current={cell.isToday ? 'date' : undefined}
+                aria-label={cell.date}
+                aria-pressed={isSelected}
                 className={cn(
                   'flex min-h-[92px] flex-col items-stretch gap-1 border-b border-r border-(--stroke-nous) p-1.5 text-left transition-colors',
                   !cell.inMonth && 'opacity-35',
@@ -159,6 +201,9 @@ export function CalendarView() {
                     ? 'bg-[color-mix(in_srgb,var(--dt-primary)_8%,transparent)]'
                     : 'hover:bg-(--ui-control-hover-background)'
                 )}
+                key={cell.date}
+                onClick={() => setSelected(cell.date)}
+                onDoubleClick={() => void openDay(cell.date)}
               >
                 <span
                   className={cn(
@@ -171,11 +216,8 @@ export function CalendarView() {
 
                 {dayEntries.slice(0, 3).map(entry => (
                   <span
+                    className={cn('truncate rounded px-1 py-px text-[11.5px]', entry.done && 'line-through opacity-50')}
                     key={`${entry.kind}-${entry.path}-${entry.line ?? 0}`}
-                    className={cn(
-                      'truncate rounded px-1 py-px text-[11.5px]',
-                      entry.done && 'line-through opacity-50'
-                    )}
                     style={{ backgroundColor: KIND_TONE[entry.kind] }}
                     title={entry.label}
                   >
@@ -204,21 +246,20 @@ export function CalendarView() {
               </button>
             </div>
 
+            <QuickAddRow date={selected} />
+
             {selectedEntries.length ? (
               <div className="flex flex-col">
                 {selectedEntries.map(entry => (
                   <div
-                    key={`${entry.kind}-${entry.path}-${entry.line ?? 0}`}
                     className="group flex items-center gap-2 border-b border-(--stroke-nous) py-1.5 last:border-b-0"
+                    key={`${entry.kind}-${entry.path}-${entry.line ?? 0}`}
                   >
                     {entry.kind === 'task' ? (
                       <button
+                        aria-label={`${entry.done ? s.markNotDone : s.markDone}: ${entry.label}`}
+                        aria-pressed={Boolean(entry.done)}
                         className="grid size-[15px] shrink-0 place-items-center rounded-[5px] border-[1.5px] transition-colors"
-                        style={
-                          entry.done
-                            ? { backgroundColor: 'var(--dt-primary)', borderColor: 'var(--dt-primary)' }
-                            : { borderColor: 'var(--ui-stroke-secondary)' }
-                        }
                         onClick={() => {
                           const todo = todos.find(item => item.path === entry.path && item.line === entry.line)
 
@@ -226,18 +267,23 @@ export function CalendarView() {
                             void toggleTodo(todo)
                           }
                         }}
-                        title={entry.done ? 'Mark as not done' : 'Mark as done'}
+                        style={
+                          entry.done
+                            ? { backgroundColor: 'var(--dt-primary)', borderColor: 'var(--dt-primary)' }
+                            : { borderColor: 'var(--ui-stroke-secondary)' }
+                        }
+                        title={entry.done ? s.markNotDone : s.markDone}
                       >
                         {entry.done ? (
                           <svg
-                            width="9"
-                            height="9"
-                            viewBox="0 0 12 12"
                             fill="none"
+                            height="9"
                             stroke="#fff"
-                            strokeWidth="2"
                             strokeLinecap="round"
                             strokeLinejoin="round"
+                            strokeWidth="2"
+                            viewBox="0 0 12 12"
+                            width="9"
                           >
                             <path d="M2.5 6.3 4.8 8.6 9.5 3.6" />
                           </svg>
@@ -245,13 +291,16 @@ export function CalendarView() {
                       </button>
                     ) : (
                       <Codicon
-                        name={entry.kind === 'daily' ? 'calendar' : 'file'}
                         className="shrink-0 text-[13px] opacity-45"
+                        name={entry.kind === 'daily' ? 'calendar' : 'file'}
                       />
                     )}
 
                     <button
-                      className={cn('min-w-0 flex-1 truncate text-left text-[13px]', entry.done && 'line-through opacity-50')}
+                      className={cn(
+                        'min-w-0 flex-1 truncate text-left text-[13px]',
+                        entry.done && 'line-through opacity-50'
+                      )}
                       onClick={() => {
                         closeTableView()
                         void openNote(entry.path)
@@ -260,15 +309,13 @@ export function CalendarView() {
                       {entry.label}
                     </button>
 
+                    <EntryDateButton entry={entry} />
                     <span className="shrink-0 text-[11.5px] opacity-40">{entry.path.split('/')[0]}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-[13px] opacity-55">
-                Nothing scheduled. Give a note a <code className="opacity-80">due:</code> property, or add{' '}
-                <code className="opacity-80">📅 {selected}</code> to a task, and it shows up here.
-              </p>
+              <p className="text-[13px] opacity-55">{!loading && !error ? s.nothingScheduled : null}</p>
             )}
           </div>
         ) : null}

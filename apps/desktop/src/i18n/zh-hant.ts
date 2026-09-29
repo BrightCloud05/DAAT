@@ -1986,6 +1986,8 @@ export const zhHant = defineLocale({
     setupChoiceDesc: '將此應用程式連線到您已執行的 Daat 閘道，或在這台電腦上本機安裝 Daat。',
     connectExistingTitle: '連線到現有 Daat',
     connectExistingShort: '連線現有環境',
+    connectExistingLink: '已經在別處執行 Daat？',
+    installLocalStarting: '正在啟動…',
     connectExistingDesc: '使用工作階段權杖或瀏覽器登入連線遠端後端。不會啟動本機安裝。',
     installLocalTitle: '本機安裝 Daat',
     installLocalDesc: '下載 Daat、建立 Python 環境，並在這台電腦上執行後端。',

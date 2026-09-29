@@ -3,21 +3,54 @@ import { useI18n } from '@/i18n'
 import { Check, ChevronRight, Terminal } from '@/lib/icons'
 import type { OAuthProvider } from '@/types/hermes'
 
-const PROVIDER_DISPLAY: Record<string, { order: number; title: string }> = {
+/**
+ * What each provider is called on screen, and — where it matters — how to know
+ * whether it is yours.
+ *
+ * These rows were named after the protocol rather than the product: the way in
+ * for someone who pays for ChatGPT was labelled "OpenAI OAuth (ChatGPT)", which
+ * asks the reader to know what OAuth is before they can tell it is the one they
+ * want. Nobody can answer "choose a model provider". Everybody can answer "do
+ * you pay for ChatGPT?", so the row says that instead.
+ *
+ * The ids are wire values and do not change — `openai-codex` stays
+ * `openai-codex` everywhere below the surface.
+ */
+const PROVIDER_DISPLAY: Record<string, { order: number; title: string; pitch?: string }> = {
   nous: { order: 0, title: 'Nous Portal' },
-  'openai-codex': { order: 1, title: 'OpenAI OAuth (ChatGPT)' },
+  'openai-codex': {
+    order: 1,
+    title: 'ChatGPT',
+    pitch: 'Choose this if you pay for ChatGPT — the same account you use on your phone or the website.'
+  },
   'minimax-oauth': { order: 2, title: 'MiniMax' },
   'qwen-oauth': { order: 3, title: 'Qwen Code' },
   'xai-oauth': { order: 4, title: 'xAI Grok' },
   // Both Anthropic entries sit at the bottom: the API-key path first, then
   // the subscription OAuth path (only works with extra usage credits).
   anthropic: { order: 5, title: 'Anthropic API Key' },
-  'claude-code': { order: 6, title: 'Anthropic OAuth: Required Extra Usage Credits to Use Subscription' }
+  'claude-code': {
+    order: 6,
+    title: 'Claude',
+    // The old title was the caveat, in full, where the name goes. The caveat is
+    // real and still shown — as the caveat.
+    pitch: 'A Claude subscription. Needs extra usage credits on top of the plan.'
+  }
 }
 
 const assetPath = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
 
 export const providerTitle = (p: OAuthProvider) => PROVIDER_DISPLAY[p.id]?.title ?? p.name
+
+/**
+ * The line under the name.
+ *
+ * Falls back to the per-flow subtitle ("Sign in with your browser"), which
+ * describes the mechanism. Where a provider has its own pitch it wins, because
+ * how you sign in is not the question the reader is stuck on — which one is
+ * mine is.
+ */
+export const providerPitch = (p: OAuthProvider, fallback: string) => PROVIDER_DISPLAY[p.id]?.pitch ?? fallback
 const orderOf = (p: OAuthProvider) => PROVIDER_DISPLAY[p.id]?.order ?? 99
 
 export const sortProviders = (providers: OAuthProvider[]) =>
@@ -121,7 +154,9 @@ export function ProviderRow({
           </span>
           {loggedIn ? <ConnectedTag /> : null}
         </div>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{t.onboarding.flowSubtitles[provider.flow]}</p>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          {providerPitch(provider, t.onboarding.flowSubtitles[provider.flow])}
+        </p>
       </div>
       <Trail className="size-4 text-muted-foreground transition group-hover:text-foreground" />
     </RowButton>

@@ -60,9 +60,6 @@ def meeting_transcribe(rel_path: str, language: str = "") -> str:
 
     try:
         result = transcribe_audio(str(target), **({"language": language} if language.strip() else {}))
-    except TypeError:
-        # Older signature without a language argument.
-        result = transcribe_audio(str(target))
     except Exception as error:  # noqa: BLE001 — surface the reason to the model
         return f"Could not transcribe {rel_path}: {error}"
 

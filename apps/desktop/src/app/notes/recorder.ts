@@ -1,203 +1,269 @@
-/**
- * Meeting recorder.
- *
- * Records with MediaRecorder and writes the result into the vault as an
- * ordinary file next to the meeting note — so the recording is the user's,
- * in a folder they can open, and deleting the note's folder deletes the
- * audio with it. Nothing is uploaded: transcription happens on this Mac
- * through the local Whisper model.
- *
- * Recording is a live capture of a room that may contain other people, so
- * this module never starts implicitly — only from an explicit user action —
- * and the UI shows a running timer the whole time.
- */
-
+/** Meeting capture stays alive across views; each recording owns a unique file. */
 import { atom } from 'nanostores'
 
 export type RecorderStatus = 'idle' | 'requesting' | 'recording' | 'saving' | 'error'
 
 export interface RecorderState {
   status: RecorderStatus
-  /** Seconds elapsed, for the timer. */
   elapsed: number
   error: string | null
-  /** Vault-relative folder of the recording in progress. */
   folder: string | null
+  title?: string
+  interrupted?: string | null
 }
 
 const IDLE: RecorderState = { status: 'idle', elapsed: 0, error: null, folder: null }
-
 export const $recorder = atom<RecorderState>(IDLE)
 
-let recorder: MediaRecorder | null = null
-let stream: MediaStream | null = null
-let chunks: Blob[] = []
-let ticker: ReturnType<typeof setInterval> | null = null
-let startedAt = 0
+interface Capture {
+  recorder: MediaRecorder
+  stream: MediaStream
+  title: string
+  folder: string
+  audioPath: string
+  vaultRoot: string
+  startedAt: number
+  endedAt?: number
+  ticker?: ReturnType<typeof setInterval>
+  chain: Promise<void>
+  bytes: number
+  error: string | null
+  discarded: boolean
+}
 
-/** `Meetings/2026-07-29 1432 Standup` — sortable, and readable in Finder. */
+let capture: Capture | null = null
+let requestGeneration = 0
+
+/** Human-readable date/title plus an identity independent of clock precision. */
 export function meetingFolder(title: string, now: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0')
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(now.getMinutes())}`
 
-  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}${pad(
-    now.getMinutes()
-  )}`
-
-  // Keep it a valid single path segment on every filesystem.
   const safe = title
     .replace(/[/\\:*?"<>|]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 60)
 
-  return `Meetings/${stamp}${safe ? ` ${safe}` : ''}`
+  return `Meetings/${stamp}${safe ? ` ${safe}` : ''} ${crypto.randomUUID()}`
 }
 
-/** The best container this build of Chromium will actually produce. */
 function pickMimeType(): string | undefined {
-  const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
-
-  return candidates.find(type => MediaRecorder.isTypeSupported?.(type))
+  return ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported?.(type))
 }
 
 export function formatElapsed(seconds: number): string {
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+}
 
-  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+function release(current: Capture): void {
+  if (current.ticker) {clearInterval(current.ticker)}
+  current.stream.getTracks().forEach(track => track.stop())
+
+  if (capture === current) {capture = null}
+}
+
+function interrupt(current: Capture, reason: string): void {
+  if (capture !== current || current.endedAt !== undefined) {return}
+  current.endedAt = Date.now()
+  $recorder.set({
+    ...$recorder.get(),
+    elapsed: Math.floor((current.endedAt - current.startedAt) / 1000),
+    interrupted: reason
+  })
 }
 
 export async function startRecording(title: string): Promise<boolean> {
-  if ($recorder.get().status === 'recording') {
-    return false
-  }
-
-  $recorder.set({ ...IDLE, status: 'requesting' })
+  if (!['idle', 'error'].includes($recorder.get().status)) {return false}
+  const generation = ++requestGeneration
+  $recorder.set({ ...IDLE, title, status: 'requesting' })
+  let stream: MediaStream | null = null
 
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true }
-    })
+    const vaultRoot = (await window.hermesDesktop.vault.info()).root
+
+    if (!vaultRoot) {throw new Error('Choose a notes folder before recording.')}
+
+    if (generation !== requestGeneration) {return false}
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+
+    if (generation !== requestGeneration) {
+      stream.getTracks().forEach(track => track.stop())
+
+      return false
+    }
+
+    const mimeType = pickMimeType()
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    const folder = meetingFolder(title, new Date())
+
+    const current: Capture = {
+      recorder,
+      stream,
+      folder,
+      title,
+      vaultRoot,
+      audioPath: `${folder}/audio.${(mimeType ?? recorder.mimeType).includes('mp4') ? 'm4a' : 'webm'}`,
+      startedAt: Date.now(),
+      chain: Promise.resolve(),
+      bytes: 0,
+      error: null,
+      discarded: false
+    }
+
+    capture = current
+
+    recorder.ondataavailable = event => {
+      if (!event.data.size || current.discarded) {return}
+      const chunk = event.data
+      current.chain = current.chain.then(async () => {
+        try {
+          const result = await window.hermesDesktop.vault.appendBinary(
+            current.audioPath,
+            new Uint8Array(await chunk.arrayBuffer()),
+            current.vaultRoot
+          )
+
+          current.bytes = result.bytes
+        } catch (error) {
+          current.error ??= error instanceof Error ? error.message : 'Could not save the recording.'
+
+          if (capture === current) {$recorder.set({ ...$recorder.get(), error: current.error })}
+        }
+      })
+    }
+
+    recorder.onerror = () => interrupt(current, 'The microphone stopped working.')
+
+    for (const track of stream.getAudioTracks()) {
+      track.addEventListener('ended', () => interrupt(current, 'The microphone was disconnected.'))
+    }
+
+    recorder.start(5_000)
+    $recorder.set({ status: 'recording', title, folder, elapsed: 0, error: null, interrupted: null })
+    current.ticker = setInterval(() => {
+      if (capture === current && current.endedAt === undefined && $recorder.get().status === 'recording') {
+        $recorder.set({ ...$recorder.get(), elapsed: Math.floor((Date.now() - current.startedAt) / 1000) })
+      }
+    }, 1000)
+
+    return true
   } catch (error) {
-    // Denied, or no input device. Both are the user's business to fix.
-    $recorder.set({
-      ...IDLE,
-      status: 'error',
-      error:
-        error instanceof DOMException && error.name === 'NotAllowedError'
-          ? 'Daat needs microphone access. Grant it in System Settings → Privacy & Security → Microphone.'
-          : error instanceof Error
-            ? error.message
-            : 'No microphone available.'
-    })
+    stream?.getTracks().forEach(track => track.stop())
+
+    if (generation === requestGeneration) {
+      if (capture) {release(capture)}
+      $recorder.set({
+        ...IDLE,
+        status: 'error',
+        error:
+          error instanceof DOMException && error.name === 'NotAllowedError'
+            ? 'Daat needs microphone access. Grant it in System Settings → Privacy & Security → Microphone.'
+            : error instanceof Error
+              ? error.message
+              : 'Could not start a recording.'
+      })
+    }
 
     return false
   }
-
-  const mimeType = pickMimeType()
-
-  chunks = []
-  recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-
-  recorder.ondataavailable = event => {
-    if (event.data.size > 0) {
-      chunks.push(event.data)
-    }
-  }
-
-  // Timeslice: without it a crash mid-meeting loses everything, because the
-  // blob is only produced at stop().
-  recorder.start(5_000)
-  startedAt = Date.now()
-
-  $recorder.set({ status: 'recording', elapsed: 0, error: null, folder: meetingFolder(title, new Date()) })
-
-  ticker = setInterval(() => {
-    const current = $recorder.get()
-
-    if (current.status === 'recording') {
-      $recorder.set({ ...current, elapsed: Math.floor((Date.now() - startedAt) / 1000) })
-    }
-  }, 1000)
-
-  return true
 }
 
-function teardown(): void {
-  if (ticker) {
-    clearInterval(ticker)
-    ticker = null
+async function stopCapture(current: Capture): Promise<void> {
+  if (current.recorder.state !== 'inactive') {
+    await new Promise<void>((resolve, reject) => {
+      current.recorder.onstop = () => resolve()
+
+      try {
+        current.recorder.stop()
+      } catch (error) {
+        reject(error)
+      }
+    })
   }
 
-  stream?.getTracks().forEach(track => track.stop())
-  stream = null
-  recorder = null
+  // MediaRecorder flushes its final data event before stop. The same capture's
+  // serialized chain must finish before its file can be used or discarded.
+  await current.chain
 }
 
 export interface FinishedRecording {
-  /** Vault-relative path of the audio file. */
   audioPath: string
   folder: string
   seconds: number
+  title: string
+  vaultRoot: string
+  startedAt: number
 }
 
-/** Stop, write the audio into the vault, and return where it landed. */
 export async function stopRecording(): Promise<FinishedRecording | null> {
-  const current = $recorder.get()
+  const current = capture
 
-  if (current.status !== 'recording' || !recorder) {
-    return null
-  }
-
-  const active = recorder
-  const folder = current.folder ?? meetingFolder('', new Date())
-  const seconds = Math.floor((Date.now() - startedAt) / 1000)
-
-  $recorder.set({ ...current, status: 'saving' })
-
-  const blob = await new Promise<Blob>(resolve => {
-    active.onstop = () => resolve(new Blob(chunks, { type: active.mimeType || 'audio/webm' }))
-    active.stop()
-  })
-
-  teardown()
-
-  const extension = blob.type.includes('mp4') ? 'm4a' : 'webm'
-  const audioPath = `${folder}/audio.${extension}`
+  if (!current || $recorder.get().status !== 'recording') {return null}
+  $recorder.set({ ...$recorder.get(), status: 'saving' })
 
   try {
-    const bytes = new Uint8Array(await blob.arrayBuffer())
-
-    if (!bytes.byteLength) {
-      $recorder.set({ ...IDLE, status: 'error', error: 'The recording came out empty — nothing was captured.' })
-
-      return null
-    }
-
-    await window.hermesDesktop.vault.writeBinary(audioPath, bytes)
+    await stopCapture(current)
   } catch (error) {
+    current.error ??= error instanceof Error ? error.message : 'Could not finish the recording.'
+  }
+
+  release(current)
+
+  if (current.error) {
     $recorder.set({
       ...IDLE,
       status: 'error',
-      error: error instanceof Error ? error.message : 'Could not save the recording.'
+      error: `${current.error} The audio so far is at ${current.vaultRoot}/${current.audioPath}.`
     })
 
     return null
   }
 
-  $recorder.set(IDLE)
+  if (!current.bytes) {
+    await window.hermesDesktop.vault.trash(current.audioPath, current.vaultRoot).catch(() => undefined)
+    $recorder.set({ ...IDLE, status: 'error', error: 'The recording came out empty — nothing was captured.' })
 
-  return { audioPath, folder, seconds }
-}
-
-/** Abandon a recording without writing it. */
-export function cancelRecording(): void {
-  if (recorder && $recorder.get().status === 'recording') {
-    recorder.onstop = null
-    recorder.stop()
+    return null
   }
 
-  chunks = []
-  teardown()
   $recorder.set(IDLE)
+
+  return {
+    audioPath: current.audioPath,
+    folder: current.folder,
+    title: current.title,
+    vaultRoot: current.vaultRoot,
+    startedAt: current.startedAt,
+    seconds: Math.floor(((current.endedAt ?? Date.now()) - current.startedAt) / 1000)
+  }
+}
+
+export async function cancelRecording(): Promise<void> {
+  ++requestGeneration
+  const current = capture
+
+  if (!current) {
+    $recorder.set(IDLE)
+
+    return
+  }
+
+  if ($recorder.get().status === 'saving') {return}
+  current.discarded = true
+  $recorder.set({ ...$recorder.get(), status: 'saving' })
+
+  try {
+    await stopCapture(current)
+    await window.hermesDesktop.vault.trash(current.audioPath, current.vaultRoot)
+    $recorder.set(IDLE)
+  } catch (error) {
+    $recorder.set({
+      ...IDLE,
+      status: 'error',
+      error: `${error instanceof Error ? error.message : 'Could not discard the recording.'} ${current.vaultRoot}/${current.audioPath}`
+    })
+  } finally {
+    release(current)
+  }
 }

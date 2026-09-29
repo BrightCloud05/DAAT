@@ -7,6 +7,7 @@ file — the same contract the desktop's own writer keeps.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import sqlite3
@@ -14,6 +15,7 @@ import subprocess
 import tempfile
 import time
 import unicodedata
+import uuid
 from pathlib import Path
 
 MAX_READ_CHARS = 120_000
@@ -120,22 +122,20 @@ def _backup_existing(target: Path, rel: str) -> str | None:
     if not target.is_file():
         return None
 
-    try:
-        previous = target.read_bytes()
-    except OSError:
-        return None
+    previous = target.read_bytes()
 
     home = os.environ.get("HERMES_HOME", "").strip() or str(Path.home() / ".daat")
     folder = Path(home) / "state" / "vault-backups"
     folder.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    safe = re.sub(r"[^A-Za-z0-9._-]", "_", rel)[-80:]
-    backup = folder / f"{stamp}-{safe}"
+    identity = hashlib.sha256(str(target).encode("utf-8")).hexdigest()[:16]
+    safe = re.sub(r"[^\w._-]", "_", Path(rel).name, flags=re.UNICODE)[-60:]
+    backup = folder / f"{stamp}-{identity}-{uuid.uuid4().hex}-{safe}"
 
-    try:
-        backup.write_bytes(previous)
-    except OSError:
-        return None
+    with backup.open("xb") as handle:
+        handle.write(previous)
+        handle.flush()
+        os.fsync(handle.fileno())
 
     # Keep the folder from growing without bound.
     try:
@@ -180,8 +180,8 @@ def vault_read(rel: str) -> str:
     return content
 
 
-def vault_write(rel: str, content: str) -> str:
-    root = _vault_root()
+def vault_write(rel: str, content: str, *, root: Path | None = None, expected_content: str | None = None) -> str:
+    root = root or _vault_root()
 
     if not root:
         return _no_vault()
@@ -194,17 +194,34 @@ def vault_write(rel: str, content: str) -> str:
     if not target:
         return f"Refused: '{rel}' escapes the vault."
 
+    if expected_content is not None:
+        try:
+            current = target.read_text(encoding="utf-8") if target.exists() else ""
+        except OSError as error:
+            return f"Could not read {rel}: {error}"
+        if current != expected_content:
+            return f"Conflict: {rel} changed since it was read; nothing was overwritten."
+
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         replaced = _backup_existing(target, rel)
     except OSError as error:
         return f"Could not write {rel}: {error}"
 
-    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=f".{target.name}.tmp-")
+    # Inside a try like every other step: this raises on a read-only volume or a
+    # full disk, and it sat outside one — so the single function documented to
+    # report failure by returning a string threw instead, and callers that
+    # checked the string never got to run.
+    try:
+        fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=f".{target.name}.tmp-")
+    except OSError as error:
+        return f"Could not write {rel}: {error}"
 
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
 
         os.replace(tmp, target)
     except Exception as error:  # noqa: BLE001
@@ -339,6 +356,8 @@ def vault_search(query: str) -> str:
             break
 
         try:
+            if _resolve(root, str(path.relative_to(root))) is None:
+                continue
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 if needle in line.lower():
                     hits.append(f"{path.relative_to(root)}:{number}:{line.strip()[:200]}")

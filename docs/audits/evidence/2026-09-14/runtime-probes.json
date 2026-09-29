@@ -1,0 +1,46 @@
+{
+  "method": "real module imports and temporary local files; Electron host/index and HTTP responses stubbed; no network or user data",
+  "results": [
+    {
+      "id": "vault-symlink-boundary",
+      "outsideRead": "OUTSIDE SENTINEL",
+      "outsideAfterWrite": "CHANGED OUTSIDE"
+    },
+    {
+      "id": "rename-existing-destination",
+      "destination": "SOURCE A",
+      "sourceStillExists": false
+    },
+    {
+      "id": "ics-failed-fetch-deletes-existing",
+      "initialWritten": 1,
+      "failedErrors": [
+        "Fixture: HTTP 503"
+      ],
+      "removed": 1,
+      "remaining": 0
+    },
+    {
+      "id": "ics-user-note-edits-overwritten",
+      "userTextSurvives": false
+    },
+    {
+      "id": "ics-remove-last-feed-leaves-notes",
+      "removed": 0,
+      "remaining": 1
+    },
+    {
+      "id": "ics-exdate-not-applied",
+      "parsed": [
+        {
+          "uid": "exclusion",
+          "summary": "Excluded occurrence",
+          "dates": [
+            "2026-09-15",
+            "2026-09-16"
+          ]
+        }
+      ]
+    }
+  ]
+}

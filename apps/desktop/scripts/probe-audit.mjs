@@ -166,7 +166,7 @@ await page.locator('aside button', { hasText: 'Home' }).first().click()
 await page.waitForTimeout(1800)
 await sweep('Home')
 
-for (const name of ['Notes', 'Todo', 'Calendar', 'Money', 'Meetings', 'Mail']) {
+for (const name of ['Notes', 'Todo', 'Calendar', 'AUTOMATION', 'Meetings', 'Mail']) {
   await open(name)
   await sweep(name)
 }
@@ -179,15 +179,8 @@ for (const title of ['Linear Algebra', 'Assignment 2', 'Lecture Template']) {
   await sweep(`Note "${title}"`)
 }
 
-console.log('--- money arithmetic ---')
-await open('Money')
-
-const money = await canvasText()
-
-// 4200 in, 1884.20 out, 2315.80 net. Formatting varies; the digits must not.
-check('income is totalled', /4,?200/.test(money), money.slice(0, 90).replace(/\n+/g, ' '))
-check('spend is totalled', /1,?884/.test(money))
-check('net is totalled', /2,?315/.test(money))
+await open('AUTOMATION')
+check('automation manager is a dedicated screen', await page.locator('[data-automation-page]').count() === 1)
 
 console.log('--- accessible names on icon-only controls ---')
 

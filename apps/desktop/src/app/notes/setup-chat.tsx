@@ -47,8 +47,9 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
       return
     }
 
-    setDraft('')
-    void answerQuestion(persona, text)
+    void answerQuestion(persona, text).then(ok => {
+      if (ok) {setDraft('')}
+    })
   }
 
   return (
@@ -118,12 +119,13 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
                   )}
                 >
                   <textarea
+                    aria-label={locale === 'ko' ? question?.askKo : question?.ask}
                     autoFocus
                     className="max-h-40 min-h-[26px] flex-1 resize-none bg-transparent text-[16px] leading-relaxed outline-none placeholder:opacity-35"
                     disabled={working}
                     onChange={event => setDraft(event.target.value)}
                     onKeyDown={event => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
+                      if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault()
                         submit()
                       }
@@ -169,8 +171,16 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
             </>
           )}
 
+          {setup.result ? (
+            <p className="text-sm opacity-70" role="status">
+              {setup.result}
+            </p>
+          ) : null}
           {setup.error ? (
-            <div className="flex items-start gap-2 rounded-lg bg-(--sem-late-wash) px-3.5 py-2.5 text-[13px]">
+            <div
+              className="flex items-start gap-2 rounded-lg bg-(--sem-late-wash) px-3.5 py-2.5 text-[13px]"
+              role="alert"
+            >
               <Codicon className="mt-0.5 shrink-0" name="warning" />
               <span>{setup.error}</span>
             </div>
@@ -182,7 +192,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
       <div className="flex shrink-0 justify-center px-6 pb-7">
         <div className="flex w-full max-w-[34rem] flex-col gap-1.5">
           {setup.steps.map((step, index) => {
-            const kind = persona.questions[step.question]?.kind
+            const kind = step.files ? 'files' : persona.questions[step.question]?.kind
 
             if (step.answer === null) {
               return null
@@ -190,7 +200,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
 
             if (kind === 'preferences') {
               return (
-                <div className="flex items-center gap-2 text-[12.5px]" key={step.question}>
+                <div className="flex items-center gap-2 text-[12.5px]" key={`${step.question}:${index}`}>
                   <Codicon className="shrink-0 text-[11px] text-(--dt-primary)" name="check" />
                   <span className="opacity-55">{s.savedPreference}</span>
                 </div>
@@ -202,7 +212,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
             }
 
             return (
-              <div className="flex items-center gap-2 text-[12.5px]" key={step.question}>
+              <div className="flex items-center gap-2 text-[12.5px]" key={`${step.question}:${index}`}>
                 <Codicon className="shrink-0 text-[11px] text-(--dt-primary)" name="check" />
                 <span className="opacity-55">{s.madePages(step.created.length)}</span>
                 <button
@@ -214,9 +224,7 @@ export function SetupChat({ persona, onDone }: { persona: Persona; onDone: () =>
               </div>
             )
           })}
-          {setup.steps.some(step => step.undone) ? (
-            <span className="text-[12.5px] opacity-35">{s.undone}</span>
-          ) : null}
+          {setup.steps.some(step => step.undone) ? <span className="text-[12.5px] opacity-35">{s.undone}</span> : null}
         </div>
       </div>
     </div>

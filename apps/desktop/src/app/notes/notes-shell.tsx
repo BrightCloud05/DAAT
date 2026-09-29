@@ -14,32 +14,58 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { submitAgentPrompt } from '@/store/quick-entry'
 
+import { routeSessionId } from '../routes'
+import { SkillsView } from '../skills'
 import { VaultEditorPane } from '../vault/editor-pane'
 import { $activeNote, $vaultNotes, createNote, newUntitledPath } from '../vault/store'
 
 import { AgentSessions } from './agent-sessions'
+import { AutomationsView } from './automations-view'
 import { CalendarView } from './calendar-view'
+import { CatSettings } from './cat-settings'
 import { GraphView } from './graph-view'
 import { HomeView } from './home-view'
 import { MailView } from './mail-view'
-import { MeetingsView } from './meetings-view'
-import { MoneyView } from './money-view'
+import { MeetingsView, RecordingStatusBar } from './meetings-view'
 import { OnboardingWizard } from './onboarding-wizard'
-import {
-  $agentPanelOpen,
-  $notesSidebarOpen,
-  setAgentPanelOpen,
-  toggleAgentPanel
-} from './panes-store'
-import { $onboarded } from './persona-store'
+import { $agentPanelOpen, $notesSidebarOpen, setAgentPanelOpen, toggleAgentPanel } from './panes-store'
+import { $onboarded, ensureDaatPlugins } from './persona-store'
 import { NotesSidebar } from './sidebar'
+import { $productLocale, productStrings } from './strings'
 import { TableView } from './table-view'
 import { openDailyNote } from './templates'
 import { TodoView } from './todo-view'
 import { DocTopbar } from './topbar'
-import { $canvasView } from './view-store'
+import { $canvasView, closeTableView } from './view-store'
+
+/**
+ * Open the agent in its own window.
+ *
+ * A session window renders the full shell (see store/ui-mode), which is the
+ * same surface Hermes itself shows — sessions, capabilities, artifacts — so
+ * the pop-out is a real workspace rather than a wider version of the panel.
+ *
+ * With no session yet there is nothing to pop out, so this opens a full
+ * instance window instead of failing silently on an empty id.
+ */
+async function popOutAgent(): Promise<void> {
+  const sessionId = routeSessionId(window.location.hash.replace(/^#/, ''))
+
+  try {
+    if (sessionId) {
+      await window.hermesDesktop.openSessionWindow(sessionId)
+
+      return
+    }
+
+    await window.hermesDesktop.openWindow()
+  } catch {
+    // A window that could not open is not worth breaking the panel over.
+  }
+}
 
 export function NotesShell() {
+  const s = productStrings(useStore($productLocale))
   const active = useStore($activeNote)
   const canvasView = useStore($canvasView)
   const onboarded = useStore($onboarded)
@@ -59,6 +85,40 @@ export function NotesShell() {
     submitAgentPrompt(prompt)
   }
 
+  /*
+   * Daat's own plugins are opt-in through `plugins.enabled`, and the seeded
+   * config.yaml comes verbatim from upstream, which has no `plugins:` block.
+   * applyPersona turns them on — but only for someone who went through the
+   * wizard, and Escape dismisses it. Anyone who skipped it had an agent that
+   * could not read or write their vault.
+   *
+   * Retried rather than fired once: on a first run the Python backend is often
+   * still starting, and this is the one thing that must not be lost to that.
+   */
+  useEffect(() => {
+    let cancelled = false
+
+    const attempt = async (remaining: number): Promise<void> => {
+      if (cancelled) {
+        return
+      }
+
+      try {
+        await ensureDaatPlugins()
+      } catch {
+        if (remaining > 0) {
+          setTimeout(() => void attempt(remaining - 1), 5_000)
+        }
+      }
+    }
+
+    void attempt(5)
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
@@ -76,6 +136,10 @@ export function NotesShell() {
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'n') {
         event.preventDefault()
 
+        // Same rule as the sidebar's New page: making a page is opening a
+        // page, and ⌘N from Graph or Todo used to leave the user staring at
+        // the screen they were already on.
+        closeTableView()
         void createNote(newUntitledPath($vaultNotes.get()))
       }
     }
@@ -93,33 +157,30 @@ export function NotesShell() {
       {/* Sidebar: pages + search. Translucent — the Glass material shows. */}
       {sidebarOpen ? (
         <aside className="flex w-60 shrink-0 flex-col border-r border-(--stroke-nous) bg-(--ui-bg-sidebar)">
-        <NotesSidebar />
+          <NotesSidebar />
         </aside>
       ) : null}
 
       {/* Document canvas — the product. */}
       <main className="relative flex min-w-0 flex-1 flex-col bg-(--ui-bg-editor)">
         <DocTopbar agentOpen={agentOpen} onToggleAgent={() => toggleAgentPanel()} />
+        <RecordingStatusBar onAskAgent={askAgent} />
         <div className="min-h-0 flex-1">
-          {canvasView === 'graph' ? (
-            <GraphView />
-          ) : canvasView === 'home' ? (
-            <HomeView />
-          ) : canvasView === 'table' ? (
-            <TableView />
-          ) : canvasView === 'todo' ? (
-            <TodoView />
-          ) : canvasView === 'mail' ? (
-            <MailView onAskAgent={askAgent} />
-          ) : canvasView === 'money' ? (
-            <MoneyView onAskAgent={askAgent} />
-          ) : canvasView === 'calendar' ? (
-            <CalendarView />
-          ) : canvasView === 'meetings' ? (
-            <MeetingsView onAskAgent={askAgent} />
-          ) : (
-            <VaultEditorPane />
-          )}
+          {
+            {
+              graph: <GraphView />,
+              home: <HomeView />,
+              table: <TableView />,
+              todo: <TodoView />,
+              mail: <MailView onAskAgent={askAgent} />,
+              automations: <AutomationsView />,
+              cat: <CatSettings />,
+              capabilities: <SkillsView />,
+              calendar: <CalendarView />,
+              meetings: <MeetingsView onAskAgent={askAgent} />,
+              note: <VaultEditorPane />
+            }[canvasView]
+          }
         </div>
       </main>
 
@@ -136,10 +197,24 @@ export function NotesShell() {
             <div className="flex h-9 shrink-0 items-center gap-2 border-b border-(--stroke-nous) px-3">
               <Codicon className="text-(--dt-primary)" name="sparkle" />
               <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                Agent{active ? ` · ${active.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '')}` : ''}
+                Agent
+                {active
+                  ? ` · ${active.path
+                      .split('/')
+                      .pop()
+                      ?.replace(/\.(md|markdown)$/i, '')}`
+                  : ''}
               </span>
               <AgentSessions />
-              <Button onClick={() => setAgentOpen(false)} size="icon-xs" title="Close (⌘J)" variant="ghost">
+              {/* Pop the conversation out into its own window.
+                  Carries the CURRENT session across rather than opening an
+                  empty one: the panel usually holds a thread about the note in
+                  front of you, and losing it on the way out is the whole
+                  reason people distrust a pop-out button. */}
+              <Button aria-label={s.popOutAgent} onClick={() => void popOutAgent()} size="icon-xs" variant="ghost">
+                <Codicon name="link-external" />
+              </Button>
+              <Button aria-label={s.closeAgent} onClick={() => setAgentOpen(false)} size="icon-xs" variant="ghost">
                 <Codicon name="close" />
               </Button>
             </div>

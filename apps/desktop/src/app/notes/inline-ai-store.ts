@@ -159,6 +159,33 @@ export function undoInlineAi(): void {
  */
 let activeRun: { notePath: string | null; stop: () => void } | null = null
 
+/**
+ * Where the prompt panel can actually sit.
+ *
+ * `left` is measured against the editor's own box, not the window, and there
+ * was a lower clamp but no upper one — so asking about anything in the
+ * right-hand half of a line put the prompt, and the whole action list under
+ * it, past the edge of the pane where it could not be read or clicked. It
+ * anchors to the selection when there is room and slides left when there is
+ * not, which is what every menu on the machine does.
+ *
+ * The widths mirror `w-[26rem] max-w-[85%]` on the panel itself.
+ */
+const PANEL_PX = 416
+const PANEL_MAX_FRACTION = 0.85
+const GUTTER_PX = 8
+
+export function panelLeft(left: number, hostWidth: number): number {
+  if (!Number.isFinite(hostWidth) || hostWidth <= 0) {
+    return Math.max(GUTTER_PX, left)
+  }
+
+  const panel = Math.min(PANEL_PX, hostWidth * PANEL_MAX_FRACTION)
+  const rightmost = Math.max(GUTTER_PX, hostWidth - panel - GUTTER_PX)
+
+  return Math.min(Math.max(GUTTER_PX, left), rightmost)
+}
+
 export function openInlineAiAt(anchor: number, range?: { from: number; to: number }): void {
   const view = $editorView.get()
 
@@ -192,7 +219,7 @@ export function openInlineAiAt(anchor: number, range?: { from: number; to: numbe
   $inlineAi.set({
     status: 'prompt',
     top: (coords?.bottom ?? host.top) - host.top + 4,
-    left: Math.max(8, (coords?.left ?? host.left) - host.left),
+    left: panelLeft((coords?.left ?? host.left) - host.left, host.width),
     anchor,
     range: range ?? null,
     selected,
@@ -333,6 +360,47 @@ export async function runInlineAi(task: string): Promise<void> {
   const note = $activeNote.get()
   const title = `AI · ${note?.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '') ?? 'note'}`
 
+  /*
+   * The run is registered HERE, before the first await — not after
+   * session.create returns.
+   *
+   * session.create is allowed thirty seconds, and for every one of them
+   * `activeRun` used to be null. Both guards below it are written as
+   * `if (activeRun && …)`, so a note opened in that window stopped nothing:
+   * the deltas that followed dispatched into the new note's document at the
+   * old note's offsets, and in rewrite mode the first one deleted that span
+   * and replaced it with the other note's answer. Autosave committed it a
+   * second later. The undo bar could not help either — it is keyed to the
+   * note the run started in, so it declined to act while still reporting
+   * "Undone".
+   *
+   * `stop` only raises the flag until there is a session to stop; the real
+   * one is installed further down, on this same object so identity holds.
+   */
+  const startedIn = view
+  const notePath = note?.path ?? null
+
+  let abandoned = false
+
+  const run: { notePath: string | null; stop: () => void } = {
+    notePath,
+    stop: () => {
+      abandoned = true
+    }
+  }
+
+  activeRun = run
+
+  /** Still the document this run started in, and still wanted. */
+  const stillOurs = () =>
+    !abandoned && $editorView.get() === startedIn && ($activeNote.get()?.path ?? null) === notePath
+
+  const giveUp = () => {
+    if (activeRun === run) {
+      activeRun = null
+    }
+  }
+
   let sessionId: string | null = null
 
   try {
@@ -344,12 +412,26 @@ export async function runInlineAi(task: string): Promise<void> {
 
     sessionId = String(created?.session_id ?? created?.sid ?? created?.id ?? '') || null
   } catch (error) {
+    giveUp()
     $inlineAi.set({ ...state, error: error instanceof Error ? error.message : 'Could not start the agent.' })
 
     return
   }
 
+  // The user moved on while the session was being created. Throw the session
+  // away rather than writing its answer into whatever is open now.
+  if (!stillOurs()) {
+    giveUp()
+
+    if (sessionId) {
+      void cancelRun(sessionId)
+    }
+
+    return
+  }
+
   if (!sessionId) {
+    giveUp()
     $inlineAi.set({ ...state, error: 'The agent did not return a session.' })
 
     return
@@ -364,7 +446,6 @@ export async function runInlineAi(task: string): Promise<void> {
   let streamed = 0
   let finished = false
   let graceTimer: ReturnType<typeof setTimeout> | null = null
-  const notePath = note?.path ?? null
 
   $aiUndo.set(null)
   $inlineAi.set({ ...state, status: 'running', sessionId, error: null })
@@ -381,9 +462,7 @@ export async function runInlineAi(task: string): Promise<void> {
       graceTimer = null
     }
 
-    if (activeRun?.notePath === notePath) {
-      activeRun = null
-    }
+    giveUp()
 
     unsubscribe()
     unsubscribeEdits()
@@ -456,6 +535,10 @@ export async function runInlineAi(task: string): Promise<void> {
 
   /** One insertion point for both paths, so the two can't drift apart. */
   const write = (text: string) => {
+    if (!stillOurs()) {
+      return
+    }
+
     view.dispatch({
       changes: pending ? { from: pending.from, to: pending.to, insert: text } : { from: anchor, insert: text },
       annotations: inlineAiInsert.of(true),
@@ -531,11 +614,8 @@ export async function runInlineAi(task: string): Promise<void> {
     }
   })()
 
-  activeRun = {
-    notePath,
-    stop: () => {
-      void finish(false)
-    }
+  run.stop = () => {
+    void finish(false)
   }
 
   try {

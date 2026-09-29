@@ -1,0 +1,28 @@
+{
+  "reschedule": {
+    "ok": true,
+    "written": "- [ ] Beta 📅 2026-09-20\n- [ ] Alpha 📅 2026-09-14\n"
+  },
+  "failedWriteReportedSuccess": true,
+  "quotedYaml": {
+    "before": "ok",
+    "after": "invalid",
+    "edited": "---\n\"status\": todo\nstatus: done\n---\nbody"
+  },
+  "recordingCollision": {
+    "first": "Meetings/2026-09-14 1042 Daily",
+    "second": "Meetings/2026-09-14 1042 Daily"
+  },
+  "recordingBytes": {
+    "samePath": true,
+    "bytes": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ]
+  },
+  "cancelSecondErasesExistingRecording": true
+}

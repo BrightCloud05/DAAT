@@ -1,0 +1,160 @@
+DAAT audit verification excerpts — 2026-09-14
+Local working tree; temporary app data; fake backend for UI probes.
+
+
+[desktop-tests.log]
+ Test Files  413 passed | 1 skipped (414)
+      Tests  3783 passed | 2 skipped (3785)
+   Duration  55.87s (transform 14.21s, setup 28.88s, import 150.55s, tests 76.04s, environment 188.35s)
+
+[typecheck.log]
+> daat@0.17.0 typecheck
+
+[build.log]
+> tsc --build tsconfig.e2e.json --clean
+> tsc --build tsconfig.json --clean
+> tsc --build tsconfig.electron.json --clean
+✓ built in 1.97s
+
+[python-tests.log]
+  ║ 2 failed, 16 passed in 0.37s
+=== Summary: 5 files, 73 tests passed, 2 failed (100% complete) in 2.3s (2 workers) ===
+  Durations cached to test_durations.json (5 files)
+2 failed, 16 passed in 0.37s
+
+[ui-audit.log]
+--- every screen, looking for raw JS on the page ---
+  ok   Home: renders clean — 846 chars
+  ok   Notes: renders clean — 182 chars
+  ok   Todo: renders clean — 165 chars
+  ok   Calendar: renders clean — 226 chars
+  ok   Money: renders clean — 487 chars
+  ok   Meetings: renders clean — 232 chars
+  ok   Mail: renders clean — 243 chars
+--- notes with awkward frontmatter ---
+  ok   Note "Linear Algebra": renders clean — 139 chars
+  ok   Note "Assignment 2": renders clean — 133 chars
+  ok   Note "Lecture Template": renders clean — 138 chars
+--- money arithmetic ---
+  ok   income is totalled — Agent Money 2026-09 Open the note Drop a bank statement here A photo, a screenshot or a P
+  ok   spend is totalled
+  ok   net is totalled
+--- accessible names on icon-only controls ---
+  ok   every visible button has an accessible name
+--- console ---
+  ok   no console errors across the sweep
+
+RESULT: ALL CHECKS PASSED
+
+
+[ui-editor.log]
+--- boot report ---
+{
+  "url": "file:///Users/joseph/Documents/Project/AI%20OBSIDIAN/biseo-agent/apps/desktop/dist/index.html",
+  "uiMode": null,
+  "hasVaultBridge": true,
+  "vaultInfo": {
+    "root": "/var/folders/4t/_bdgg6d94gd7dl21tk9nz62c0000gn/T/daat-probe-CJRxFg/vault",
+    "name": "vault",
+    "noteCount": 4,
+    "location": "local",
+    "indexing": false
+  },
+  "notes": [
+    "Probe.md",
+    "Templates/Daily.md",
+    "Templates/Meeting Notes.md",
+    "Templates/Project.md"
+  ],
+  "sidebarButtons": [
+    "",
+    "Home",
+    "Notes4",
+    "Probe",
+    "",
+    "",
+    "Templates",
+    "Daily",
+    "",
+    "",
+    "Meeting Notes",
+    "",
+    "",
+    "Project",
+    "",
+    "",
+    "Graph",
+    "Todo",
+    "Mail",
+    "Money"
+  ],
+  "editorCount": 0,
+  "blockers": []
+}
+--- after opening the note ---
+{
+  "editorCount": 1,
+  "contentEditable": "true",
+  "editorRect": {
+    "w": 980,
+    "h": 434,
+    "x": 240,
+    "y": 235
+  },
+  "docText": "# Probefirst line",
+  "elementAtEditorCenter": "DIV.cm-line"
+}
+--- after typing "TYPED" ---
+{
+  "docText": "ProbeTYPEDfirst line",
+  "activeElement": "DIV.cm-content cm-lineWrapping"
+}
+RESULT: TYPING WORKS
+--- file on disk ---
+"# Probe\nTYPED\nfirst line\n"
+RESULT: SAVE WORKS
+RESULT: (note had no frontmatter — nothing to preserve)
+
+
+[ui-onboarding.log]
+--- step 1: persona ---
+  ok   the wizard is shown on first run
+  ok   all six personas render
+  ok   Continue is disabled before a choice
+  ok   Continue enables after choosing
+  ok   the product ships in English by default
+--- step 2: where the notes live ---
+  ok   the vault folder is shown
+  ok   the real path is displayed
+--- step 3: the assistant takes over ---
+  FAIL the one question is asked
+  FAIL it is set large
+  FAIL there is somewhere to answer
+  ok   a single question shows no progress counter — counting to one is not progress
+  ok   the question can still be skipped
+  FAIL files can still be handed over
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+locator.fill: Timeout 30000ms exceeded.
+Call log:
+[2m  - waiting for locator('textarea').last()[22m
+
+    at /private/tmp/daat-audit-20260914.9HdBvq/probe-onboarding.mjs:158:39 {
+  name: 'TimeoutError'
+}
+
+Node.js v24.14.1
+
+
+[ui-scale.log]
+seeded 10000 notes
+boot+index wait: 20131ms
+verified index: {"root":"/var/folders/4t/_bdgg6d94gd7dl21tk9nz62c0000gn/T/daat-perf-tJArS6/vault","name":"vault","noteCount":10003,"location":"local","indexing":false}
+sidebar buttons rendered: 78 | total DOM nodes: 446
+12 scroll steps: 85ms
+search round-trip: 1517ms
+table open: 212ms | rows: 36 | canvas nodes: 582
+graph open+settle: 6160ms | AgentGraph10003 pages · 19997 linksUnresolvedTagsRecentre | canvas 1960x1216
+frames in 1s while simulating: 36

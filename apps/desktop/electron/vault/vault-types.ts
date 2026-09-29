@@ -52,11 +52,22 @@ export interface VaultEntry {
 }
 
 export interface VaultReadResult {
+  vaultRoot?: string
   path: string
   content: string
   /** mtime observed at read time — hand back to write() for conflict detection. */
   mtimeMs: number
   dataless: boolean
+}
+
+export interface VaultRecoveryEntry {
+  id: string
+  vaultRoot: string
+  path: string
+  content: string
+  baseContent: string
+  mtimeMs: number
+  updatedAt: number
 }
 
 export type VaultWriteResult =
@@ -67,6 +78,15 @@ export type VaultWriteResult =
       reason: 'conflict'
       /** Where the caller's content was preserved instead. */
       conflictPath: string
+    }
+  | {
+      /**
+       * The note's contents are still coming down from iCloud, so there was
+       * nothing safe to write against. Nothing was written and nothing was
+       * preserved — the caller still holds the text and should retry.
+       */
+      ok: false
+      reason: 'unreadable'
     }
 
 /** Pushed to the renderer over `hermes:vault:index-event`. */
@@ -87,6 +107,12 @@ export interface VaultGraphNode {
   path: string
   title: string
   degree: number
+  /**
+   * 'note' (default) — a real file, clickable.
+   * 'ghost' — an unresolved link target, Obsidian-style; `path` is synthetic.
+   * 'tag' — a #tag hub connecting the notes that carry it.
+   */
+  kind?: 'note' | 'ghost' | 'tag'
 }
 
 export interface VaultGraphEdge {

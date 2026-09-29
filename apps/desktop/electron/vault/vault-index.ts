@@ -14,17 +14,21 @@
  * vault_backlinks tool; keep schema changes backward-readable.
  */
 
-import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { VaultGraph, VaultGraphEdge, VaultLink, VaultNote, VaultSearchHit } from './vault-types'
+import Database from 'better-sqlite3'
+
 import type { ParsedNote } from './vault-parser'
+import type { VaultGraph, VaultGraphEdge, VaultLink, VaultNote, VaultSearchHit } from './vault-types'
 
 export const SNIPPET_START = ''
 export const SNIPPET_END = ''
 
-const SCHEMA_VERSION = 1
+// v2: internal markdown links join wikilinks in `links` (vault-parser), so
+// existing rows are stale — the bump wipes indexed data to force a reparse.
+// Table shapes are unchanged; the Python read-only consumers keep working.
+const SCHEMA_VERSION = 3
 
 function linkKey(raw: string): string {
   // "Note Name#heading" targets the note; strip the heading fragment.
@@ -37,7 +41,10 @@ function noteKeys(relPath: string, title: string): { pathKey: string; nameKey: s
   const name = path.posix.basename(relPath).replace(/\.(md|markdown)$/i, '')
 
   return {
-    pathKey: relPath.replace(/\.(md|markdown)$/i, '').normalize('NFC').toLowerCase(),
+    pathKey: relPath
+      .replace(/\.(md|markdown)$/i, '')
+      .normalize('NFC')
+      .toLowerCase(),
     nameKey: name.normalize('NFC').toLowerCase(),
     titleKey: title.normalize('NFC').toLowerCase()
   }
@@ -99,21 +106,38 @@ export class VaultIndex {
       );
       CREATE INDEX IF NOT EXISTS idx_frontmatter_path ON frontmatter(path);
 
+      CREATE TABLE IF NOT EXISTS todos (
+        path TEXT NOT NULL,
+        line INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        done INTEGER NOT NULL,
+        PRIMARY KEY(path, line)
+      );
+
       CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
         path UNINDEXED,
         title,
         body,
         tokenize = 'unicode61 remove_diacritics 2'
       );
-
-      PRAGMA user_version = ${SCHEMA_VERSION};
     `)
+
+    if (version > 0) {
+      // Parsing rules changed under an existing index: drop the derived data
+      // so the next scan re-reads every note. The files themselves are the
+      // source of truth; nothing user-owned lives here.
+      this.db.exec(
+        'DELETE FROM links; DELETE FROM tags; DELETE FROM frontmatter; DELETE FROM notes; DELETE FROM notes_fts; DELETE FROM todos;'
+      )
+    }
+
+    this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION};`)
   }
 
   upsertNote(
     relPath: string,
     parsed: ParsedNote,
-    meta: { mtimeMs: number; size: number; hash: string; dataless: boolean }
+    meta: { mtimeMs: number; size: number; hash: string; dataless: boolean; content?: string }
   ): void {
     const keys = noteKeys(relPath, parsed.title)
 
@@ -141,9 +165,20 @@ export class VaultIndex {
       this.db.prepare('DELETE FROM frontmatter WHERE path = ?').run(relPath)
       this.db.prepare('DELETE FROM notes_fts WHERE path = ?').run(relPath)
 
-      const insertLink = this.db.prepare(
-        'INSERT INTO links (source, target_raw, target_key, line) VALUES (?, ?, ?, ?)'
-      )
+      if (!meta.dataless) {
+        this.db.prepare('DELETE FROM todos WHERE path = ?').run(relPath)
+        const insertTodo = this.db.prepare('INSERT INTO todos (path, line, text, done) VALUES (?, ?, ?, ?)')
+
+        for (const [line, text] of (meta.content ?? '').split('\n').entries()) {
+          const task = /^\s*[-*]\s+\[([ xX])\]\s+(.+)$/.exec(text)
+
+          if (task) {
+            insertTodo.run(relPath, line + 1, task[2].trim(), Number(task[1] !== ' '))
+          }
+        }
+      }
+
+      const insertLink = this.db.prepare('INSERT INTO links (source, target_raw, target_key, line) VALUES (?, ?, ?, ?)')
 
       for (const link of parsed.links) {
         insertLink.run(relPath, link.targetRaw, linkKey(link.targetRaw), link.line)
@@ -176,6 +211,7 @@ export class VaultIndex {
       this.db.prepare('DELETE FROM tags WHERE path = ?').run(relPath)
       this.db.prepare('DELETE FROM frontmatter WHERE path = ?').run(relPath)
       this.db.prepare('DELETE FROM notes_fts WHERE path = ?').run(relPath)
+      this.db.prepare('DELETE FROM todos WHERE path = ?').run(relPath)
     })
 
     run()
@@ -187,18 +223,36 @@ export class VaultIndex {
     this.removeNote(fromPath)
   }
 
-  getNote(relPath: string): { hash: string; mtimeMs: number } | null {
-    const row = this.db.prepare('SELECT hash, mtime_ms as mtimeMs FROM notes WHERE path = ?').get(relPath) as
-      | { hash: string; mtimeMs: number }
-      | undefined
+  getNote(relPath: string): { hash: string; mtimeMs: number; dataless: boolean } | null {
+    // `dataless` comes back too: a row indexed while iCloud still had the
+    // contents is a row with an empty body, and the caller has to know not to
+    // trust its mtime as evidence that nothing changed.
+    const row = this.db.prepare('SELECT hash, mtime_ms as mtimeMs, dataless FROM notes WHERE path = ?').get(relPath) as
+      { hash: string; mtimeMs: number; dataless: number } | undefined
 
-    return row ?? null
+    return row ? { ...row, dataless: Boolean(row.dataless) } : null
   }
 
   noteCount(): number {
     const row = this.db.prepare('SELECT COUNT(*) as count FROM notes').get() as { count: number }
 
     return row.count
+  }
+
+  todos(limit?: number): Array<{ path: string; line: number; text: string; done: boolean }> {
+    const bounded = typeof limit === 'number' && Number.isFinite(limit)
+
+    const query = `SELECT t.path, t.line, t.text, t.done FROM todos t JOIN notes n ON n.path=t.path
+      ORDER BY n.mtime_ms DESC, t.path, t.line${bounded ? ' LIMIT ?' : ''}`
+
+    const rows = this.db.prepare(query).all(...(bounded ? [Math.max(0, Math.floor(limit))] : [])) as Array<{
+      path: string
+      line: number
+      text: string
+      done: number
+    }>
+
+    return rows.map(row => ({ ...row, done: Boolean(row.done) }))
   }
 
   listNotes(): VaultNote[] {
@@ -217,9 +271,10 @@ export class VaultIndex {
    * write `[[my note]]` into the user's file for a note called "My Note".
    */
   noteNames(): Array<{ path: string; title: string; name: string }> {
-    const rows = this.db
-      .prepare(`SELECT path, title FROM notes ORDER BY mtime_ms DESC`)
-      .all() as Array<{ path: string; title: string }>
+    const rows = this.db.prepare(`SELECT path, title FROM notes ORDER BY mtime_ms DESC`).all() as Array<{
+      path: string
+      title: string
+    }>
 
     return rows.map(row => ({
       ...row,
@@ -234,9 +289,7 @@ export class VaultIndex {
       return null
     }
 
-    const byPath = this.db.prepare('SELECT path FROM notes WHERE path_key = ?').get(key) as
-      | { path: string }
-      | undefined
+    const byPath = this.db.prepare('SELECT path FROM notes WHERE path_key = ?').get(key) as { path: string } | undefined
 
     if (byPath) {
       return byPath.path
@@ -323,16 +376,28 @@ export class VaultIndex {
       byKey.set(note.path_key, note.path)
     }
 
-    const rows = this.db.prepare('SELECT source, target_key FROM links').all() as Array<{
+    const rows = this.db.prepare('SELECT source, target_raw, target_key FROM links').all() as Array<{
       source: string
+      target_raw: string
       target_key: string
     }>
 
     const seen = new Set<string>()
     const edges: VaultGraphEdge[] = []
+    // Unresolved targets become ghost nodes (Obsidian's "note that doesn't
+    // exist yet"); keyed so five links to [[Same Idea]] make one ghost.
+    const ghosts = new Map<string, string>()
 
     for (const row of rows) {
-      const target = byKey.get(row.target_key)
+      let target = byKey.get(row.target_key)
+
+      if (!target && row.target_key) {
+        target = `ghost:${row.target_key}`
+
+        if (!ghosts.has(target)) {
+          ghosts.set(target, row.target_raw.split('#')[0].trim() || row.target_key)
+        }
+      }
 
       if (!target || target === row.source) {
         continue
@@ -349,6 +414,29 @@ export class VaultIndex {
       edges.push({ source: row.source, target })
     }
 
+    // Tag hubs: notes sharing #tag cluster around it, like Obsidian's
+    // "Tags" graph filter. The renderer decides whether to draw them.
+    const tagRows = this.db.prepare('SELECT path, tag FROM tags').all() as Array<{ path: string; tag: string }>
+    const tagNames = new Set<string>()
+    const notePaths = new Set(notes.map(note => note.path))
+
+    for (const row of tagRows) {
+      if (!notePaths.has(row.path)) {
+        continue
+      }
+
+      const tagNode = `tag:${row.tag}`
+      const key = `${row.path}>${tagNode}`
+
+      if (seen.has(key)) {
+        continue
+      }
+
+      seen.add(key)
+      tagNames.add(row.tag)
+      edges.push({ source: row.path, target: tagNode })
+    }
+
     const degree = new Map<string, number>()
 
     for (const edge of edges) {
@@ -357,11 +445,25 @@ export class VaultIndex {
     }
 
     return {
-      nodes: notes.map(note => ({
-        path: note.path,
-        title: note.title,
-        degree: degree.get(note.path) ?? 0
-      })),
+      nodes: [
+        ...notes.map(note => ({
+          path: note.path,
+          title: note.title,
+          degree: degree.get(note.path) ?? 0
+        })),
+        ...[...ghosts.entries()].map(([ghostPath, label]) => ({
+          path: ghostPath,
+          title: label,
+          degree: degree.get(ghostPath) ?? 0,
+          kind: 'ghost' as const
+        })),
+        ...[...tagNames].map(tag => ({
+          path: `tag:${tag}`,
+          title: `#${tag}`,
+          degree: degree.get(`tag:${tag}`) ?? 0,
+          kind: 'tag' as const
+        }))
+      ],
       edges
     }
   }
@@ -432,7 +534,9 @@ export class VaultIndex {
 
   /** Full wipe — used when (re)indexing a vault from scratch. */
   clear(): void {
-    this.db.exec('DELETE FROM notes; DELETE FROM links; DELETE FROM tags; DELETE FROM frontmatter; DELETE FROM notes_fts;')
+    this.db.exec(
+      'DELETE FROM notes; DELETE FROM links; DELETE FROM tags; DELETE FROM frontmatter; DELETE FROM notes_fts; DELETE FROM todos;'
+    )
   }
 
   close(): void {

@@ -7,11 +7,13 @@
  * `window.hermesDesktop.vault.*` in preload.ts.
  */
 
-import { BrowserWindow, app, dialog, ipcMain } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { VaultService, defaultICloudVaultDir, defaultLocalVaultDir } from './vault-service'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+
+import { initIcsIpc } from './vault-ics'
+import { defaultICloudVaultDir, defaultLocalVaultDir, VaultService } from './vault-service'
 import type { VaultConflictEvent, VaultIndexEvent } from './vault-types'
 
 function broadcast(channel: string, payload: VaultIndexEvent | VaultConflictEvent): void {
@@ -95,6 +97,7 @@ export function initVaultIpc(): VaultService {
 
   ipcMain.handle('hermes:vault:choose', async event => {
     const window = BrowserWindow.fromWebContents(event.sender) ?? undefined
+
     const result = await dialog.showOpenDialog(window as BrowserWindow, {
       title: 'Open vault folder',
       properties: ['openDirectory', 'createDirectory']
@@ -111,6 +114,17 @@ export function initVaultIpc(): VaultService {
     return info
   })
 
+  ipcMain.handle('hermes:vault:selectFolder', async event => {
+    const window = BrowserWindow.fromWebContents(event.sender) ?? undefined
+
+    const result = await dialog.showOpenDialog(window as BrowserWindow, {
+      title: 'Open vault folder',
+      properties: ['openDirectory', 'createDirectory']
+    })
+
+    return result.canceled ? null : (result.filePaths[0] ?? null)
+  })
+
   ipcMain.handle('hermes:vault:open', async (_event, root: string) => {
     const info = await service.open(root)
 
@@ -121,22 +135,39 @@ export function initVaultIpc(): VaultService {
   ipcMain.handle('hermes:vault:reindex', () => service.reindex())
   ipcMain.handle('hermes:vault:list', () => service.list())
   ipcMain.handle('hermes:vault:listDir', (_event, subdir?: string) => service.listDir(subdir))
-  ipcMain.handle('hermes:vault:read', (_event, relPath: string) => service.read(relPath))
+  ipcMain.handle('hermes:vault:read', (_event, relPath: string, root?: string) => service.read(relPath, root))
 
   ipcMain.handle(
     'hermes:vault:write',
-    (_event, relPath: string, content: string, expectedMtimeMs: number | null, expectedContent?: string) =>
-      service.write(relPath, content, expectedMtimeMs ?? null, expectedContent)
+    (
+      _event,
+      relPath: string,
+      content: string,
+      expectedMtimeMs: number | null,
+      expectedContent?: string,
+      root?: string
+    ) => service.write(relPath, content, expectedMtimeMs ?? null, expectedContent, root)
   )
 
-  ipcMain.handle('hermes:vault:createNote', (_event, relPath: string) => service.createNote(relPath))
-  ipcMain.handle('hermes:vault:writeBinary', (_event, relPath: string, data: Uint8Array) =>
-    service.writeBinary(relPath, data)
+  ipcMain.handle('hermes:vault:createNote', (_event, relPath: string, root?: string) =>
+    service.createNote(relPath, root)
+  )
+  ipcMain.handle('hermes:vault:appendBinary', (_event, relPath: string, data: Uint8Array, root?: string) =>
+    service.appendBinary(relPath, data, root)
   )
 
-  ipcMain.handle('hermes:vault:createDir', (_event, relPath: string) => service.createDir(relPath))
-  ipcMain.handle('hermes:vault:rename', (_event, fromRel: string, toRel: string) => service.rename(fromRel, toRel))
-  ipcMain.handle('hermes:vault:trash', (_event, relPath: string) => service.trash(relPath))
+  ipcMain.handle('hermes:vault:writeBinary', (_event, relPath: string, data: Uint8Array, root?: string) =>
+    service.writeBinary(relPath, data, root)
+  )
+
+  ipcMain.handle('hermes:vault:createDir', (_event, relPath: string, root?: string) => service.createDir(relPath, root))
+  ipcMain.handle('hermes:vault:rename', (_event, fromRel: string, toRel: string, root?: string) =>
+    service.rename(fromRel, toRel, root)
+  )
+  ipcMain.handle('hermes:vault:trash', (_event, relPath: string, root?: string) => service.trash(relPath, root))
+  ipcMain.handle('hermes:vault:saveRecovery', (_event, entry) => service.saveRecovery(entry))
+  ipcMain.handle('hermes:vault:listRecovery', (_event, root: string) => service.listRecovery(root))
+  ipcMain.handle('hermes:vault:removeRecovery', (_event, id: string) => service.removeRecovery(id))
   ipcMain.handle('hermes:vault:search', (_event, query: string) => service.search(query))
   ipcMain.handle('hermes:vault:backlinks', (_event, relPath: string) => service.backlinks(relPath))
   ipcMain.handle('hermes:vault:linksFrom', (_event, relPath: string) => service.linksFrom(relPath))
@@ -153,9 +184,12 @@ export function initVaultIpc(): VaultService {
   ipcMain.handle('hermes:vault:propertiesTable', () => service.propertiesTable())
   ipcMain.handle('hermes:vault:linkGraph', () => service.linkGraph())
   ipcMain.handle('hermes:vault:todos', (_event, limit?: number) => service.todos(limit))
-  ipcMain.handle('hermes:vault:toggleTodo', (_event, relPath: string, line: number, text?: string) =>
-    service.toggleTodo(relPath, line, text)
+  ipcMain.handle('hermes:vault:toggleTodo', (_event, relPath: string, line: number, text?: string, root?: string) =>
+    service.toggleTodo(relPath, line, text, root)
   )
+
+  // Calendar subscriptions (ICS feeds → Calendar/Sync notes).
+  initIcsIpc(service)
 
   return service
 }

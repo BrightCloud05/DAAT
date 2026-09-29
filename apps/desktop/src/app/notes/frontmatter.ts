@@ -29,7 +29,21 @@ export interface FrontmatterBlock {
 
 const BLOCK_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/
 /** A top-level key line: no indentation, `name:` at the start. */
-const TOP_KEY_RE = /^([^\s#][^:\r\n]*):/
+const TOP_KEY_RE = /^((?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s#?][^\r\n]*?)):(?=\s|$)/
+
+function topKey(line: string): string | null {
+  const match = TOP_KEY_RE.exec(line)
+
+  if (!match) {return null}
+
+  try {
+    // The parsed key is the identity; quotes and escapes belong to its source
+    // representation. Comparing the two directly used to append duplicate keys.
+    return Object.keys(yaml.load(`${match[1]}: null`) as Record<string, unknown>)[0] ?? null
+  } catch {
+    return null
+  }
+}
 
 export function readFrontmatter(content: string): FrontmatterBlock | null {
   const match = BLOCK_RE.exec(content)
@@ -72,19 +86,20 @@ function keyLineRange(body: string, key: string): { start: number; end: number }
   let end = lines.length
 
   for (let index = 0; index < lines.length; index++) {
-    const match = TOP_KEY_RE.exec(lines[index])
+    const candidate = topKey(lines[index])
 
-    if (!match) {
+    if (candidate === null) {
       continue
     }
 
     if (start !== -1) {
       // The next top-level key ends the previous one's block.
       end = index
+
       break
     }
 
-    if (match[1].trim() === key) {
+    if (candidate === key) {
       start = index
     }
   }
@@ -129,8 +144,17 @@ export function propertyEdit(
   const lines = body.split('\n')
   const existing = keyLineRange(body, key)
 
+  // Flow mappings and explicit/multiline keys are valid YAML, but cannot be
+  // spliced by this line editor. Keep them intact instead of appending a second
+  // representation of the same property or mixing YAML collection styles.
+  if (Object.keys(block.props).some(name => !keyLineRange(body, name))) {return null}
+
   if (existing) {
-    lines.splice(existing.start, existing.end - existing.start, ...(value === undefined ? [] : [renderPair(key, value)]))
+    lines.splice(
+      existing.start,
+      existing.end - existing.start,
+      ...(value === undefined ? [] : [renderPair(key, value)])
+    )
   } else if (value !== undefined) {
     lines.push(renderPair(key, value))
   } else {
@@ -151,10 +175,13 @@ export function propertyEdit(
 export function coerceScalar(text: string): unknown {
   const trimmed = text.trim()
 
-  if (!trimmed) return ''
-  if (trimmed === 'true') return true
-  if (trimmed === 'false') return false
-  if (/^-?\d+(\.\d+)?$/.test(trimmed)) return Number(trimmed)
+  if (!trimmed) {return ''}
+
+  if (trimmed === 'true') {return true}
+
+  if (trimmed === 'false') {return false}
+
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {return Number(trimmed)}
 
   return trimmed
 }

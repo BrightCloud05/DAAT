@@ -12,5 +12,3 @@ provides_tools:
   - vault_list
   - vault_search
   - vault_backlinks
-  - money_add_transactions
-  - money_summary

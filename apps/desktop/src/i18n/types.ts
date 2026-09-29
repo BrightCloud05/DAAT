@@ -1814,6 +1814,8 @@ export interface Translations {
     setupChoiceDesc: string
     connectExistingTitle: string
     connectExistingShort: string
+    connectExistingLink: string
+    installLocalStarting: string
     connectExistingDesc: string
     installLocalTitle: string
     installLocalDesc: string

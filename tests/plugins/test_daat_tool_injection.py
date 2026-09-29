@@ -120,13 +120,13 @@ def test_mail_positionals_are_terminated(himalaya_argv):
     argv = himalaya_argv[-1]
 
     assert "--" in argv
-    assert argv.index("--") < argv.index("--config"), "attacker flag reached himalaya's parser"
+    assert argv[argv.index("--") + 1:] == ["--config /tmp/evil.toml"], "query crossed the option boundary"
 
 
 def test_mail_search_keeps_quoted_phrases_together(himalaya_argv):
     mail_tools.mail_search('subject "invoice 42"')
 
-    assert himalaya_argv[-1][-2:] == ["subject", "invoice 42"]
+    assert himalaya_argv[-1][himalaya_argv[-1].index("--") + 1:] == ['subject "invoice 42"']
 
 
 @pytest.mark.parametrize("bad_id", ["--config /tmp/evil.toml", "12; rm -rf ~", "-c", ""])

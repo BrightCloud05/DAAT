@@ -1,0 +1,76 @@
+name: Follow stable Hermes releases
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: daat-hermes-sync
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'BrightCloud05/DAAT' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      changed: ${{ steps.prepare.outputs.changed }}
+      branch: ${{ steps.prepare.outputs.branch }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/prepare_daat_upstream.py
+      - if: steps.prepare.outputs.changed == 'true'
+        uses: ./.github/actions/verify-daat-runtime
+      - if: steps.prepare.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verified-merge
+          path: /tmp/daat-sync.bundle
+          retention-days: 7
+  propose:
+    needs: verify
+    if: needs.verify.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-merge
+          path: /tmp/verified-merge
+      - name: Propose the verified integration for independent review
+        env:
+          GH_TOKEN: ${{ secrets.DAAT_SYNC_TOKEN }}
+          SYNC_BRANCH: ${{ needs.verify.outputs.branch }}
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo 'Configure DAAT_SYNC_TOKEN for this repository with Contents, Pull requests and Workflows write permissions.'
+            exit 1
+          fi
+          [[ "$SYNC_BRANCH" =~ ^codex/hermes-[a-f0-9]{40}$ ]]
+          gh auth setup-git
+          if git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null; then
+            echo 'An integration branch already exists; preserve its review and edits.'
+            exit 0
+          fi
+          git bundle verify /tmp/verified-merge/daat-sync.bundle
+          git fetch /tmp/verified-merge/daat-sync.bundle HEAD
+          git push origin "FETCH_HEAD:refs/heads/$SYNC_BRANCH"
+          cat > /tmp/daat-sync-body.md <<'BODY'
+          Integrates the latest stable Hermes release while retaining DAAT features.
+
+          Validation: desktop type checks, transactional updater tests, DAAT notes/memory/automation tests, and the staged runtime persistence probe passed before this branch was published.
+
+          Independent review is required before merging. A conflict or failed validation stops the sync; no default-branch overwrite or automatic merge is performed. The runtime release workflow revalidates the merged revision before its protected release gate.
+          BODY
+          gh pr create --base "$GITHUB_REF_NAME" --head "$SYNC_BRANCH" --title 'Integrate stable Hermes update into DAAT' --body-file /tmp/daat-sync-body.md

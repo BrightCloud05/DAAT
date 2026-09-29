@@ -38,6 +38,8 @@ import fsp from 'node:fs/promises'
 import https from 'node:https'
 import path from 'node:path'
 
+import { refreshBundledRuntime } from './agent-runtime-update'
+import { bundleFingerprint, writeStamp } from './agent-source'
 import { hiddenWindowsChildOptions } from './windows-child-options'
 
 const IS_WINDOWS = process.platform === 'win32'
@@ -264,6 +266,18 @@ function seedAgentSource(activeRoot, appRoot, emit) {
   try {
     fs.mkdirSync(path.dirname(activeRoot), { recursive: true })
     fs.cpSync(source, activeRoot, { recursive: true })
+
+    // Record what was laid down and which build it came from. Without this a
+    // later app has no way to tell an install it may safely replace from one
+    // someone made themselves — so it replaced neither, and every update
+    // shipped a new interface onto an old agent. See electron/agent-source.ts.
+    try {
+      writeStamp(activeRoot, bundleFingerprint(source))
+    } catch (stampErr) {
+      // A missing stamp costs future updates, not this install.
+      emit?.(`[bootstrap] could not stamp the seeded source (${stampErr.message})`)
+    }
+
     emit?.(`[bootstrap] using the source that ships with the app (no clone needed)`)
 
     return true
@@ -981,7 +995,36 @@ async function runBootstrap(opts) {
 
   try {
     // Seed before deciding, so a fresh machine takes the no-clone path.
-    seedAgentSource(seedRoot || activeRoot, appRoot, emit)
+    const seeded = seedAgentSource(seedRoot || activeRoot, appRoot, emit)
+
+    // An install that already exists is not seeded — but it may still be older
+    // than the app that is now running. main.ts refreshes on the fast path
+    // (a healthy runtime launched directly); this covers the other one, where
+    // the runtime needs repair and would otherwise be repaired at the old
+    // version. See electron/agent-source.ts.
+    if (!seeded) {
+      try {
+        const bundle = bundledAgentSource(appRoot)
+
+        if (bundle) {
+          const outcome = await refreshBundledRuntime(seedRoot || activeRoot, bundle, hermesHome, line => emit({ type: 'log', line }))
+
+          if (outcome.action === 'updated') {
+            emit?.(
+              `[bootstrap] updated the agent source from ${outcome.from} to ${outcome.to}` +
+                (outcome.depsChanged ? ' (dependencies changed)' : '')
+            )
+          } else if (outcome.action === 'declined') {
+            emit?.(`[bootstrap] left the existing source alone (${outcome.why}): ${outcome.detail}`)
+          } else if (outcome.action === 'unavailable' && outcome.why === 'another agent update is in progress') {
+            throw new Error('Another Daat window is updating the agent. Retry after it finishes.')
+          }
+        }
+      } catch (refreshErr) {
+        emit?.(`[bootstrap] source refresh could not safely finish: ${refreshErr.message}`)
+        throw refreshErr
+      }
+    }
 
     const existingCheckout = hasExistingGitCheckout(activeRoot)
     const pinCommit = !existingCheckout

@@ -32,9 +32,9 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime } from './active-runtime-state'
-import { initMailIpc } from './mail/mail-ipc'
-import { initVaultIpc } from './vault/vault-ipc'
-import type { VaultService } from './vault/vault-service'
+import { refreshBundledRuntime } from './agent-runtime-update'
+import { refreshReleasedRuntime } from './agent-release'
+import { recoverAgentSource } from './agent-source'
 import { stopBackendChild as stopBackendChildImpl } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -126,7 +126,9 @@ import {
   TEXT_PREVIEW_SOURCE_MAX_BYTES
 } from './hardening'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
+import { initMailIpc } from './mail/mail-ipc'
 import { ensureMainWindow } from './main-window-lifecycle'
+import { ensureMenubarCat, getMenubarCatStatus, quitMenubarCatWithApp, readMenubarCatSettings, setMenubarCatSettings, startMenubarCat, stopMenubarCat, updateMenubarCatContext } from './menubar-cat'
 import {
   oauthGuardMayHardFail,
   oauthSessionIsLive,
@@ -148,6 +150,7 @@ import { FirstRunSetupResetError, runPrimaryBackendStartup } from './primary-bac
 import { rehomePrimaryConnection } from './primary-connection-rehome'
 import { decideProfileDeleteAction, profileNameFromDeleteRequest, resolveRouteProfile } from './profile-delete-routing'
 import { fetchPrimaryProfileSessions } from './profile-session-routing'
+import { buildPythonBackendEnv } from './python-backend-env'
 import { createQuickEntryShortcut, quickEntryWindowBounds, sanitizeQuickEntrySettings } from './quick-entry'
 import { type ActiveWork, mergeActiveWork, normalizeActiveWork, quitPromptFor } from './quit-guard'
 import * as remoteLifecycle from './remote-lifecycle'
@@ -190,7 +193,10 @@ import {
 } from './update-relaunch'
 import { isOfficialSshRemote, OFFICIAL_REPO_HTTPS_URL } from './update-remote'
 import { spawnUpdaterProcess } from './updater-process'
+import { initVaultIpc } from './vault/vault-ipc'
+import type { VaultService } from './vault/vault-service'
 import { fetchMarketplaceThemes, searchMarketplaceThemes } from './vscode-marketplace'
+import { WindowCloseGuard } from './window-close-guard'
 import {
   computeWindowOptions,
   debounce,
@@ -3147,6 +3153,49 @@ function shellQuote(value) {
 // (`hermes desktop --build-only`), then atomically swap the running .app bundle
 // with the freshly built one and relaunch. Degrades to "backend updated,
 // restart to load the new GUI" if the swap can't be performed.
+/**
+ * Update ~/.daat/hermes-agent from the source inside this app, when it is safe.
+ *
+ * A declined or rolled-back update keeps the old runtime usable. An incomplete
+ * recovery must stop startup so we never launch a half-swapped runtime.
+ */
+async function refreshInstalledAgentSource(): Promise<void> {
+  try {
+    const bundle = [
+      path.join(process.resourcesPath || '', 'app.asar.unpacked', 'dist', 'agent-src'),
+      path.join(process.resourcesPath || '', 'app', 'dist', 'agent-src'),
+      path.join(app.getAppPath(), 'dist', 'agent-src')
+    ].find(candidate => fs.existsSync(path.join(candidate, 'pyproject.toml')))
+
+    if (!bundle) {
+      return
+    }
+
+    const refresh = (installed: string, source: string) => refreshBundledRuntime(installed, source, HERMES_HOME, rememberLog)
+    const outcome = IS_PACKAGED
+      ? await refreshReleasedRuntime({ installed: ACTIVE_HERMES_ROOT, bundle, hermesHome: HERMES_HOME,
+          desktopVersion: app.getVersion(), log: rememberLog, refresh })
+      : await refresh(ACTIVE_HERMES_ROOT, bundle)
+
+    if (outcome.action === 'updated') {
+      rememberLog(
+        `[agent-source] updated ${outcome.files} file(s) (${outcome.removed} removed) ` +
+          `from ${outcome.from} to ${outcome.to}` +
+          (outcome.depsChanged ? ' — dependencies updated and validated' : '')
+      )
+    } else if (outcome.action === 'declined') {
+      rememberLog(`[agent-source] left alone (${outcome.why}): ${outcome.detail}`)
+    } else if (outcome.action === 'failed') {
+      rememberLog(`[agent-source] update failed; previous runtime restored: ${outcome.why}`)
+    } else if (outcome.action === 'unavailable' && outcome.why === 'another agent update is in progress') {
+      throw new Error('Another Daat window is updating the agent. Retry startup after the update finishes.')
+    }
+  } catch (err) {
+    rememberLog(`[agent-source] startup paused: ${(err as Error).message}`)
+    throw err
+  }
+}
+
 async function applyUpdatesPosixInApp(opts: any) {
   const updateRoot = resolveUpdateRoot()
   const hermes = resolveHermesCliBinary(updateRoot)
@@ -3682,19 +3731,15 @@ function createPythonBackend(root, label, backendArgs, options: any = {}) {
     return null
   }
 
-  const venvRoot = path.join(root, 'venv')
-  const venvPython = getVenvPython(venvRoot)
-  const command = IS_WINDOWS && fileExists(venvPython) ? venvPython : python
+  const command = python
 
   return {
     kind: 'python',
     label,
     command,
     args: ['-m', 'hermes_cli.main', ...backendArgs],
-    env: buildDesktopBackendEnv({
+    env: buildPythonBackendEnv(root, command, {
       hermesHome: HERMES_HOME,
-      pythonPathEntries: [root, ...getVenvSitePackagesEntries(venvRoot)],
-      venvRoot,
       ...vaultBackendEnv()
     }),
     root,
@@ -3716,10 +3761,8 @@ function createActiveBackend(backendArgs) {
     label: `Daat at ${ACTIVE_HERMES_ROOT}`,
     command,
     args: ['-m', 'hermes_cli.main', ...backendArgs],
-    env: buildDesktopBackendEnv({
+    env: buildPythonBackendEnv(ACTIVE_HERMES_ROOT, command, {
       hermesHome: HERMES_HOME,
-      pythonPathEntries: [ACTIVE_HERMES_ROOT, ...getVenvSitePackagesEntries(VENV_ROOT)],
-      venvRoot: VENV_ROOT,
       ...vaultBackendEnv()
     }),
     root: ACTIVE_HERMES_ROOT,
@@ -3761,9 +3804,17 @@ function resolveHermesBackend(backendArgs) {
   //    builds could leave a healthy install behind without the marker. If the
   //    active runtime is usable, launch it directly; only fall through to
   //    bootstrap when the runtime itself is unusable.
+  recoverAgentSource(ACTIVE_HERMES_ROOT)
   const activeRuntime = activeRuntimeState()
 
   if (activeRuntime.shouldUseActiveRuntime && !bootstrapRepairRequested) {
+    // The app and the agent live in two places, and only one of them is
+    // replaced by dragging a new build over the old. Before launching an
+    // existing agent, bring its source up to the one inside this app —
+    // refuses on a git checkout, an install of unknown origin, or one the
+    // user has edited. See electron/agent-source.ts.
+    // Source updates run in ensureRuntime, where dependency checks can be awaited.
+
     if (!activeRuntime.hasValidMarker) {
       rememberLog(
         `[bootstrap] Active Daat runtime at ${ACTIVE_HERMES_ROOT} is usable but the bootstrap marker is missing or stale; skipping first-run bootstrap.`
@@ -4047,6 +4098,7 @@ async function ensureRuntime(backend) {
     )
   }
 
+  await refreshInstalledAgentSource()
   const venvPython = getVenvPython(VENV_ROOT)
 
   if (!fileExists(venvPython)) {
@@ -4063,6 +4115,10 @@ async function ensureRuntime(backend) {
   }
 
   backend.command = getVenvPython(VENV_ROOT)
+  backend.env = buildPythonBackendEnv(ACTIVE_HERMES_ROOT, backend.command, {
+    hermesHome: HERMES_HOME,
+    ...vaultBackendEnv()
+  })
   backend.label = `Daat at ${ACTIVE_HERMES_ROOT} (venv: ${VENV_ROOT})`
   updateBootProgress({
     phase: 'runtime.ready',
@@ -5207,8 +5263,8 @@ function buildApplicationMenu() {
   template.push({
     label: 'View',
     submenu: [
-      { role: 'reload' },
-      { role: 'forceReload' },
+      { label: 'Reload', accelerator: 'CommandOrControl+R', click: () => void reloadEditorWindow(BrowserWindow.getFocusedWindow() || mainWindow).catch(reportCloseFailure) },
+      { label: 'Force Reload', accelerator: 'CommandOrControl+Shift+R', click: () => void reloadEditorWindow(BrowserWindow.getFocusedWindow() || mainWindow, true).catch(reportCloseFailure) },
       { role: 'toggleDevTools' },
       { type: 'separator' },
       {
@@ -6732,6 +6788,7 @@ function writeDesktopConnectionConfig(config) {
   writeFileAtomic(DESKTOP_CONNECTION_CONFIG_PATH, JSON.stringify(config, null, 2))
   connectionConfigCache = config
   connectionConfigCacheMtime = fs.statSync(DESKTOP_CONNECTION_CONFIG_PATH).mtimeMs
+  updateMenubarCatContext(catRuntimeContext())
 }
 
 // Returns the desktop's chosen profile name, or null when unset. "default" is
@@ -6762,6 +6819,7 @@ function writeActiveDesktopProfile(name) {
 
   fs.mkdirSync(path.dirname(DESKTOP_PROFILE_CONFIG_PATH), { recursive: true })
   writeFileAtomic(DESKTOP_PROFILE_CONFIG_PATH, JSON.stringify({ profile: value || null }, null, 2))
+  updateMenubarCatContext(catRuntimeContext())
 
   return value || null
 }
@@ -9685,6 +9743,10 @@ ipcMain.handle('hermes:connection-config:apply', async (_event, payload) => {
 
 ipcMain.handle('hermes:profile:get', async () => ({ profile: readActiveDesktopProfile() }))
 ipcMain.handle('hermes:profile:set', async (_event, name) => {
+  if (mainWindow && guardedEditors.has(mainWindow.webContents.id)) {
+    await editorCloseGuard.request(mainWindow.webContents.id)
+  }
+
   const next = writeActiveDesktopProfile(name)
 
   // Switching profiles is a backend re-home: relaunch the dashboard under the
@@ -10290,6 +10352,84 @@ ipcMain.on('hermes:keep-awake', (_event, on) => {
 // accelerator — so both handlers return the state that ACTUALLY resulted,
 // including `registered: false` + `error: 'taken'` when another app owns the
 // chord. See electron/quick-entry.ts + store/quick-entry.
+function catRuntimeContext() {
+  let profile = readActiveDesktopProfile()
+
+  if (!profile) {
+    try { profile = fs.readFileSync(path.join(HERMES_HOME, 'active_profile'), 'utf8').trim() } catch { /* default */ }
+  }
+
+  if (!profile || (profile !== 'default' && !PROFILE_NAME_RE.test(profile))) {profile = 'default'}
+
+  return {
+    runtimeHome: profile === 'default' ? HERMES_HOME : path.join(HERMES_HOME, 'profiles', profile),
+    profile, mode: primaryBackendIsRemote() ? 'remote' as const : 'local' as const,
+    applicationPath: IS_PACKAGED && IS_MAC ? path.resolve(process.execPath, '../../..') : ''
+  }
+}
+
+const guardedEditors = new Set<number>()
+const closeAllowed = new Set<number>()
+let savedBeforeQuit = false
+let savingBeforeQuit = false
+
+const editorCloseGuard = new WindowCloseGuard((id, requestId) => {
+  const win = BrowserWindow.getAllWindows().find(candidate => candidate.webContents.id === id)
+
+  if (!win) {throw new Error('The editor is no longer available.')}
+  win.webContents.send('hermes:window:prepare-close', requestId)
+})
+
+function reportCloseFailure(error: Error): void {
+  rememberLog(`[vault] close cancelled: ${error.message}`)
+  void dialog.showMessageBox({ type: 'error', message: 'Your edits could not be saved.', detail: error.message, buttons: ['Keep Open'] })
+}
+
+async function reloadEditorWindow(win: BrowserWindow | null, ignoreCache = false): Promise<void> {
+  if (!win || win.isDestroyed()) {return}
+
+  if (guardedEditors.has(win.webContents.id)) {await editorCloseGuard.request(win.webContents.id)}
+
+  if (ignoreCache) {win.webContents.reloadIgnoringCache()}
+  else {win.reload()}
+}
+
+ipcMain.on('hermes:window:close-guard', (event, enabled) => {
+  const id = event.sender.id
+
+  if (!enabled) { guardedEditors.delete(id);
+
+ return }
+
+  if (guardedEditors.has(id)) {return}
+  guardedEditors.add(id)
+  const win = BrowserWindow.fromWebContents(event.sender)
+
+  if (!win || (win as any).__daatCloseGuardInstalled) {return
+  ;}
+
+(win as any).__daatCloseGuardInstalled = true
+  win.on('close', closeEvent => {
+    if (!guardedEditors.has(id) || savedBeforeQuit || closeAllowed.delete(id)) {return}
+    closeEvent.preventDefault()
+    void editorCloseGuard.request(id).then(() => { closeAllowed.add(id); win.close() }).catch(reportCloseFailure)
+  })
+  win.on('closed', () => { guardedEditors.delete(id); closeAllowed.delete(id); editorCloseGuard.forget(id) })
+})
+ipcMain.on('hermes:window:prepared-close', (event, result) => {
+  if (result && typeof result.requestId === 'string') {editorCloseGuard.respond(event.sender.id, result.requestId, result.ok === true, typeof result.error === 'string' ? result.error : undefined)}
+})
+
+ipcMain.handle('hermes:cat:settings:get', () => {
+  updateMenubarCatContext(catRuntimeContext())
+
+  return readMenubarCatSettings()
+})
+ipcMain.handle('hermes:cat:settings:set', (_event, patch) => setMenubarCatSettings(patch))
+ipcMain.handle('hermes:cat:status', () => getMenubarCatStatus())
+ipcMain.handle('hermes:cat:start', () => startMenubarCat())
+ipcMain.handle('hermes:cat:stop', () => stopMenubarCat())
+
 ipcMain.handle('hermes:quick-entry:settings:get', async () => {
   const settings = readQuickEntrySettings()
   const state = quickEntryShortcut.current()
@@ -11455,6 +11595,7 @@ app.whenReady().then(() => {
   // it without the renderer visiting Settings. A failed registration is logged
   // here and surfaced in Settings via the IPC state (never silent).
   applyQuickEntrySettings(readQuickEntrySettings())
+  ensureMenubarCat(catRuntimeContext())
   createWindow()
 
   // Win/Linux cold start: the launching hermes:// URL is in our own argv.
@@ -11544,10 +11685,32 @@ function heldQuitForActiveWork(event: Electron.Event): boolean {
   return true
 }
 
+let catQuitFinished = false
 app.on('before-quit', event => {
   // Runs ahead of every teardown below, so "Keep Running" leaves the app
   // exactly as it was.
   if (heldQuitForActiveWork(event)) {
+    return
+  }
+
+  if (!savedBeforeQuit && guardedEditors.size) {
+    event.preventDefault()
+
+    if (!savingBeforeQuit) {
+      savingBeforeQuit = true
+      void Promise.all([...guardedEditors].map(id => editorCloseGuard.request(id))).then(() => {
+        savedBeforeQuit = true
+        app.quit()
+      }).catch(reportCloseFailure).finally(() => { savingBeforeQuit = false })
+    }
+
+    return
+  }
+
+  if (!catQuitFinished && readMenubarCatSettings().quitWithApp) {
+    event.preventDefault()
+    void quitMenubarCatWithApp().catch(error => rememberLog(`[cat] ${error.message}`)).finally(() => { catQuitFinished = true; app.quit() })
+
     return
   }
 

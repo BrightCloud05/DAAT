@@ -7,8 +7,9 @@
 
 import type { EditorView } from '@codemirror/view'
 
-import { createNote, refreshVaultNotes } from '../vault/store'
 import { $editorView } from '../vault/editor-bridge'
+import { $activeNote, $vaultInfo, createNote, refreshVaultNotes } from '../vault/store'
+
 import { closeTableView } from './view-store'
 
 const vault = () => window.hermesDesktop.vault
@@ -38,11 +39,11 @@ export function todayStamp(date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-export function fillTemplate(content: string, title: string): string {
+export function fillTemplate(content: string, title: string, date = todayStamp()): string {
   const now = new Date()
 
   return content
-    .replaceAll('{{date}}', todayStamp(now))
+    .replaceAll('{{date}}', date)
     .replaceAll('{{time}}', `${pad(now.getHours())}:${pad(now.getMinutes())}`)
     .replaceAll('{{title}}', title)
 }
@@ -59,7 +60,7 @@ export function isTemplateNote(relPath: string | null | undefined): boolean {
  * template would otherwise read a null view on the same tick and silently do
  * nothing — the "Start today's plan" button that created a blank note.
  */
-async function waitForEditor(timeoutMs = 2000): Promise<EditorView | null> {
+export async function waitForEditor(timeoutMs = 2000): Promise<EditorView | null> {
   const existing = $editorView.get()
 
   if (existing) {
@@ -83,16 +84,36 @@ async function waitForEditor(timeoutMs = 2000): Promise<EditorView | null> {
   })
 }
 
-/** Replace the whole current document with a filled template (undoable). */
-export async function applyTemplateToActive(templatePath: string, title: string): Promise<void> {
+/**
+ * Replace the whole current document with a filled template (undoable).
+ *
+ * `expectedPath` is the note the caller meant. It matters because this is a
+ * full-document replace sitting behind two awaits — waitForEditor alone allows
+ * two seconds — and a click on another note in that window used to land the
+ * template on whatever was open by then, wiping it. Callers with their own
+ * awaits before this one should pass the path explicitly; the default covers
+ * the rest.
+ */
+export async function applyTemplateToActive(
+  templatePath: string,
+  title: string,
+  expectedPath = $activeNote.get()?.path,
+  date = todayStamp()
+): Promise<void> {
+  const root = $vaultInfo.get()?.root ?? undefined
   const view = await waitForEditor()
 
   if (!view) {
     return
   }
 
-  const template = await vault().read(templatePath)
-  const filled = fillTemplate(template.content, title)
+  const template = await vault().read(templatePath, root)
+
+  if ($activeNote.get()?.path !== expectedPath || $vaultInfo.get()?.root !== root || $editorView.get() !== view) {
+    return
+  }
+
+  const filled = fillTemplate(template.content, title, date)
 
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: filled } })
   view.focus()
@@ -124,7 +145,7 @@ export async function openDailyNote(): Promise<void> {
   const daily = templates.find(template => template.name.toLowerCase() === 'daily')
 
   if (daily) {
-    await applyTemplateToActive(daily.path, stamp)
+    await applyTemplateToActive(daily.path, stamp, relPath)
   }
 
   await refreshVaultNotes()

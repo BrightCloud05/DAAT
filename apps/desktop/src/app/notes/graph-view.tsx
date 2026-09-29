@@ -28,6 +28,8 @@ interface GraphNode extends SimulationNodeDatum {
   path: string
   title: string
   degree: number
+  /** 'ghost' = unresolved link target, 'tag' = #tag hub; absent for notes. */
+  kind?: 'note' | 'ghost' | 'tag'
 }
 
 type GraphEdge = SimulationLinkDatum<GraphNode>
@@ -54,9 +56,12 @@ export function GraphView() {
   const revision = useStore($vaultRevision)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const hostRef = useRef<HTMLDivElement | null>(null)
-  const [graph, setGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null)
+  const [fullGraph, setFullGraph] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null)
   const [hover, setHover] = useState<GraphNode | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Obsidian's defaults: unresolved links visible, tag hubs opt-in.
+  const [showGhosts, setShowGhosts] = useState(true)
+  const [showTags, setShowTags] = useState(false)
 
   // Live view state the render loop reads. Kept in refs, not state: the
   // simulation redraws every frame and re-rendering React at 60fps to move a
@@ -75,7 +80,7 @@ export function GraphView() {
           return
         }
 
-        setGraph({
+        setFullGraph({
           nodes: data.nodes.map(node => ({ ...node })),
           edges: data.edges.map(edge => ({ source: edge.source, target: edge.target }))
         })
@@ -92,8 +97,32 @@ export function GraphView() {
     }
   }, [revision])
 
+  // The filters carve the fetched graph down before it reaches d3; edges
+  // touching a hidden node go with it, so the simulation never sees them.
+  const graph = useMemo(() => {
+    if (!fullGraph) {
+      return null
+    }
+
+    const visible = (node: GraphNode) =>
+      node.kind === 'ghost' ? showGhosts : node.kind === 'tag' ? showTags : true
+
+    const nodes = fullGraph.nodes.filter(visible)
+    const paths = new Set(nodes.map(node => node.path))
+    const edges = fullGraph.edges.filter(
+      edge => paths.has(edge.source as string) && paths.has(edge.target as string)
+    )
+
+    // Fresh copies: d3 mutates node objects in place, and reusing the ones a
+    // previous simulation ran on would leak stale positions across filters.
+    return { nodes: nodes.map(node => ({ ...node })), edges: edges.map(edge => ({ ...edge })) }
+  }, [fullGraph, showGhosts, showTags])
+
   const counts = useMemo(
-    () => ({ notes: graph?.nodes.length ?? 0, links: graph?.edges.length ?? 0 }),
+    () => ({
+      notes: graph?.nodes.filter(node => !node.kind || node.kind === 'note').length ?? 0,
+      links: graph?.edges.length ?? 0
+    }),
     [graph]
   )
 
@@ -188,14 +217,30 @@ export function GraphView() {
       context.stroke()
 
       const active = hoverRef.current
-
-      context.fillStyle = ink
+      const accent = readVar('--dt-primary', '#4b6ef5')
 
       for (const node of nodes) {
-        context.globalAlpha = active && active !== node ? 0.3 : 0.82
+        const dimmed = active && active !== node
+        const radius = radiusOf(node.degree)
+
         context.beginPath()
-        context.arc(node.x ?? 0, node.y ?? 0, radiusOf(node.degree), 0, Math.PI * 2)
-        context.fill()
+        context.arc(node.x ?? 0, node.y ?? 0, radius, 0, Math.PI * 2)
+
+        if (node.kind === 'ghost') {
+          // A note that doesn't exist yet: hollow, quieter than real ink.
+          context.globalAlpha = dimmed ? 0.18 : 0.45
+          context.strokeStyle = ink
+          context.lineWidth = 1.1 / zoom
+          context.stroke()
+        } else if (node.kind === 'tag') {
+          context.globalAlpha = dimmed ? 0.25 : 0.7
+          context.fillStyle = accent
+          context.fill()
+        } else {
+          context.globalAlpha = dimmed ? 0.3 : 0.82
+          context.fillStyle = ink
+          context.fill()
+        }
       }
 
       context.globalAlpha = 1
@@ -278,14 +323,36 @@ export function GraphView() {
       <div className="flex shrink-0 items-baseline gap-3 px-10 pt-10 pb-4">
         <h1 className="font-(--dt-font-serif) text-[28px] font-medium tracking-[-0.01em]">{s.graph}</h1>
         <span className="text-[12.5px] opacity-45">{s.graphCount(counts.notes, counts.links)}</span>
-        <button
-          className="ml-auto rounded-xs border border-(--stroke-nous) px-2.5 py-1 text-[12.5px] transition-colors hover:bg-(--ui-control-hover-background)"
-          onClick={() => {
-            view.current = { zoom: 1, panX: 0, panY: 0 }
-          }}
-        >
-          {s.graphRecenter}
-        </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            className={
+              showGhosts
+                ? 'rounded-xs border border-(--stroke-nous) bg-(--ui-control-active-background) px-2.5 py-1 text-[12.5px]'
+                : 'rounded-xs border border-(--stroke-nous) px-2.5 py-1 text-[12.5px] opacity-55 transition-colors hover:bg-(--ui-control-hover-background)'
+            }
+            onClick={() => setShowGhosts(value => !value)}
+          >
+            {s.graphGhosts}
+          </button>
+          <button
+            className={
+              showTags
+                ? 'rounded-xs border border-(--stroke-nous) bg-(--ui-control-active-background) px-2.5 py-1 text-[12.5px]'
+                : 'rounded-xs border border-(--stroke-nous) px-2.5 py-1 text-[12.5px] opacity-55 transition-colors hover:bg-(--ui-control-hover-background)'
+            }
+            onClick={() => setShowTags(value => !value)}
+          >
+            {s.graphTags}
+          </button>
+          <button
+            className="rounded-xs border border-(--stroke-nous) px-2.5 py-1 text-[12.5px] transition-colors hover:bg-(--ui-control-hover-background)"
+            onClick={() => {
+              view.current = { zoom: 1, panX: 0, panY: 0 }
+            }}
+          >
+            {s.graphRecenter}
+          </button>
+        </div>
       </div>
 
       <div className="relative min-h-0 flex-1" ref={hostRef}>
@@ -329,7 +396,8 @@ export function GraphView() {
 
             const node = atPointer(event)
 
-            if (node) {
+            // Ghost and tag nodes are synthetic — there is no file to open.
+            if (node && (!node.kind || node.kind === 'note')) {
               closeTableView()
               void openNote(node.path)
             }

@@ -1,6 +1,31 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 
 contextBridge.exposeInMainWorld('hermesDesktop', {
+  onBeforeClose: handler => {
+    const listener = async (_event, requestId) => {
+      try {
+        await handler()
+        ipcRenderer.send('hermes:window:prepared-close', { requestId, ok: true })
+      } catch (error) {
+        ipcRenderer.send('hermes:window:prepared-close', { requestId, ok: false, error: error?.message || String(error) })
+      }
+    }
+
+    ipcRenderer.on('hermes:window:prepare-close', listener)
+    ipcRenderer.send('hermes:window:close-guard', true)
+
+    return () => {
+      ipcRenderer.removeListener('hermes:window:prepare-close', listener)
+      ipcRenderer.send('hermes:window:close-guard', false)
+    }
+  },
+  cat: {
+    getSettings: () => ipcRenderer.invoke('hermes:cat:settings:get'),
+    setSettings: patch => ipcRenderer.invoke('hermes:cat:settings:set', patch),
+    getStatus: () => ipcRenderer.invoke('hermes:cat:status'),
+    start: () => ipcRenderer.invoke('hermes:cat:start'),
+    stop: () => ipcRenderer.invoke('hermes:cat:stop')
+  },
   getConnection: profile => ipcRenderer.invoke('hermes:connection', profile),
   revalidateConnection: () => ipcRenderer.invoke('hermes:connection:revalidate'),
   touchBackend: profile => ipcRenderer.invoke('hermes:backend:touch', profile),
@@ -152,18 +177,23 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     defaults: () => ipcRenderer.invoke('hermes:vault:defaults'),
     create: baseDir => ipcRenderer.invoke('hermes:vault:create', baseDir),
     choose: () => ipcRenderer.invoke('hermes:vault:choose'),
+    selectFolder: () => ipcRenderer.invoke('hermes:vault:selectFolder'),
+    saveRecovery: entry => ipcRenderer.invoke('hermes:vault:saveRecovery', entry),
+    listRecovery: root => ipcRenderer.invoke('hermes:vault:listRecovery', root),
+    removeRecovery: id => ipcRenderer.invoke('hermes:vault:removeRecovery', id),
     open: root => ipcRenderer.invoke('hermes:vault:open', root),
     reindex: () => ipcRenderer.invoke('hermes:vault:reindex'),
     list: () => ipcRenderer.invoke('hermes:vault:list'),
     listDir: subdir => ipcRenderer.invoke('hermes:vault:listDir', subdir),
-    read: relPath => ipcRenderer.invoke('hermes:vault:read', relPath),
-    write: (relPath, content, expectedMtimeMs, expectedContent) =>
-      ipcRenderer.invoke('hermes:vault:write', relPath, content, expectedMtimeMs, expectedContent),
-    createNote: relPath => ipcRenderer.invoke('hermes:vault:createNote', relPath),
-    createDir: relPath => ipcRenderer.invoke('hermes:vault:createDir', relPath),
-    writeBinary: (relPath, data) => ipcRenderer.invoke('hermes:vault:writeBinary', relPath, data),
-    rename: (fromRel, toRel) => ipcRenderer.invoke('hermes:vault:rename', fromRel, toRel),
-    trash: relPath => ipcRenderer.invoke('hermes:vault:trash', relPath),
+    read: (relPath, expectedRoot) => ipcRenderer.invoke('hermes:vault:read', relPath, expectedRoot),
+    write: (relPath, content, expectedMtimeMs, expectedContent, expectedRoot) =>
+      ipcRenderer.invoke('hermes:vault:write', relPath, content, expectedMtimeMs, expectedContent, expectedRoot),
+    createNote: (relPath, expectedRoot) => ipcRenderer.invoke('hermes:vault:createNote', relPath, expectedRoot),
+    createDir: (relPath, expectedRoot) => ipcRenderer.invoke('hermes:vault:createDir', relPath, expectedRoot),
+    appendBinary: (relPath, data, expectedRoot) => ipcRenderer.invoke('hermes:vault:appendBinary', relPath, data, expectedRoot),
+    writeBinary: (relPath, data, expectedRoot) => ipcRenderer.invoke('hermes:vault:writeBinary', relPath, data, expectedRoot),
+    rename: (fromRel, toRel, expectedRoot) => ipcRenderer.invoke('hermes:vault:rename', fromRel, toRel, expectedRoot),
+    trash: (relPath, expectedRoot) => ipcRenderer.invoke('hermes:vault:trash', relPath, expectedRoot),
     search: query => ipcRenderer.invoke('hermes:vault:search', query),
     backlinks: relPath => ipcRenderer.invoke('hermes:vault:backlinks', relPath),
     linksFrom: relPath => ipcRenderer.invoke('hermes:vault:linksFrom', relPath),
@@ -173,7 +203,11 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       linkGraph: () => ipcRenderer.invoke('hermes:vault:linkGraph'),
     todos: limit => ipcRenderer.invoke('hermes:vault:todos', limit),
     reportContext: payload => ipcRenderer.send('hermes:vault:context', payload),
-    toggleTodo: (relPath, line, text) => ipcRenderer.invoke('hermes:vault:toggleTodo', relPath, line, text),
+    toggleTodo: (relPath, line, text, expectedRoot) => ipcRenderer.invoke('hermes:vault:toggleTodo', relPath, line, text, expectedRoot),
+    icsSubscriptions: () => ipcRenderer.invoke('hermes:vault:icsSubscriptions'),
+    icsAdd: (url, name) => ipcRenderer.invoke('hermes:vault:icsAdd', url, name),
+    icsRemove: id => ipcRenderer.invoke('hermes:vault:icsRemove', id),
+    icsSync: () => ipcRenderer.invoke('hermes:vault:icsSync'),
     onIndexEvent: callback => {
       const listener = (_event, payload) => callback(payload)
       ipcRenderer.on('hermes:vault:index-event', listener)
@@ -193,7 +227,10 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     status: () => ipcRenderer.invoke('hermes:mail:status'),
     list: opts => ipcRenderer.invoke('hermes:mail:list', opts),
     read: opts => ipcRenderer.invoke('hermes:mail:read', opts),
-    folders: opts => ipcRenderer.invoke('hermes:mail:folders', opts)
+    folders: opts => ipcRenderer.invoke('hermes:mail:folders', opts),
+    flag: opts => ipcRenderer.invoke('hermes:mail:flag', opts),
+    move: opts => ipcRenderer.invoke('hermes:mail:move', opts),
+    search: opts => ipcRenderer.invoke('hermes:mail:search', opts)
   },
   readDir: dirPath => ipcRenderer.invoke('hermes:fs:readDir', dirPath),
   gitRoot: startPath => ipcRenderer.invoke('hermes:fs:gitRoot', startPath),

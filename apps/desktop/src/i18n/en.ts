@@ -2177,14 +2177,20 @@ export const en: Translations = {
     viewDocs: 'View install docs',
     installTo: 'Will install to',
     retryAfterRun: 'I’ve run it -- retry',
-    setupChoiceTitle: 'Set up Daat Desktop',
+    setupChoiceTitle: 'Welcome to Daat',
+    // This is the first sentence anyone reads. It used to offer a choice
+    // between a local install and connecting to "a Daat gateway you already
+    // run" — a thing almost nobody has, presented as an equal option, blocking
+    // everything until one was picked. The choice still exists, as a link.
     setupChoiceDesc:
-      'Connect this app to a Daat gateway you already run, or install Daat locally on this computer.',
+      'Daat keeps your notes and helps you with them. Setting up takes about ten minutes and mostly happens on its own — you can leave it running and come back.',
     connectExistingTitle: 'Connect to existing Daat',
     connectExistingShort: 'Connect existing',
     connectExistingDesc: 'Use a remote backend with a session token or browser sign-in. No local install will start.',
-    installLocalTitle: 'Install Daat locally',
-    installLocalDesc: 'Download Daat, create its Python environment, and run the backend on this computer.',
+    connectExistingLink: 'Already running Daat somewhere else?',
+    installLocalTitle: 'Set up Daat on this Mac',
+    installLocalDesc: 'Everything stays on this computer.',
+    installLocalStarting: 'Starting…',
     localStartUnavailable: 'Local installation could not start. Restart Daat Desktop and try again.',
     remoteSetupTitle: 'Connect to existing Daat',
     remoteSetupDesc: 'Enter your gateway URL. Daat Desktop will detect whether it needs a token or browser sign-in.',
@@ -2298,7 +2304,8 @@ export const en: Translations = {
     externalPending: provider =>
       `${provider} signs in through its own CLI. Run this command in a terminal, then come back and pick "I've signed in":`,
     signedIn: "I've signed in",
-    deviceCodeOpened: provider => `We opened ${provider} in your browser. Enter this code there:`,
+    deviceCodeOpened: provider =>
+      `We opened ${provider} in your browser. Paste this code there — we already copied it for you (press \u2318V).`,
     reopenVerification: 'Re-open verification page',
     copy: 'Copy',
     defaultModel: 'Default model',

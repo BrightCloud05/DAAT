@@ -1,0 +1,63 @@
+name: Publish verified DAAT runtime
+on:
+  push:
+    branches: [main]
+    paths: [daat-upstream.json]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: daat-runtime-release
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'BrightCloud05/DAAT' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Require an independent release approval policy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/environments/daat-runtime-release" > /tmp/release-environment.json
+          jq -e 'any(.protection_rules[]; .type == "required_reviewers" and .prevent_self_review == true and (.reviewers | length > 0))' /tmp/release-environment.json
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/verify-daat-runtime
+      - name: Package the verified source
+        run: |
+          python3 scripts/package_daat_runtime.py --source apps/desktop/dist/agent-src --output /tmp/daat-runtime \
+            --revision "$GITHUB_SHA" --upstream "$(jq -r .tag daat-upstream.json)" \
+            --desktop-version "$(jq -r .version apps/desktop/package.json)"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verified-runtime
+          path: /tmp/daat-runtime/
+          retention-days: 7
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: daat-runtime-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-runtime
+          path: /tmp/daat-runtime
+      - name: Publish immutable runtime assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="daat-runtime-$GITHUB_SHA"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'This revision already has a release; never replace published assets.'
+            exit 0
+          fi
+          cat > /tmp/runtime-notes.md <<'BODY'
+          Verified DAAT engine update based on a stable Hermes release. DAAT applies it before starting its managed backend, after integrity and compatibility checks. Notes, accounts, model preferences and personal Hermes installations are not replaced.
+          BODY
+          gh release create "$tag" /tmp/daat-runtime/daat-runtime.zip /tmp/daat-runtime/daat-runtime.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title 'DAAT verified engine update' --notes-file /tmp/runtime-notes.md --latest=false

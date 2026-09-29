@@ -706,6 +706,8 @@ export interface AnalyticsTotals {
 }
 
 export interface CronJob {
+  profile?: string
+  workdir?: null | string
   deliver?: null | string
   enabled: boolean
   id: string
@@ -724,6 +726,8 @@ export interface CronJob {
 }
 
 export interface CronJobCreatePayload {
+  workdir?: string
+  skills?: string[]
   deliver?: string
   model?: string
   name?: string

@@ -28,7 +28,8 @@
  * Usage: node scripts/stage-agent-source.mjs   (run from apps/desktop)
  */
 
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -43,10 +44,53 @@ const repoRoot = resolve(desktopRoot, '../..')
  *
  * The root *modules* are read from pyproject — see declaredModules().
  */
-const ROOT_FILES = ['pyproject.toml', 'uv.lock', 'LICENSE', 'constraints-termux.txt']
+const ROOT_FILES = ['pyproject.toml', 'uv.lock', 'LICENSE', 'constraints-termux.txt', 'setup.py', 'README.md', 'cli-config.yaml.example', '.env.example']
 
 /** Directories that are not Python packages but are needed all the same. */
-const EXTRA_DIRS = ['scripts', 'skills', 'prompts', 'personas']
+const EXTRA_DIRS = ['scripts', 'skills', 'prompts', 'personas', 'locales', 'optional-mcps']
+
+/**
+ * Optional skill categories that ship with Daat, merged into skills/.
+ *
+ * The repo carries 69 skills in skills/ — those already install themselves on
+ * first run — and another 111 in optional-skills/ that ship nowhere. Which of
+ * those a note-taking app should carry is a judgement about its readers, so it
+ * is written down here rather than left to whoever next edits a glob.
+ *
+ * Included because they serve someone Daat is actually for:
+ *   finance             the Accounting persona, plus excel-author/pptx-author,
+ *                       which are useful to anyone who has to hand something in
+ *   research            search and source-gathering — the front half of taking
+ *                       a note about something you read
+ *   productivity        flashcards for students, capture tools for everyone
+ *   data-science        jupyter-notebook, for the coursework that needs it
+ *   software-development, web-development, devops   the Programming persona
+ *   communication, email                            the Office Admin and
+ *                       Secretary personas
+ *
+ * Left out, deliberately:
+ *   mlops (31 skills)   model registries and training pipelines. No student,
+ *                       accountant or secretary will ever call one, and 31 of
+ *                       them would crowd the skill index the model reads.
+ *   creative (13)       Blender, Unreal, audio generation — a different product
+ *   security, blockchain, payments, gaming, migration, mcp, dogfood
+ *
+ * Size is not the reason for any of this: the whole optional set is 7.8 MB
+ * against a 149 MB app. The reason is that the index of available skills is
+ * something the model reads on every turn, and a list padded with tools nobody
+ * here will use makes it worse at picking the ones they will.
+ */
+export const OPTIONAL_SKILL_CATEGORIES = [
+  'communication',
+  'data-science',
+  'devops',
+  'email',
+  'finance',
+  'productivity',
+  'research',
+  'software-development',
+  'web-development'
+]
 
 /** Never ship these into a user's machine. */
 const SKIP = new Set(['__pycache__', '.pytest_cache', '.ruff_cache', 'node_modules', '.git', '.venv', 'venv'])
@@ -81,11 +125,17 @@ export function declaredPackages(pyprojectToml) {
  * on a machine with no repo to fall back to. Same failure mode declaredPackages
  * already guards against, one door down.
  */
-export function declaredModules(pyprojectToml) {
+export function declaredModules(pyprojectToml, sourceRoot = repoRoot) {
   const found = /^py-modules\s*=\s*\[([^\]]+)\]/m.exec(pyprojectToml)
 
   if (!found) {
-    throw new Error('[stage-agent-source] could not read [tool.setuptools] py-modules from pyproject.toml')
+    // Current Hermes derives these in setup.py; mirror its root *.py rule.
+    if (existsSync(join(sourceRoot, 'setup.py')) && pyprojectToml.includes('[tool.setuptools]')) {
+      return readdirSync(sourceRoot, { withFileTypes: true })
+        .filter(entry => entry.isFile() && entry.name.endsWith('.py') && entry.name !== 'setup.py')
+        .map(entry => entry.name).sort()
+    }
+    throw new Error('[stage-agent-source] could not read [tool.setuptools] py-modules or setup.py discovery')
   }
 
   return [...new Set([...found[1].matchAll(/"([^"]+)"/g)].map(match => `${match[1]}.py`))]
@@ -100,6 +150,32 @@ function copyTree(from, to) {
       return !SKIP.has(name) && !name.endsWith('.pyc')
     }
   })
+}
+
+/** Bundle-owned files, relative POSIX, sorted — mirrors ownedFiles(). */
+function walkFiles(root) {
+  const found = []
+  const skip = new Set([...SKIP, '.daat-bundle-id', '.daat-bundle-stamp'])
+
+  const walk = (dir, prefix) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (skip.has(entry.name) || entry.name.endsWith('.pyc')) {
+        continue
+      }
+
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name
+
+      if (entry.isDirectory()) {
+        walk(join(dir, entry.name), rel)
+      } else if (entry.isFile()) {
+        found.push(rel)
+      }
+    }
+  }
+
+  walk(root, '')
+
+  return found.sort()
 }
 
 function sizeOf(dir) {
@@ -149,6 +225,40 @@ export function stageAgentSource({ dest = resolve(desktopRoot, 'dist/agent-src')
     copied.push(name)
   }
 
+  // Merge the chosen optional categories into skills/, because that is the one
+  // directory tools/skills_sync.py seeds from. Nothing else has to change:
+  // first run copies them into the user's profile like any bundled skill.
+  const skillsDest = join(dest, 'skills')
+  const merged = []
+
+  for (const category of OPTIONAL_SKILL_CATEGORIES) {
+    const from = join(repoRoot, 'optional-skills', category)
+
+    if (!existsSync(from)) {
+      throw new Error(`[stage-agent-source] optional skill category "${category}" is not in the repo`)
+    }
+
+    for (const entry of readdirSync(from, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue
+      }
+
+      const target = join(skillsDest, category, entry.name)
+
+      // A same-named skill in both trees would be silently replaced here, and
+      // the bundled one is the one that was chosen deliberately.
+      if (existsSync(target)) {
+        console.warn(`[stage-agent-source] skipping optional ${category}/${entry.name}: already bundled`)
+        continue
+      }
+
+      copyTree(join(from, entry.name), target)
+      merged.push(`${category}/${entry.name}`)
+    }
+  }
+
+  console.log(`[stage-agent-source] merged ${merged.length} optional skills into skills/`)
+
   for (const file of [...modules, ...ROOT_FILES]) {
     const from = join(repoRoot, file)
 
@@ -165,6 +275,21 @@ export function stageAgentSource({ dest = resolve(desktopRoot, 'dist/agent-src')
     cpSync(from, join(dest, file))
     copied.push(file)
   }
+
+  // The identity of this build's source, computed once here so a launch can
+  // read one small file instead of hashing forty megabytes. See
+  // electron/agent-source.ts — this is what tells an installed agent that a
+  // newer one is sitting inside the app.
+  const bundleId = createHash('sha1')
+    .update(
+      walkFiles(dest)
+        .map(rel => `${rel}:${createHash('sha1').update(readFileSync(join(dest, rel))).digest('hex')}`)
+        .join('\n')
+    )
+    .digest('hex')
+
+  writeFileSync(join(dest, '.daat-bundle-id'), bundleId, 'utf8')
+  console.log(`[stage-agent-source] bundle id ${bundleId.slice(0, 12)}`)
 
   const megabytes = Math.round(sizeOf(dest) / 1024 / 1024)
 

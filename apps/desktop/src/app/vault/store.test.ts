@@ -10,15 +10,24 @@
  */
 
 import assert from 'node:assert/strict'
-import { beforeEach, test } from 'vitest'
+
+import { afterEach, beforeEach, test } from 'vitest'
 
 import {
   $activeDirty,
   $activeNote,
+  $vaultInfo,
+  $vaultRescued,
+  $vaultSaveError,
+  chooseVault,
   flushActiveNote,
+  ICLOUD_DOWNLOAD_PENDING,
   noteEdited,
   openNote,
-  resetSaveState
+  prepareVaultForClose,
+  rescuedText,
+  resetSaveState,
+  restoreRecovery
 } from './store'
 
 interface FakeFile {
@@ -28,6 +37,9 @@ interface FakeFile {
 
 let disk: Record<string, FakeFile>
 let writes: Array<{ path: string; content: string }>
+let journal: Map<string, VaultRecoveryEntry>
+let root: string
+let operations: string[]
 /** Resolves the held write, letting a test keep one save "in flight". */
 let releaseWrite: (() => void) | null = null
 
@@ -36,12 +48,16 @@ let releaseWrite: (() => void) | null = null
  * on the wire while the user keeps typing; later saves must run normally or
  * the test can never observe the recovery.
  */
-function installBridge(options: { holdFirstWrite?: boolean; failWrites?: boolean } = {}) {
+function installBridge(
+  options: { holdFirstWrite?: boolean; failWrites?: boolean; unreadable?: boolean; failRecovery?: boolean } = {}
+) {
   disk = {
     'A.md': { content: 'A original', mtimeMs: 1 },
     'B.md': { content: 'IMPORTANT NOTE B', mtimeMs: 1 }
   }
   writes = []
+  root = '/vault'
+  operations = []
   releaseWrite = null
 
   let held = false
@@ -49,11 +65,23 @@ function installBridge(options: { holdFirstWrite?: boolean; failWrites?: boolean
   const vault = {
     read: async (path: string) => ({
       path,
+      vaultRoot: root,
       content: disk[path]?.content ?? '',
       mtimeMs: disk[path]?.mtimeMs ?? 0,
       dataless: false
     }),
-    write: async (path: string, content: string, expectedMtimeMs: number | null) => {
+    write: async (
+      path: string,
+      content: string,
+      expectedMtimeMs: number | null,
+      _expectedContent?: string,
+      expectedRoot?: string
+    ) => {
+      if (expectedRoot && expectedRoot !== root) {
+        throw new Error('vault changed')
+      }
+
+      operations.push(`write:${root}`)
       writes.push({ path, content })
 
       if (options.holdFirstWrite && !held) {
@@ -68,6 +96,12 @@ function installBridge(options: { holdFirstWrite?: boolean; failWrites?: boolean
         throw new Error('EACCES: read-only volume')
       }
 
+      // The note's text is still coming down from iCloud, so the main process
+      // refused rather than write over bytes nobody has read.
+      if (options.unreadable) {
+        return { ok: false as const, reason: 'unreadable' as const }
+      }
+
       const existing = disk[path]
 
       if (existing && expectedMtimeMs !== null && existing.mtimeMs !== expectedMtimeMs) {
@@ -80,7 +114,29 @@ function installBridge(options: { holdFirstWrite?: boolean; failWrites?: boolean
     },
     createNote: async (path: string) => ({ path, content: '', mtimeMs: 0, dataless: false, created: true }),
     list: async () => [],
-    info: async () => ({ root: '/vault', name: 'vault', noteCount: 2, location: 'local', indexing: false })
+    info: async () => ({ root, name: 'vault', noteCount: 2, location: 'local', indexing: false }),
+    selectFolder: async () => {
+      operations.push('select')
+
+      return '/vault-b'
+    },
+    open: async (selected: string) => {
+      operations.push(`open:${selected}`)
+      root = selected
+
+      return { root, name: 'vault', noteCount: 0, location: 'local', indexing: false }
+    },
+    saveRecovery: async (entry: VaultRecoveryEntry) => {
+      if (options.failRecovery) {
+        throw new Error('Journal disk is full')
+      }
+
+      journal.set(entry.id, { ...entry })
+    },
+    listRecovery: async (selected: string) => [...journal.values()].filter(entry => entry.vaultRoot === selected),
+    removeRecovery: async (id: string) => {
+      journal.delete(id)
+    }
   }
 
   // @ts-expect-error — test double for the preload bridge.
@@ -93,8 +149,12 @@ beforeEach(() => {
   releaseWrite?.()
   resetSaveState()
   installBridge()
+  journal = new Map()
+  $vaultInfo.set({ root: '/vault', name: 'vault', noteCount: 2, location: 'local', indexing: false })
   $activeNote.set(null)
 })
+
+afterEach(() => resetSaveState())
 
 test("one note's unsaved text is never written into another note", async () => {
   // The failure this guards: $activeNote.set() notifies SYNCHRONOUSLY, and a
@@ -127,6 +187,11 @@ test("one note's unsaved text is never written into another note", async () => {
       !writes.some(write => write.path === 'B.md' && write.content.includes('A typed')),
       `A's text was written to B: ${JSON.stringify(writes)}`
     )
+
+    // Not landing in B is only half of it. It has to still exist somewhere —
+    // this assertion is what was missing, and the buffer was simply dropped.
+    assert.deepEqual($vaultRescued.get(), ['A.md'])
+    assert.equal(rescuedText('A.md'), 'A typed something')
   } finally {
     unsubscribe()
   }
@@ -199,4 +264,146 @@ test('a conflict reloads disk truth instead of looping', async () => {
 
   assert.equal($activeNote.get()?.content, 'their version')
   assert.equal($activeDirty.get(), false)
+})
+
+test('a save refused while iCloud downloads keeps the text and says why', async () => {
+  /*
+   * The main process refuses to write over a note whose current bytes it could
+   * not read — otherwise the empty document an evicted note opens as replaces
+   * the real one on every device.
+   *
+   * That refusal is transient, so it must not be handled like a conflict: no
+   * conflict copy was made and nothing was written, so reloading disk truth
+   * here would throw the user's typing away. Hold it and retry.
+   */
+  installBridge({ unreadable: true })
+
+  await openNote('A.md')
+  noteEdited('what I just typed')
+
+  await flushActiveNote()
+
+  assert.equal($activeDirty.get(), true, 'the text is still unsaved, and must still count as such')
+  assert.equal($vaultSaveError.get(), ICLOUD_DOWNLOAD_PENDING)
+  assert.equal($activeNote.get()?.content, 'A original', 'nothing was adopted from disk')
+  assert.equal(disk['A.md'].content, 'A original', 'and nothing was written')
+
+  // iCloud finishes; the retry that was already armed now lands.
+  installBridge()
+  await flushActiveNote()
+
+  assert.equal(disk['A.md'].content, 'what I just typed')
+  assert.equal($vaultSaveError.get(), null)
+})
+
+test('text that could not be saved comes back when the note is reopened', async () => {
+  /*
+   * The whole loss took four steps and no error: type into A, the save fails
+   * (offline volume, unplugged drive), click B, and the buffer that still held
+   * A's text was cleared on the way. The dirty dot moved on with B, so nothing
+   * on screen suggested anything had been lost.
+   */
+  installBridge({ failWrites: true })
+
+  await openNote('A.md')
+  noteEdited('the paragraph I actually wrote')
+  await flushActiveNote()
+
+  await openNote('B.md')
+
+  assert.deepEqual($vaultRescued.get(), ['A.md'], 'the text has to be held somewhere')
+
+  // The volume comes back.
+  const saved = { ...disk }
+
+  installBridge()
+  disk = saved
+
+  await openNote('A.md')
+
+  assert.equal($activeNote.get()?.content, 'A original', 'the store still tracks disk truth')
+  assert.equal(rescuedText('A.md'), 'the paragraph I actually wrote', 'and the editor is handed the real text')
+})
+
+test('a note whose save finally lands stops being held', async () => {
+  installBridge({ failWrites: true })
+
+  await openNote('A.md')
+  noteEdited('eventually saved')
+  await flushActiveNote()
+
+  assert.deepEqual($vaultRescued.get(), ['A.md'])
+
+  const saved = { ...disk }
+
+  installBridge()
+  disk = saved
+
+  await flushActiveNote()
+
+  assert.equal(disk['A.md'].content, 'eventually saved')
+  assert.deepEqual($vaultRescued.get(), [], 'nothing left to hold once it is on disk')
+})
+
+test('choosing a vault saves against the old root before activating the selection', async () => {
+  await openNote('A.md')
+  noteEdited('old vault edit')
+  await chooseVault()
+  assert.deepEqual(operations, ['select', 'write:/vault', 'open:/vault-b'])
+  assert.equal(disk['A.md'].content, 'old vault edit')
+  assert.equal($vaultInfo.get()?.root, '/vault-b')
+})
+
+test('newer typing during a conflict remains recoverable until its own conflict copy is saved', async () => {
+  installBridge({ holdFirstWrite: true })
+  await openNote('A.md')
+  noteEdited('submitted')
+  const pending = flushActiveNote()
+  disk['A.md'] = { content: 'external', mtimeMs: 99 }
+  noteEdited('submitted and latest typing')
+  releaseWrite?.()
+  await pending
+  assert.equal($activeDirty.get(), true)
+  assert.equal(rescuedText('A.md'), 'submitted and latest typing')
+  assert.equal($activeNote.get()?.content, 'A original')
+  await flushActiveNote()
+  assert.equal(writes.at(-1)?.content, 'submitted and latest typing')
+  assert.equal($activeNote.get()?.content, 'external')
+})
+
+test('failed saves survive store reset and recover with the original conflict base', async () => {
+  installBridge({ failWrites: true })
+  await openNote('A.md')
+  noteEdited('typing before restart')
+  await prepareVaultForClose()
+  assert.equal([...journal.values()][0]?.content, 'typing before restart')
+  resetSaveState()
+  $activeNote.set(null)
+  disk['A.md'] = { content: 'external after close', mtimeMs: 99 }
+  await restoreRecovery('/vault')
+  await openNote('A.md')
+  assert.equal(rescuedText('A.md'), 'typing before restart')
+  assert.equal($activeNote.get()?.content, 'A original')
+  assert.equal($activeNote.get()?.mtimeMs, 1)
+})
+
+test('close preparation rejects when neither save nor recovery is durable', async () => {
+  installBridge({ failWrites: true, failRecovery: true })
+  await openNote('A.md')
+  noteEdited('must stay open')
+  await assert.rejects(prepareVaultForClose(), /Journal disk is full/)
+  assert.equal(rescuedText('A.md'), 'must stay open')
+  assert.equal($activeDirty.get(), true)
+})
+
+test('undo while a save is in flight restores the original bytes after it lands', async () => {
+  installBridge({ holdFirstWrite: true })
+  await openNote('A.md')
+  noteEdited('temporary change')
+  const pending = flushActiveNote()
+  noteEdited('A original')
+  releaseWrite?.()
+  await pending
+  await flushActiveNote()
+  assert.equal(disk['A.md'].content, 'A original')
 })

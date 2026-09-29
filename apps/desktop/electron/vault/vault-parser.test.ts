@@ -54,3 +54,35 @@ test('malformed frontmatter degrades gracefully', () => {
   assert.equal(parsed.title, 'file')
   assert.ok(parsed.plainText.length > 0)
 })
+
+test('internal markdown links count as links, external ones do not', () => {
+  const parsed = parseNote(
+    [
+      'A [plain link](Other%20Note.md) and a [folder one](Projects/Plan.md).',
+      'An [extensionless](Some%20Note) relative link.',
+      'But [not the web](https://example.com/page.md), [not mail](mailto:a@b.c),',
+      '[not an anchor](#section), and [not an image](diagram.png).'
+    ].join('\n'),
+    'file'
+  )
+
+  assert.deepEqual(
+    parsed.links.map(link => link.targetRaw),
+    ['Other Note', 'Projects/Plan', 'Some Note']
+  )
+})
+
+test('markdown links inside code stay unindexed, like wikilinks', () => {
+  const parsed = parseNote('```\n[hidden](Secret.md)\n```\n\n`[inline](Also.md)`', 'file')
+
+  assert.deepEqual(parsed.links, [])
+})
+
+test('a markdown link with a heading fragment targets the note', () => {
+  const parsed = parseNote('[jump](Other%20Note.md#somewhere)', 'file')
+
+  assert.deepEqual(
+    parsed.links.map(link => link.targetRaw),
+    ['Other Note']
+  )
+})
