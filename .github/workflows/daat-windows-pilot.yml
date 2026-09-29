@@ -1,0 +1,92 @@
+name: DAAT Windows x64 internal pilot
+
+# Manual build only. This produces an unsigned candidate, not a public release
+# and not evidence that installation/first launch passed on a clean machine.
+on:
+  push:
+    branches: [codex/daat-windows-ci]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      HERMES_HOME: ${{ runner.temp }}/daat-pilot-runtime
+      HERMES_DESKTOP_USER_DATA_DIR: ${{ runner.temp }}/daat-pilot-user-data
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install locked workspace dependencies
+        run: npm ci
+      - name: Installer path contracts (PowerShell 7)
+        shell: pwsh
+        run: |
+          pwsh -NoProfile -File scripts/tests/test-daat-install-paths.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pwsh -NoProfile -File scripts/tests/test-install-ps1-longpath.ps1
+      - name: Installer path contracts (Windows PowerShell 5.1)
+        shell: powershell
+        run: powershell -NoProfile -File scripts/tests/test-daat-install-paths.ps1
+      - name: Typecheck desktop
+        run: npm run typecheck --workspace apps/desktop
+      - name: Build unsigned x64 NSIS candidate without publishing
+        run: npm run dist:win:nsis --workspace apps/desktop -- --x64 --publish never -c.win.signAndEditExecutable=true -c.win.signExecutable=false
+      - name: Packaging regression tests on native Windows
+        run: npm run test --workspace apps/desktop -- --project electron scripts/electron-dist-target.test.mjs scripts/platform-payload-cleanup.test.mjs scripts/stage-native-deps.test.mjs scripts/before-pack.test.mjs
+      - name: Install the generated NSIS package
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem apps/desktop/release/Daat-*-win-x64.exe)
+          if ($installer.Count -ne 1) { throw 'Expected one installer' }
+          $target = Join-Path $env:RUNNER_TEMP 'Daat installed'
+          $process = Start-Process -FilePath $installer[0].FullName -ArgumentList '/S', "/D=$target" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Install failed: $($process.ExitCode)" }
+          if (!(Test-Path "$target/Daat.exe")) { throw 'Installed executable missing' }
+          "DAAT_INSTALLED_EXE=$target/Daat.exe" >> $env:GITHUB_ENV
+      - name: Installed app bootstrap, note save and restart
+        working-directory: apps/desktop
+        shell: pwsh
+        run: node scripts/windows-installed-smoke.mjs "$env:DAAT_INSTALLED_EXE"
+      - name: Uninstall the tested app
+        shell: pwsh
+        run: |
+          $target = Split-Path $env:DAAT_INSTALLED_EXE
+          $uninstaller = @(Get-ChildItem -LiteralPath $target -Filter '*Uninstall*.exe')
+          if ($uninstaller.Count -ne 1) { throw 'Expected one uninstaller' }
+          $process = Start-Process -FilePath $uninstaller[0].FullName -ArgumentList '/S' -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Uninstall failed: $($process.ExitCode)" }
+          $deadline = (Get-Date).AddSeconds(60)
+          while ((Test-Path $env:DAAT_INSTALLED_EXE) -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 1 }
+          if (Test-Path $env:DAAT_INSTALLED_EXE) { throw 'Executable remains after uninstall' }
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: daat-windows-acceptance
+          if-no-files-found: warn
+          retention-days: 7
+          path: apps/desktop/release/acceptance/
+      - name: Record installer checksum
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem apps/desktop/release/Daat-*-win-x64.exe)
+          if ($installers.Count -ne 1) { throw 'Expected exactly one x64 installer' }
+          $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $installers[0].FullName
+          "$($hash.Hash.ToLower())  $($installers[0].Name)" | Set-Content apps/desktop/release/SHA256SUMS.txt -Encoding ascii
+          "Unsigned candidate; Windows Server install, bootstrap, note persistence and uninstall passed. Windows 10/11 and provider acceptance remain untested. Commit: $env:GITHUB_SHA" | Set-Content apps/desktop/release/PILOT-STATUS.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: daat-windows-x64-unsigned-pilot
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            apps/desktop/release/Daat-*-win-x64.exe
+            apps/desktop/release/SHA256SUMS.txt
+            apps/desktop/release/PILOT-STATUS.txt

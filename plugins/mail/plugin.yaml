@@ -1,0 +1,17 @@
+manifest_version: 1
+name: mail
+version: 0.1.0
+description: "Daat mail: read, search, organize and send email through the Himalaya CLI (IMAP/SMTP)."
+author: Daat
+kind: standalone
+provides_tools:
+  - mail_accounts
+  - mail_folders
+  - mail_list
+  - mail_read
+  - mail_search
+  - mail_move
+  - mail_flag
+  - mail_draft
+  - mail_reply
+  - mail_send

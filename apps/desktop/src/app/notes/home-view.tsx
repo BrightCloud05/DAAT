@@ -1,0 +1,400 @@
+/**
+ * Home dashboard — implementation of "Daat Home.dc.html" (design 1a).
+ *
+ * Every card reads the user's real files: tasks and dates out of their
+ * notes, mail from their own account, scheduled jobs from the Hermes backend.
+ * A card with nothing behind it yet says so plainly rather than showing a
+ * plausible number — a dashboard that invents figures is worse than none.
+ */
+
+import { useStore } from '@nanostores/react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+
+import { activeGateway } from '@/store/gateway'
+
+import { $vaultInfo, $vaultNotes, $vaultRevision, openNote } from '../vault/store'
+
+import { AutomationCard } from './automation-card'
+import { briefingParts, buildBriefing } from './briefing'
+import { collectEntries, dueOf, taskLabel } from './calendar'
+import { PersonaWidgets } from './persona-widgets'
+import { $productLocale, productStrings } from './strings'
+import { isTemplateNote, openDailyNote, todayStamp } from './templates'
+import { $vaultTodos, initTodosStore, toggleTodo } from './todos-store'
+import { closeTableView, openCalendarView, openMailView, openMeetingsView } from './view-store'
+
+const CARD = 'rounded-xs border border-(--stroke-nous) bg-(--dt-card) p-6 flex flex-col gap-4'
+const CARD_TITLE = 'text-[13px] font-semibold'
+const MUTED = 'text-xs opacity-50'
+
+function Sparkle({ size = 15 }: { size?: number }) {
+  return (
+    <svg fill="var(--dt-primary)" height={size} viewBox="0 0 16 16" width={size}>
+      <path d="M8 0.8 9.5 6.5 15.2 8 9.5 9.5 8 15.2 6.5 9.5 0.8 8 6.5 6.5Z" />
+    </svg>
+  )
+}
+
+function editedAgo(mtimeMs: number): string {
+  const minutes = Math.max(0, Math.round((Date.now() - mtimeMs) / 60_000))
+
+  if (minutes < 1) {return 'just now'}
+
+  if (minutes < 60) {return `${minutes} min ago`}
+
+  const hours = Math.round(minutes / 60)
+
+  return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`
+}
+
+/** Next few dated things, from the same source the Calendar reads. */
+function UpNextCard() {
+  const s = productStrings(useStore($productLocale))
+  const revision = useStore($vaultRevision)
+  const info = useStore($vaultInfo)
+  const todos = useStore($vaultTodos)
+
+  const schedule = useQuery({
+    queryKey: ['home-upcoming', info?.root, revision],
+    queryFn: () => window.hermesDesktop.vault.propertiesTable()
+  })
+
+
+  const upcoming = useMemo(() => {
+    const today = todayStamp()
+
+    return [...collectEntries(schedule.data ?? [], todos).entries()]
+      .filter(([date]) => date >= today)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .flatMap(([date, entries]) => entries.filter(entry => !entry.done).map(entry => ({ date, entry })))
+      .slice(0, 4)
+  }, [schedule.data, todos])
+
+  return (
+    <div className={CARD}>
+      <div className="flex items-baseline">
+        <span className={CARD_TITLE}>{s.upNext}</span>
+        <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openCalendarView}>
+          {s.calendar}
+        </button>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {upcoming.map(({ date, entry }) => (
+          <button
+            className="flex items-baseline gap-2 text-left"
+            key={`${date}-${entry.path}-${entry.line ?? 0}`}
+            onClick={() => {
+              closeTableView()
+              void openNote(entry.path)
+            }}
+          >
+            <span className="shrink-0 text-[11.5px] opacity-45">{date === todayStamp() ? s.today : date.slice(5)}</span>
+            <span className="truncate text-[13px]">{entry.label}</span>
+          </button>
+        ))}
+        {schedule.isPending ? (
+          <span className={MUTED}>{s.loading}</span>
+        ) : schedule.isError ? (
+          <div className="text-xs text-destructive" role="alert">
+            {s.dataLoadFailed} <button onClick={() => void schedule.refetch()}>{s.retryNow}</button>
+          </div>
+        ) : (
+          !upcoming.length && <span className={MUTED}>{s.nothingScheduled}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Real inbox state, or an honest "not connected yet". */
+function InboxCard() {
+  const s = productStrings(useStore($productLocale))
+
+  const inbox = useQuery({
+    queryKey: ['home-mail'],
+    queryFn: async () => {
+      const status = await window.hermesDesktop.mail.status()
+
+      if (!status.installed || !status.accounts.length) {return { connected: false, mail: [] as MailEnvelope[] }}
+
+      return { connected: true, mail: await window.hermesDesktop.mail.list({ limit: 5 }) }
+    },
+    refetchOnMount: 'always'
+  })
+
+  const state = inbox.data
+
+  const unread = state?.mail.filter(item => !item.seen) ?? []
+
+  return (
+    <div className={CARD}>
+      <div className="flex items-baseline">
+        <span className={CARD_TITLE}>{s.inbox}</span>
+        {state?.connected ? (
+          <span className={`ml-auto ${MUTED}`}>{s.mailRecentUnread(unread.length)}</span>
+        ) : state?.connected === false ? (
+          <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openMailView}>
+            {s.connect}
+          </button>
+        ) : null}
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {inbox.isError ? (
+          <div className="text-xs text-destructive" role="alert">
+            {s.mailLoadFailed} <button onClick={() => void inbox.refetch()}>{s.retryNow}</button>
+          </div>
+        ) : !state ? (
+          <span className={MUTED}>{s.loading}</span>
+        ) : state.connected ? (
+          <>
+            {state.mail.slice(0, 3).map(item => (
+              <button className="flex flex-col gap-0.5 text-left" key={item.id} onClick={openMailView}>
+                <span className="truncate text-[13px]">{item.subject || s.noSubject}</span>
+                <span className={MUTED}>{item.fromName || item.fromAddr || '—'}</span>
+              </button>
+            ))}
+            {!state.mail.length && <span className={MUTED}>{s.inboxEmpty}</span>}
+          </>
+        ) : (
+          <span className={MUTED}>{s.connectMailHint}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The note workspace, with live mail and automation summaries. */
+export function HomeView() {
+  const s = productStrings(useStore($productLocale))
+  const notes = useStore($vaultNotes)
+  const info = useStore($vaultInfo)
+  const todos = useStore($vaultTodos)
+  const [aiConnected, setAiConnected] = useState(false)
+
+  initTodosStore()
+
+  useEffect(() => {
+    const check = () => setAiConnected(activeGateway()?.connectionState === 'open')
+
+    check()
+
+    const timer = setInterval(check, 5_000)
+
+    return () => clearInterval(timer)
+  }, [])
+
+  const open = todos.filter(todo => !todo.done)
+
+  // Templates are source, not pages — and their unsubstituted "{{title}}"
+  // heading is what the indexer reads as a title.
+  const recent = [...notes]
+    .filter(note => !isTemplateNote(note.path))
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, 3)
+
+  const hasDaily = notes.some(note => note.path === `Daily/${todayStamp()}.md`)
+
+  const dateLabel = new Date().toLocaleDateString(useStore($productLocale) === 'ko' ? 'ko-KR' : 'en-AU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+  })
+
+  // What to lead with. Counting pages told the user nothing they wanted to
+  // know — see briefing.ts. This leads with the most urgent true thing, and
+  // says plainly when there is nothing pressing.
+  const locale = useStore($productLocale)
+
+  const briefing = useMemo(
+    () =>
+      buildBriefing(
+        {
+          today: todayStamp(),
+          tasks: todos.map(todo => ({
+            label: taskLabel(todo.text),
+            due: dueOf(todo.text) ?? undefined,
+            done: todo.done
+          })),
+          hasDaily,
+          // Today's daily note is not "where you left off" — it is where the
+          // app just put you, and naming it back reads as a non-sequitur.
+          lastEdited: recent.find(note => !note.path.startsWith('Daily/'))?.title,
+          pageCount: notes.length
+        },
+        locale === 'ko'
+      ),
+    [todos, hasDaily, recent, notes.length, locale]
+  )
+
+  const openNoteFromHome = (path: string) => {
+    closeTableView()
+    void openNote(path)
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
+      {/* Header row: Home · date · AI pill (design: 52px topbar content). */}
+      <div className="flex shrink-0 items-center gap-3.5 px-6 pt-4 pb-2">
+        <span className="text-[13px] font-semibold">{s.home}</span>
+        <span className="text-[13px] opacity-50">{dateLabel}</span>
+        <span className="ml-auto flex h-[26px] items-center gap-1.5 rounded-lg border border-(--stroke-nous) bg-(--dt-card) px-2.5 text-xs">
+          <span
+            className="size-1.5 rounded-full"
+            style={{ backgroundColor: aiConnected ? 'var(--sem-good)' : 'var(--ui-stroke-secondary)' }}
+          />
+          {aiConnected ? 'AI connected' : 'AI connecting…'}
+        </span>
+      </div>
+
+      <div className="mx-auto flex w-full max-w-[62rem] flex-col gap-6 px-10 pb-20 pt-6">
+        {/* Morning briefing. This used to sit inside a rainbow conic-gradient
+            border under a blue glow — the single loudest thing in the app, and
+            the reason the whole screen read as generated. The numbers were
+            always the point; a hairline is enough to hold them. */}
+        <div style={{ animation: 'daat-lift 200ms ease-out both' }}>
+          <div className="flex flex-col gap-4 rounded-xs border border-(--stroke-nous) bg-(--dt-card) px-8 py-7">
+            <div className="flex items-center gap-2">
+              <Sparkle />
+              <span className="text-xs font-medium uppercase tracking-[0.09em] opacity-45">Briefing</span>
+              <span className={MUTED}>{info?.name ?? 'vault'}</span>
+            </div>
+            <p className="m-0 max-w-[46rem] font-(--dt-font-serif) text-[21px] leading-snug tracking-[-0.01em]">
+              {briefingParts(briefing.text).map((part, index) =>
+                part.strong ? (
+                  <strong className="font-semibold" key={index}>
+                    {part.text}
+                  </strong>
+                ) : (
+                  <span key={index}>{part.text}</span>
+                )
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                className="flex h-[30px] items-center rounded-xs bg-(--dt-primary) px-4 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-85"
+                onClick={() => void openDailyNote()}
+              >
+                {hasDaily ? s.openTodaysPlan : s.startTodaysPlan}
+              </button>
+              <span className="ml-auto text-xs opacity-50">Ask a follow-up ⌘J</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Widget grid. */}
+        <div className="grid grid-cols-3 gap-4" style={{ animation: 'daat-lift 200ms ease-out 30ms both' }}>
+          {/* Todo — real, checkboxes work. */}
+          <div className={CARD}>
+            <div className="flex items-baseline">
+              <span className={CARD_TITLE}>{s.todo}</span>
+              <span className={`ml-auto ${MUTED}`}>{s.openCount(open.length)}</span>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {todos.slice(0, 5).map(todo => (
+                <button
+                  className="group flex items-center gap-2 text-left"
+                  key={`${todo.path}:${todo.line}`}
+                  onClick={() => void toggleTodo(todo)}
+                  title={todo.path}
+                >
+                  <span
+                    className="grid size-[15px] shrink-0 place-items-center rounded-[5px] border-[1.5px] transition-colors"
+                    style={
+                      todo.done
+                        ? { backgroundColor: 'var(--dt-primary)', borderColor: 'var(--dt-primary)' }
+                        : { borderColor: 'var(--ui-stroke-secondary)' }
+                    }
+                  >
+                    {todo.done ? (
+                      <svg
+                        fill="none"
+                        height="9"
+                        stroke="#fff"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        viewBox="0 0 12 12"
+                        width="9"
+                      >
+                        <path d="M2.5 6.3 4.8 8.6 9.5 3.6" />
+                      </svg>
+                    ) : null}
+                  </span>
+                  <span className={`truncate text-[13px] ${todo.done ? 'line-through opacity-45' : ''}`}>
+                    {todo.text}
+                  </span>
+                </button>
+              ))}
+              {!todos.length && <span className={MUTED}>{s.noTasksYet}</span>}
+            </div>
+          </div>
+
+          {/* Recent notes — real. */}
+          <div className={CARD}>
+            <div className="flex items-baseline">
+              <span className={CARD_TITLE}>{s.recentNotes}</span>
+              {recent.length ? (
+                <button
+                  className="ml-auto text-xs text-(--dt-primary) hover:opacity-70"
+                  onClick={() => openNoteFromHome(recent[0].path)}
+                >
+                  {s.openLatest}
+                </button>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-3">
+              {recent.map(note => (
+                <button
+                  className="flex flex-col gap-0.5 text-left"
+                  key={note.path}
+                  onClick={() => openNoteFromHome(note.path)}
+                >
+                  <span className="truncate text-[13px] font-medium">{note.title}</span>
+                  <span className={MUTED}>Edited {editedAgo(note.mtimeMs)}</span>
+                </button>
+              ))}
+              {!recent.length && <span className={MUTED}>{s.noNotesYet}</span>}
+            </div>
+          </div>
+
+          {/* Today — daily note state. */}
+          <div className={CARD}>
+            <div className="flex items-baseline">
+              <span className={CARD_TITLE}>{s.today}</span>
+              <span className={`ml-auto ${MUTED}`}>{todayStamp()}</span>
+            </div>
+            {hasDaily ? (
+              <button className="flex flex-col gap-1 text-left" onClick={() => void openDailyNote()}>
+                <span className="text-[13px] font-medium text-(--dt-primary)">{s.openTodaysNote}</span>
+                <span className={MUTED}>Your plan, tasks and log for the day.</span>
+              </button>
+            ) : (
+              <button className="flex flex-col gap-1 text-left" onClick={() => void openDailyNote()}>
+                <span className="text-[13px] font-medium">{s.startTodaysNote}</span>
+                <span className={MUTED}>⌘D any time — the Daily template fills it in.</span>
+              </button>
+            )}
+          </div>
+
+          {/* Persona-specific cards first: for a student, today's classes and
+              what's due beat a generic "up next". */}
+          <PersonaWidgets />
+          <UpNextCard />
+          <InboxCard />
+          <AutomationCard />
+
+          <div className={CARD}>
+            <div className="flex items-baseline">
+              <span className={CARD_TITLE}>{s.meetings}</span>
+              <button className="ml-auto text-xs text-(--dt-primary) hover:opacity-70" onClick={openMeetingsView}>
+                {s.startRecording}
+              </button>
+            </div>
+            <span className={MUTED}>{s.meetingsHint}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
