@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Headless probe of the module screens (Todo, Calendar, Money, Mail).
+ * Headless probe of the module screens (Todo, Calendar, AUTOMATION, Mail).
  *
  * Each one is a lens over real vault files, so the check that matters is
  * whether data the user actually wrote shows up on the right screen — not
@@ -155,9 +155,9 @@ await page.locator('button[title="Previous month"]').first().click()
 await page.waitForTimeout(600)
 check('paging months keeps the grid alive', await bodyHas('Sun'))
 
-console.log('--- Money ---')
-await openModule('Money')
-check('the import zone explains itself', await bodyHas('Drop a bank statement here'))
+console.log('--- AUTOMATION ---')
+await openModule('AUTOMATION')
+check('automation manager opens', await page.locator('[data-automation-page]').count() === 1)
 
 console.log('--- Mail ---')
 await openModule('Mail')

@@ -12,7 +12,8 @@ import { atom } from 'nanostores'
 import { getHermesConfigRecord, saveHermesConfig, updateProfileSoul } from '@/hermes'
 
 import { refreshVaultNotes } from '../vault/store'
-import { PERSONAS, personaById, type Persona, type PersonaId } from './personas'
+
+import { type Persona, personaById, type PersonaId, PERSONAS } from './personas'
 
 const PERSONA_KEY = 'daat.persona.v1'
 const DONE_KEY = 'daat.onboarded.v1'
@@ -67,7 +68,9 @@ async function applyToolsets(wanted: string[]): Promise<void> {
     return
   }
 
-  await saveHermesConfig({ ...config, toolsets: merged })
+  const result = await saveHermesConfig({ ...config, toolsets: merged })
+
+  if (!result.ok) {throw new Error('Could not save assistant tools.')}
 }
 
 /**
@@ -139,83 +142,82 @@ export async function ensureDaatPlugins(): Promise<void> {
     return
   }
 
-  await saveHermesConfig({
+  const result = await saveHermesConfig({
     ...config,
     memory: wantsMemory ? { ...memory, provider: 'vault' } : memory,
     plugins: { ...plugins, enabled: merged },
     toolsets: mergedToolsets
   })
+
+  if (!result.ok) {throw new Error('Could not enable the notes assistant.')}
 }
 
 export interface ApplyPersonaResult {
   notesCreated: number
-  /** Set when the assistant's voice couldn't be written (backend still booting). */
   soulError: string | null
+  errors: string[]
 }
 
 export async function applyPersona(id: PersonaId): Promise<ApplyPersonaResult> {
   const persona = personaById(id)
 
-  if (!persona) {
-    return { notesCreated: 0, soulError: null }
-  }
-
+  if (!persona) {return { notesCreated: 0, soulError: null, errors: [] }}
   $persona.set(persona)
   persist(PERSONA_KEY, persona.id)
-
+  const errors: string[] = []
   let soulError: string | null = null
+  let notesCreated = 0
+  const detail = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-  // Before the soul write, so a backend that is still booting fails the
-  // cosmetic step rather than the one the vault depends on.
   try {
     await ensureDaatPlugins()
-  } catch {
-    // Retried on next launch by the boot path in notes-shell.
+  } catch (error) {
+    errors.push(detail(error))
   }
 
   try {
-    // "default" is HERMES_HOME itself, so this writes ~/.daat/SOUL.md.
-    await updateProfileSoul('default', persona.soul)
+    const result = await updateProfileSoul('default', persona.soul)
+
+    if (!result.ok) {throw new Error('Could not save assistant preferences.')}
   } catch (error) {
-    // The Python backend may still be starting on first run. The persona is
-    // remembered either way; Settings can re-apply it.
-    soulError = error instanceof Error ? error.message : String(error)
+    soulError = detail(error)
+    errors.push(soulError)
   }
 
   try {
     await applyToolsets(persona.toolsets)
-  } catch {
-    // Same story — the vault tools work regardless, and Settings → Toolsets
-    // is the place this can be corrected by hand.
+  } catch (error) {
+    errors.push(detail(error))
   }
 
-  let notesCreated = 0
+  try {
+    const vault = window.hermesDesktop.vault
+    const root = (await vault.info()).root
 
-  for (const [relPath, content] of Object.entries(persona.starters)) {
-    try {
-      const existing = await window.hermesDesktop.vault.read(relPath).catch(() => null)
+    if (!root) {throw new Error('Choose a notes folder first.')}
 
-      // Never overwrite something the user already has under that name.
-      // `dataless` matters: an iCloud-evicted file reads back as empty rather
-      // than failing, so without this a second Mac would replace the user's
-      // customised template with the starter.
-      if (existing && (existing.dataless || existing.content.trim())) {
-        continue
-      }
+    for (const [relPath, content] of Object.entries(persona.starters)) {
+      try {
+        // Exclusive creation distinguishes an existing blank/cloud file from
+        // a new starter without a read-then-overwrite race.
+        const created = await vault.createNote(relPath, root)
 
-      const result = await window.hermesDesktop.vault.write(relPath, content, null)
+        if (!created.created) {continue}
+        const result = await vault.write(relPath, content, created.mtimeMs, created.content, root)
 
-      if (result.ok) {
+        if (!result.ok) {throw new Error('Could not save this starter note.')}
         notesCreated += 1
+      } catch (error) {
+        errors.push(`${relPath}: ${detail(error)}`)
       }
-    } catch {
-      // One starter failing must not abort the rest of setup.
     }
+
+    await refreshVaultNotes()
+  } catch (error) {
+    errors.push(detail(error))
   }
 
-  await refreshVaultNotes()
-
-  return { notesCreated, soulError }
+  return { notesCreated, soulError, errors }
 }
 
 export function finishOnboarding(): void {

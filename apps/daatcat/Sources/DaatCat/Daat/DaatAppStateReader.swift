@@ -16,11 +16,10 @@ enum DaatAppStateReader {
             return URL(fileURLWithPath: (env as NSString).expandingTildeInPath)
         }
         return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".hermes")
+            .appendingPathComponent(".daat")
     }
 
-    static func read(supportDir: URL) -> DaatProgress? {
-        let home = hermesHome
+    static func read(home: URL = hermesHome) -> DaatProgress? {
         guard FileManager.default.fileExists(atPath: home.path) else { return nil }
 
         var p = DaatProgress()

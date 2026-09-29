@@ -52,11 +52,22 @@ export interface VaultEntry {
 }
 
 export interface VaultReadResult {
+  vaultRoot?: string
   path: string
   content: string
   /** mtime observed at read time — hand back to write() for conflict detection. */
   mtimeMs: number
   dataless: boolean
+}
+
+export interface VaultRecoveryEntry {
+  id: string
+  vaultRoot: string
+  path: string
+  content: string
+  baseContent: string
+  mtimeMs: number
+  updatedAt: number
 }
 
 export type VaultWriteResult =

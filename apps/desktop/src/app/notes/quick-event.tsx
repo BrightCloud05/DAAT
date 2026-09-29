@@ -9,20 +9,29 @@
  * note in `Calendar/` with a `date:` property.
  */
 
+import { useStore } from '@nanostores/react'
 import { useEffect, useRef, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 
 import { $vaultRevision } from '../vault/store'
-import { type CalendarEntry, DUE_RE } from './calendar'
+
+import { type CalendarEntry, dateFromValue, DUE_RE, taskLabel } from './calendar'
 import { propertyEdit, readFrontmatter } from './frontmatter'
 import { $productLocale, productStrings } from './strings'
-import { useStore } from '@nanostores/react'
 
 const DATE_KEYS = ['date', 'due', 'when', 'start', 'deadline', 'scheduled']
 
 function vault() {
   return window.hermesDesktop.vault
+}
+
+function requireWrite(result: VaultWriteResult): void {
+  if (result.ok) {return}
+
+  const s = productStrings($productLocale.get())
+
+  throw new Error(result.reason === 'conflict' ? `${s.conflictNotice} (${result.conflictPath})` : s.calendarSaveFailed)
 }
 
 function slugTitle(text: string): string {
@@ -42,23 +51,26 @@ function slugTitle(text: string): string {
  */
 export async function createQuickEvent(title: string, date: string): Promise<void> {
   const clean = slugTitle(title)
+  const root = (await vault().info()).root ?? undefined
   let relPath = `Calendar/${clean}.md`
-  let result = await vault().createNote(relPath)
+  let result = await vault().createNote(relPath, root)
 
   if (!result.created) {
     relPath = `Calendar/${clean} ${date}.md`
-    result = await vault().createNote(relPath)
+    result = await vault().createNote(relPath, root)
 
     if (!result.created) {
       // Same title, same day, twice — give it a unique tail and move on.
-      relPath = `Calendar/${clean} ${Date.now().toString(36)}.md`
-      result = await vault().createNote(relPath)
+      relPath = `Calendar/${clean} ${crypto.randomUUID()}.md`
+      result = await vault().createNote(relPath, root)
     }
   }
 
   const content = `---\ndate: ${date}\n---\n# ${title.trim()}\n`
 
-  await vault().write(relPath, content, result.mtimeMs, result.content)
+  if (!result.created) {throw new Error(productStrings($productLocale.get()).calendarEntryChanged)}
+
+  requireWrite(await vault().write(relPath, content, result.mtimeMs, result.content, root))
 }
 
 /**
@@ -74,10 +86,13 @@ export async function moveEntryToDate(entry: CalendarEntry, date: string): Promi
   }
 
   const file = await vault().read(entry.path)
+  const root = file.vaultRoot
 
   if (entry.kind === 'note') {
     const props = readFrontmatter(file.content)?.props ?? {}
-    const key = DATE_KEYS.find(candidate => props[candidate] !== undefined) ?? 'date'
+    const key = DATE_KEYS.find(candidate => dateFromValue(props[candidate]) === entry.date)
+
+    if (!key) {return false}
     const edit = propertyEdit(file.content, key, date)
 
     if (!edit) {
@@ -86,37 +101,29 @@ export async function moveEntryToDate(entry: CalendarEntry, date: string): Promi
 
     const next = file.content.slice(0, edit.from) + edit.insert + file.content.slice(edit.to)
 
-    await vault().write(entry.path, next, file.mtimeMs, file.content)
+    requireWrite(await vault().write(entry.path, next, file.mtimeMs, file.content, root))
 
     return true
   }
 
-  // Task: same 1-based line convention as toggleTodo, with the same outward
-  // search when the file shifted underneath us.
+  // A row number is a hint, never an identity. Another editor can insert a
+  // different dated task there. Only a unique text + original-date match is
+  // safe; duplicate tasks need a refresh instead of a guess.
   const lines = file.content.split('\n')
-  const lineIndex = (entry.line ?? 1) - 1
-  const hasMarker = (value: string | undefined) => value !== undefined && DUE_RE.test(value)
 
-  let target = hasMarker(lines[lineIndex]) ? lineIndex : -1
+  const candidates = lines.flatMap((line, index) => {
+    const task = /^\s*[-*+]\s+\[[ xX]\]\s+(.*)$/.exec(line)?.[1]
 
-  for (let offset = 1; target === -1 && offset < lines.length; offset++) {
-    for (const candidate of [lineIndex - offset, lineIndex + offset]) {
-      if (candidate >= 0 && candidate < lines.length && hasMarker(lines[candidate]) && lines[candidate].includes(entry.label)) {
-        target = candidate
-        break
-      }
-    }
-  }
+    return task && DUE_RE.exec(task)?.[1] === entry.date && taskLabel(task) === entry.label ? [index] : []
+  })
 
-  if (target === -1) {
-    return false
-  }
+  if (candidates.length !== 1) {return false}
 
-  lines[target] = lines[target].replace(DUE_RE, match =>
-    match.replace(/\d{4}-\d{2}-\d{2}/, date)
-  )
+  const target = candidates[0]
 
-  await vault().write(entry.path, lines.join('\n'), file.mtimeMs, file.content)
+  lines[target] = lines[target].replace(DUE_RE, match => match.replace(/\d{4}-\d{2}-\d{2}/, date))
+
+  requireWrite(await vault().write(entry.path, lines.join('\n'), file.mtimeMs, file.content, root))
 
   return true
 }
@@ -126,6 +133,7 @@ export function QuickAddRow({ date }: { date: string }) {
   const s = productStrings(useStore($productLocale))
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const submit = async () => {
     const value = title.trim()
@@ -135,29 +143,39 @@ export function QuickAddRow({ date }: { date: string }) {
     }
 
     setBusy(true)
+    setError(null)
 
     try {
       await createQuickEvent(value, date)
       setTitle('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : s.calendarSaveFailed)
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div className="flex items-center gap-2 border-b border-(--stroke-nous) py-1.5">
+    <div className="flex flex-wrap items-center gap-2 border-b border-(--stroke-nous) py-1.5">
       <Codicon className="shrink-0 text-[13px] opacity-45" name="add" />
       <input
+        aria-label={s.quickAddPlaceholder}
         className="w-full min-w-0 bg-transparent text-[13px] outline-none placeholder:opacity-45"
-        placeholder={s.quickAddPlaceholder}
-        value={title}
+        disabled={busy}
         onChange={event => setTitle(event.target.value)}
         onKeyDown={event => {
-          if (event.key === 'Enter') {
+          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
             void submit()
           }
         }}
+        placeholder={s.quickAddPlaceholder}
+        value={title}
       />
+      {error ? (
+        <p className="w-full text-xs text-(--dt-destructive)" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -166,6 +184,7 @@ export function QuickAddRow({ date }: { date: string }) {
 export function EntryDateButton({ entry }: { entry: CalendarEntry }) {
   const s = productStrings(useStore($productLocale))
   const inputRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState<string | null>(null)
 
   if (entry.kind === 'daily') {
     return null
@@ -174,7 +193,8 @@ export function EntryDateButton({ entry }: { entry: CalendarEntry }) {
   return (
     <span className="relative grid size-[20px] shrink-0 place-items-center">
       <button
-        className="grid size-[20px] place-items-center rounded-sm opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) group-hover:opacity-60 hover:opacity-100!"
+        aria-label={s.changeDate}
+        className="grid size-[20px] place-items-center rounded-sm opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) group-hover:opacity-60 focus-visible:opacity-100 hover:opacity-100!"
         onClick={() => inputRef.current?.showPicker()}
         title={s.changeDate}
       >
@@ -182,17 +202,31 @@ export function EntryDateButton({ entry }: { entry: CalendarEntry }) {
       </button>
       {/* Invisible native input: showPicker() anchors the OS date picker here. */}
       <input
+        aria-label={s.calendarDateLabel}
         className="pointer-events-none absolute inset-0 opacity-0"
+        onChange={event => {
+          if (event.target.value) {
+            setError(null)
+            void moveEntryToDate(entry, event.target.value)
+              .then(changed => {
+                if (!changed) {setError(s.calendarEntryChanged)}
+              })
+              .catch(cause => setError(cause instanceof Error ? cause.message : s.calendarSaveFailed))
+          }
+        }}
         ref={inputRef}
         tabIndex={-1}
         type="date"
         value={entry.date}
-        onChange={event => {
-          if (event.target.value) {
-            void moveEntryToDate(entry, event.target.value)
-          }
-        }}
       />
+      {error ? (
+        <span
+          className="absolute right-0 top-full z-10 w-64 rounded-md bg-(--ui-bg-editor) p-2 text-xs text-(--dt-destructive) shadow"
+          role="alert"
+        >
+          {error}
+        </span>
+      ) : null}
     </span>
   )
 }
@@ -210,7 +244,7 @@ export function SubscriptionsPanel() {
     void vault()
       .icsSubscriptions()
       .then(setSubscriptions)
-      .catch(() => undefined)
+      .catch(cause => setError(cause instanceof Error ? cause.message : String(cause)))
   }, [revision])
 
   const add = async () => {
@@ -235,10 +269,15 @@ export function SubscriptionsPanel() {
 
   const syncNow = async () => {
     setBusy(true)
+    setError(null)
 
     try {
-      await vault().icsSync()
+      const result = await vault().icsSync()
       setSubscriptions(await vault().icsSubscriptions())
+
+      if (result.errors.length) {setError(result.errors.join('\n'))}
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setBusy(false)
     }
@@ -270,7 +309,13 @@ export function SubscriptionsPanel() {
               void vault()
                 .icsRemove(subscription.id)
                 .then(setSubscriptions)
-                .catch(() => undefined)
+                .catch(async cause => {
+                  setError(cause instanceof Error ? cause.message : String(cause))
+                  await vault()
+                    .icsSubscriptions()
+                    .then(setSubscriptions)
+                    .catch(() => undefined)
+                })
             }}
             title={s.removeSubscription}
           >
@@ -281,15 +326,16 @@ export function SubscriptionsPanel() {
 
       <div className="mt-1 flex items-center gap-2">
         <input
+          aria-label={s.subscribeUrlPlaceholder}
           className="w-full min-w-0 rounded-md border border-(--stroke-nous) bg-transparent px-2 py-1 text-[12.5px] outline-none placeholder:opacity-40"
-          placeholder={s.subscribeUrlPlaceholder}
-          value={url}
           onChange={event => setUrl(event.target.value)}
           onKeyDown={event => {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
               void add()
             }
           }}
+          placeholder={s.subscribeUrlPlaceholder}
+          value={url}
         />
         <button
           className="shrink-0 rounded-md px-2 py-1 text-[12.5px] text-(--dt-primary) transition-opacity hover:opacity-70 disabled:opacity-40"
@@ -300,7 +346,11 @@ export function SubscriptionsPanel() {
         </button>
       </div>
 
-      {error ? <p className="mt-1 text-[11.5px] text-red-500">{error}</p> : null}
+      {error ? (
+        <p className="mt-1 text-[11.5px] text-red-500" role="alert">
+          {error}
+        </p>
+      ) : null}
       <p className="mt-2 text-[11.5px] opacity-50">{s.subscriptionHint}</p>
     </div>
   )

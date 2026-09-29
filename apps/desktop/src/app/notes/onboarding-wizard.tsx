@@ -9,7 +9,7 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
@@ -32,50 +32,102 @@ export function OnboardingWizard() {
   const [step, setStep] = useState<Step>('persona')
   const [chosen, setChosen] = useState<PersonaId | null>(null)
   const [applying, setApplying] = useState(false)
-  const [seeded, setSeeded] = useState(0)
+  const [errors, setErrors] = useState<string[]>([])
+  const dialog = useRef<HTMLDivElement>(null)
+  const applyingRef = useRef(false)
+
+  const dismiss = () => {
+    void endSetup()
+    finishOnboarding()
+  }
 
   // Escape leaves the wizard at any point; a first run you can't skip is a
   // first run that ships with an angry review.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing) {return}
+
       if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        void endSetup()
         finishOnboarding()
+      }
+
+      if (event.key === 'Tab') {
+        const nodes = Array.from(
+          dialog.current?.querySelectorAll<HTMLElement>(
+            'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'
+          ) ?? []
+        )
+
+        const first = nodes[0],
+          last = nodes.at(-1)
+
+        if (event.shiftKey && (document.activeElement === first || !dialog.current?.contains(document.activeElement))) {
+          event.preventDefault()
+          last?.focus()
+        } else if (
+          !event.shiftKey &&
+          (document.activeElement === last || !dialog.current?.contains(document.activeElement))
+        ) {
+          event.preventDefault()
+          first?.focus()
+        }
       }
     }
 
-    window.addEventListener('keydown', onKeyDown)
+    const before = document.activeElement as HTMLElement | null
+    dialog.current?.focus()
+    window.addEventListener('keydown', onKeyDown, true)
 
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true)
+      before?.focus()
+      void endSetup()
+    }
   }, [])
 
   const persona = PERSONAS.find(entry => entry.id === chosen) ?? null
 
   const confirmPersona = async () => {
-    if (!chosen) {
+    if (!chosen || applyingRef.current) {
       return
     }
 
+    applyingRef.current = true
     setApplying(true)
+    setErrors([])
 
-    const result = await applyPersona(chosen)
+    try {
+      const result = await applyPersona(chosen)
+      setErrors(result.errors)
 
-    setSeeded(result.notesCreated)
-    setApplying(false)
-    setStep('setup')
+      if (!result.errors.length) {setStep('setup')}
+    } catch (error) {
+      setErrors([error instanceof Error ? error.message : String(error)])
+    } finally {
+      applyingRef.current = false
+      setApplying(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-(--z-onboarding) flex items-center justify-center bg-(--theme-neutral-chrome) backdrop-blur-xl p-6">
+    <div
+      aria-label={s.onboardingQuestion}
+      aria-modal="true"
+      className="fixed inset-0 z-(--z-onboarding) flex items-center justify-center bg-(--theme-neutral-chrome) backdrop-blur-xl p-6"
+      ref={dialog}
+      role="dialog"
+      tabIndex={-1}
+    >
       <div
         className="flex w-full max-w-[46rem] flex-col"
         style={{ animation: 'daat-lift 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both' }}
       >
         {step === 'persona' && (
           <>
-            <Heading
-              subtitle={s.onboardingSubtitle}
-              title={s.onboardingQuestion}
-            />
+            <Heading subtitle={s.onboardingSubtitle} title={s.onboardingQuestion} />
 
             <div className="grid grid-cols-3 gap-3">
               {PERSONAS.map(entry => {
@@ -83,6 +135,7 @@ export function OnboardingWizard() {
 
                 return (
                   <button
+                    aria-pressed={selected}
                     className={cn(
                       'flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition-all duration-150',
                       'hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgba(0,0,0,0.35)]',
@@ -92,7 +145,10 @@ export function OnboardingWizard() {
                     )}
                     key={entry.id}
                     onClick={() => setChosen(entry.id)}
-                    onDoubleClick={() => void confirmPersona()}
+                    onDoubleClick={() => {
+                      setChosen(entry.id)
+                      setStep('place')
+                    }}
                   >
                     <span className="text-[22px] leading-none">{entry.emoji}</span>
                     <span className="mt-1 text-[13.5px] font-semibold">
@@ -107,7 +163,7 @@ export function OnboardingWizard() {
             </div>
 
             <Actions
-              onSkip={finishOnboarding}
+              onSkip={dismiss}
               primary={{
                 label: s.continue,
                 disabled: !chosen,
@@ -119,10 +175,7 @@ export function OnboardingWizard() {
 
         {step === 'place' && (
           <>
-            <Heading
-              subtitle={s.notesLiveHereSubtitle}
-              title={s.notesLiveHere}
-            />
+            <Heading subtitle={s.notesLiveHereSubtitle} title={s.notesLiveHere} />
 
             <div className="rounded-xl border border-(--stroke-nous) p-4">
               <div className="flex items-center gap-2.5">
@@ -132,27 +185,37 @@ export function OnboardingWizard() {
                 />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13.5px] font-medium">{info?.root ?? s.noFolderYet}</div>
-                  <div className="text-[12px] opacity-55">
-                    {info?.location === 'icloud'
-                      ? s.inICloud
-                      : s.onThisMac}
-                  </div>
+                  <div className="text-[12px] opacity-55">{info?.location === 'icloud' ? s.inICloud : s.onThisMac}</div>
                 </div>
                 <button
                   className="shrink-0 rounded-lg px-2.5 py-1.5 text-[12.5px] transition-colors hover:bg-(--ui-control-hover-background)"
-                  onClick={() => void chooseVault()}
+                  disabled={applying}
+                  onClick={() => void chooseVault().catch(error => setErrors([String(error)]))}
                 >
                   {s.chooseAnother}
                 </button>
               </div>
             </div>
 
+            {errors.length ? (
+              <div className="mt-3 text-sm" role="alert">
+                <p>{s.setupPartialFailure}</p>
+                <ul className="list-disc pl-5">
+                  {errors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+                <button className="mt-2 underline" disabled={applying} onClick={() => setStep('setup')}>
+                  {s.setupContinue}
+                </button>
+              </div>
+            ) : null}
             <Actions
-              onBack={() => setStep('persona')}
-              onSkip={finishOnboarding}
+              onBack={applying ? undefined : () => setStep('persona')}
+              onSkip={dismiss}
               primary={{
                 label: applying ? s.settingUp : s.setUpMyPages,
-                disabled: applying,
+                disabled: applying || !info?.root,
                 onClick: () => void confirmPersona()
               }}
             />

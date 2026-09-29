@@ -1,5 +1,6 @@
 import type { GatewayWsUrlResult } from '@hermes/shared'
 
+import type { CatSettings, CatStatus } from './lib/cat-types'
 import type {
   PetOverlayBounds,
   PetOverlayControl,
@@ -44,7 +45,17 @@ declare global {
     kind: 'dir' | 'note' | 'file'
     dataless: boolean
   }
+  interface VaultRecoveryEntry {
+    id: string
+    vaultRoot: string
+    path: string
+    content: string
+    baseContent: string
+    mtimeMs: number
+    updatedAt: number
+  }
   interface VaultReadResult {
+    vaultRoot?: string
     path: string
     content: string
     mtimeMs: number
@@ -88,6 +99,14 @@ declare global {
 
   interface Window {
     hermesDesktop: {
+      onBeforeClose(handler: () => Promise<void>): () => void
+      cat: {
+        getSettings(): Promise<CatSettings>
+        setSettings(patch: Partial<CatSettings>): Promise<CatSettings>
+        getStatus(): Promise<CatStatus>
+        start(): Promise<void>
+        stop(): Promise<void>
+      }
       appNotices: () => Promise<{ license: string; thirdParty: string }>
       mail: {
         status: () => Promise<{ installed: boolean; accounts: Array<{ name: string; default: boolean }> }>
@@ -118,23 +137,28 @@ declare global {
         defaults: () => Promise<{ icloud: string | null; local: string }>
         create: (baseDir?: string) => Promise<VaultInfo>
         choose: () => Promise<VaultInfo | null>
+        selectFolder(): Promise<string | null>
+        saveRecovery(entry: VaultRecoveryEntry): Promise<void>
+        listRecovery(vaultRoot: string): Promise<VaultRecoveryEntry[]>
+        removeRecovery(id: string): Promise<void>
         open: (root: string) => Promise<VaultInfo>
         reindex: () => Promise<void>
         list: () => Promise<VaultNote[]>
         listDir: (subdir?: string) => Promise<VaultEntry[]>
-        read: (relPath: string) => Promise<VaultReadResult>
+        read: (relPath: string, expectedRoot?: string) => Promise<VaultReadResult>
         write: (
           relPath: string,
           content: string,
           expectedMtimeMs: number | null,
-          expectedContent?: string
+          expectedContent?: string,
+          expectedRoot?: string
         ) => Promise<VaultWriteResult>
-        createNote: (relPath: string) => Promise<VaultReadResult & { created: boolean }>
-        createDir: (relPath: string) => Promise<void>
-        appendBinary: (relPath: string, data: Uint8Array) => Promise<{ path: string; bytes: number }>
-        writeBinary: (relPath: string, data: Uint8Array) => Promise<{ path: string; bytes: number }>
-        rename: (fromRel: string, toRel: string) => Promise<void>
-        trash: (relPath: string) => Promise<void>
+        createNote: (relPath: string, expectedRoot?: string) => Promise<VaultReadResult & { created: boolean }>
+        createDir: (relPath: string, expectedRoot?: string) => Promise<void>
+        appendBinary: (relPath: string, data: Uint8Array, expectedRoot?: string) => Promise<{ path: string; bytes: number }>
+        writeBinary: (relPath: string, data: Uint8Array, expectedRoot?: string) => Promise<{ path: string; bytes: number }>
+        rename: (fromRel: string, toRel: string, expectedRoot?: string) => Promise<void>
+        trash: (relPath: string, expectedRoot?: string) => Promise<void>
         search: (query: string) => Promise<VaultSearchHit[]>
         backlinks: (relPath: string) => Promise<VaultLink[]>
         linksFrom: (relPath: string) => Promise<VaultLink[]>
@@ -147,7 +171,7 @@ declare global {
       }>
         todos: (limit?: number) => Promise<Array<{ path: string; line: number; text: string; done: boolean }>>
         reportContext: (payload: { activeNote: string | null; selection: string }) => void
-        toggleTodo: (relPath: string, line: number, text?: string) => Promise<boolean>
+        toggleTodo: (relPath: string, line: number, text?: string, expectedRoot?: string) => Promise<boolean>
         icsSubscriptions: () => Promise<IcsSubscription[]>
         icsAdd: (url: string, name?: string) => Promise<IcsSubscription[]>
         icsRemove: (id: string) => Promise<IcsSubscription[]>

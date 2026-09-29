@@ -38,7 +38,8 @@ import fsp from 'node:fs/promises'
 import https from 'node:https'
 import path from 'node:path'
 
-import { bundleFingerprint, refreshAgentSource, writeStamp } from './agent-source'
+import { refreshBundledRuntime } from './agent-runtime-update'
+import { bundleFingerprint, writeStamp } from './agent-source'
 import { hiddenWindowsChildOptions } from './windows-child-options'
 
 const IS_WINDOWS = process.platform === 'win32'
@@ -1006,7 +1007,7 @@ async function runBootstrap(opts) {
         const bundle = bundledAgentSource(appRoot)
 
         if (bundle) {
-          const outcome = refreshAgentSource(seedRoot || activeRoot, bundle)
+          const outcome = await refreshBundledRuntime(seedRoot || activeRoot, bundle, hermesHome, line => emit({ type: 'log', line }))
 
           if (outcome.action === 'updated') {
             emit?.(
@@ -1015,10 +1016,13 @@ async function runBootstrap(opts) {
             )
           } else if (outcome.action === 'declined') {
             emit?.(`[bootstrap] left the existing source alone (${outcome.why}): ${outcome.detail}`)
+          } else if (outcome.action === 'unavailable' && outcome.why === 'another agent update is in progress') {
+            throw new Error('Another Daat window is updating the agent. Retry after it finishes.')
           }
         }
       } catch (refreshErr) {
-        emit?.(`[bootstrap] source refresh skipped: ${refreshErr.message}`)
+        emit?.(`[bootstrap] source refresh could not safely finish: ${refreshErr.message}`)
+        throw refreshErr
       }
     }
 

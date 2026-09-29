@@ -10,7 +10,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { foldGutter, foldKeymap } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
-import { Compartment, EditorState } from '@codemirror/state'
+import { Compartment, EditorState, Facet } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -72,6 +72,9 @@ async function openWikilink(target: string): Promise<void> {
  * constant so the heading can never sit wider than the text it titles.
  */
 const MEASURE = '38rem'
+// Identity belongs to the document actually mounted in CodeMirror, which can
+// differ from the selected note while React is applying a switch.
+const editorNotePath = Facet.define<string, string | null>({ combine: values => values[0] ?? null })
 
 const editorTheme = EditorView.theme({
   '&': {
@@ -175,7 +178,6 @@ export function VaultEditorPane() {
   // Notes other than this one still holding text that never reached disk.
   const elsewhere = useStore($vaultRescued).filter(path => path !== active?.path)
   const viewRef = useRef<EditorView | null>(null)
-  const pathRef = useRef<string | null>(null)
   const [hostReady, setHostReady] = useState(0)
 
   const locked = Boolean(active?.dataless)
@@ -199,7 +201,6 @@ export function VaultEditorPane() {
       setEditorView(null)
       viewRef.current?.destroy()
       viewRef.current = null
-      pathRef.current = null
 
       return
     }
@@ -222,7 +223,7 @@ export function VaultEditorPane() {
       return
     }
 
-    const isNewNote = pathRef.current !== active.path
+    const isNewNote = view.state.facet(editorNotePath) !== active.path
     const currentDoc = view.state.doc.toString()
 
     // External refresh of the same note only applies when it truly differs
@@ -230,8 +231,6 @@ export function VaultEditorPane() {
     if (!isNewNote && currentDoc === active.content) {
       return
     }
-
-    pathRef.current = active.path
 
     // Same note, new text from disk: patch the document instead of replacing
     // the state. setState() destroys every plugin, drops undo history and
@@ -272,6 +271,7 @@ export function VaultEditorPane() {
         // metadata instead of their writing.
         selection: { anchor: bodyStart(doc) },
         extensions: [
+          editorNotePath.of(active.path),
           // Seeded with the note's current state, not a default: setState
           // rebuilds the compartment, so a note opened while still evicted
           // would come up editable if this started at false.
@@ -307,7 +307,7 @@ export function VaultEditorPane() {
               const { from, to } = update.state.selection.main
 
               window.hermesDesktop.vault.reportContext({
-                activeNote: pathRef.current,
+                activeNote: update.state.facet(editorNotePath),
                 selection: from === to ? '' : update.state.doc.sliceString(from, to)
               })
             }
@@ -331,7 +331,7 @@ export function VaultEditorPane() {
     if (held !== undefined && held !== active.content) {
       noteEdited(held)
     }
-  }, [active, hostReady])
+  }, [active, hostReady, s.startWriting])
 
   if (!active) {
     return (
@@ -344,6 +344,14 @@ export function VaultEditorPane() {
         <div className="w-full max-w-[24rem]">
           <p className="m-0 font-(--dt-font-serif) text-[22px] leading-snug">{s.emptyEditorTitle}</p>
           <p className="mt-2 mb-0 text-[13.5px] leading-relaxed opacity-55">{s.emptyEditorBody}</p>
+          {elsewhere.length ? (
+            <div className="mt-4 rounded-xs bg-(--sem-late-wash) p-3 text-sm">
+              <p>{s.unsavedElsewhere(elsewhere.length)}</p>
+              <button className="underline" onClick={() => void openNote(elsewhere[0])}>
+                {s.openUnsaved}
+              </button>
+            </div>
+          ) : null}
           <div className="mt-5 flex flex-wrap gap-2">
             <button
               className="rounded-xs bg-(--dt-primary) px-3.5 py-1.5 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-85"
@@ -439,10 +447,7 @@ export function VaultEditorPane() {
           <div className="flex items-center gap-2 border-b border-(--stroke-nous) bg-(--sem-late-wash) px-4 py-1.5 text-xs">
             <Codicon name="warning" />
             <span className="min-w-0 flex-1 truncate">{s.unsavedElsewhere(elsewhere.length)}</span>
-            <button
-              className="underline opacity-80 hover:opacity-100"
-              onClick={() => void openNote(elsewhere[0])}
-            >
+            <button className="underline opacity-80 hover:opacity-100" onClick={() => void openNote(elsewhere[0])}>
               {s.openUnsaved}
             </button>
           </div>

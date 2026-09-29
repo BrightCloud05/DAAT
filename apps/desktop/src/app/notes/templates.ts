@@ -8,7 +8,7 @@
 import type { EditorView } from '@codemirror/view'
 
 import { $editorView } from '../vault/editor-bridge'
-import { $activeNote, createNote, refreshVaultNotes } from '../vault/store'
+import { $activeNote, $vaultInfo, createNote, refreshVaultNotes } from '../vault/store'
 
 import { closeTableView } from './view-store'
 
@@ -39,11 +39,11 @@ export function todayStamp(date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
-export function fillTemplate(content: string, title: string): string {
+export function fillTemplate(content: string, title: string, date = todayStamp()): string {
   const now = new Date()
 
   return content
-    .replaceAll('{{date}}', todayStamp(now))
+    .replaceAll('{{date}}', date)
     .replaceAll('{{time}}', `${pad(now.getHours())}:${pad(now.getMinutes())}`)
     .replaceAll('{{title}}', title)
 }
@@ -97,21 +97,23 @@ export async function waitForEditor(timeoutMs = 2000): Promise<EditorView | null
 export async function applyTemplateToActive(
   templatePath: string,
   title: string,
-  expectedPath = $activeNote.get()?.path
+  expectedPath = $activeNote.get()?.path,
+  date = todayStamp()
 ): Promise<void> {
+  const root = $vaultInfo.get()?.root ?? undefined
   const view = await waitForEditor()
 
   if (!view) {
     return
   }
 
-  const template = await vault().read(templatePath)
+  const template = await vault().read(templatePath, root)
 
-  if ($activeNote.get()?.path !== expectedPath) {
+  if ($activeNote.get()?.path !== expectedPath || $vaultInfo.get()?.root !== root || $editorView.get() !== view) {
     return
   }
 
-  const filled = fillTemplate(template.content, title)
+  const filled = fillTemplate(template.content, title, date)
 
   view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: filled } })
   view.focus()

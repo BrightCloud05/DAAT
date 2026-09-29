@@ -36,8 +36,7 @@ function isSessionWindow(): boolean {
   }
 }
 
-const read = (): UiMode =>
-  isSessionWindow() || storedString(KEY) === 'advanced' ? 'advanced' : 'simple'
+const read = (): UiMode => (isSessionWindow() || storedString(KEY) === 'advanced' ? 'advanced' : 'simple')
 
 export const $uiMode = atom<UiMode>(typeof window === 'undefined' ? 'simple' : read())
 
@@ -51,11 +50,12 @@ export function setUiMode(mode: UiMode): void {
     return
   }
 
-  persistString(KEY, mode)
-
   // A hard reload drops whatever the editor hasn't written yet.
   void import('@/app/vault/store')
-    .then(store => store.flushActiveNote())
-    .catch(() => undefined)
-    .finally(() => window.location.reload())
+    .then(store => store.prepareVaultForClose())
+    .then(() => {
+      persistString(KEY, mode)
+      window.location.reload()
+    })
+    .catch(() => undefined) // The store exposes the recovery error; keep the editor open.
 }

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+
 import { test } from 'vitest'
 
 import { coerceScalar, propertyEdit, readFrontmatter } from './frontmatter'
@@ -105,4 +106,26 @@ test('coerceScalar types numbers and booleans', () => {
   assert.equal(coerceScalar('true'), true)
   assert.equal(coerceScalar('hello'), 'hello')
   assert.equal(coerceScalar('2026-07-29'), '2026-07-29')
+})
+
+test('quoted property identities update and remove the existing key without breaking YAML', () => {
+  for (const [raw, key] of [
+    ['"status"', 'status'],
+    ["'a:b'", 'a:b'],
+    ["'can''t'", "can't"],
+    ['"say\\"hi"', 'say"hi']
+  ]) {
+    const doc = `---\n${raw}: draft\nkeep: yes\n---\nbody`
+    const edited = apply(doc, propertyEdit(doc, key, 'done'))
+    assert.deepEqual(readFrontmatter(edited)?.props, { [key]: 'done', keep: 'yes' })
+    assert.deepEqual(readFrontmatter(apply(edited, propertyEdit(edited, key, undefined)))?.props, { keep: 'yes' })
+  }
+})
+
+test('flow and explicit mappings are refused without replacing the document', () => {
+  for (const yaml of ['{status: draft, owner: me}', '? status\n: draft']) {
+    const doc = `---\n${yaml}\n---\nbody`
+    assert.equal(readFrontmatter(doc)?.kind, 'ok')
+    assert.equal(propertyEdit(doc, 'status', 'done'), null)
+  }
 })

@@ -29,6 +29,10 @@ export function stageDaatCat(context) {
   const desktopRoot = path.resolve(import.meta.dirname, '..')
   const daatcatRoot = path.resolve(desktopRoot, '..', 'daatcat')
   const builtApp = path.join(daatcatRoot, 'dist', 'DAAT Cat.app')
+  const arch = typeof context.arch === 'number' ? { 1: 'x64', 3: 'arm64' }[context.arch] : context.arch
+  if (!['arm64', 'x64'].includes(arch)) {
+    throw new Error(`[stage-daatcat] unsupported macOS target architecture: ${context.arch}`)
+  }
 
   if (!existsSync(path.join(daatcatRoot, 'Package.swift'))) {
     console.warn('[stage-daatcat] apps/daatcat not found; Daat ships without the menu bar cat')
@@ -43,7 +47,7 @@ export function stageDaatCat(context) {
   }
 
   try {
-    execFileSync('/bin/zsh', [path.join(daatcatRoot, 'build-app.sh')], {
+    execFileSync('/bin/zsh', [path.join(daatcatRoot, 'build-app.sh'), arch], {
       cwd: daatcatRoot,
       stdio: 'inherit'
     })

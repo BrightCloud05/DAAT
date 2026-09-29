@@ -45,15 +45,16 @@ one-off at the call site.
 
 ## Information architecture
 
-- **Chat is the home surface.** The transcript and composer stay primary; tools,
-  previews, files, review, and terminal complement the conversation.
-- **Pages are durable destinations.** Chat, Skills, Messaging, and Artifacts
-  remain in shell chrome. Do not hide a distinct product noun inside an
+- **Notes are the DAAT home surface.** Home and the Markdown canvas are primary.
+  The assistant opens beside the document; its advanced window retains Hermes chat.
+- **Pages are durable destinations.** Notes, Todo, Calendar, AUTOMATION, Mail,
+  Meetings, Graph, CAT settings and agent tools/skills are directly reachable. Do not hide a distinct product noun inside an
   unrelated page.
-- **Route overlays are short tasks.** Settings, Command Center, Cron, Profiles,
+- **Route overlays are short tasks.** Settings, Command Center, Profiles,
   Agents, and Starmap render as `OverlayView` cards and return to the previous
   route on close. Model/session pickers and dialogs layer above the current
-  surface; they are not navigation stacks.
+  surface; they are not navigation stacks. AUTOMATION uses the shared cron manager
+  as a full DAAT page; the advanced Hermes window may still open it as an overlay.
 - **Panes are working context.** Preview, files, review, and terminal remain
   attached to the current task. Their state survives temporary hiding and chat
   switches where the underlying tool is meant to persist.

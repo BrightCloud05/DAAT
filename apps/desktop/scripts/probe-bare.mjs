@@ -130,7 +130,7 @@ await open('Meetings')
 await explains('Meetings', [['offers the action anyway', /record/i]])
 
 console.log('\n--- the screens that need nothing external ---')
-for (const screen of ['Home', 'Notes', 'Todo', 'Calendar', 'Money', 'Graph']) {
+for (const screen of ['Home', 'Notes', 'Todo', 'Calendar', 'AUTOMATION', 'Graph']) {
   await open(screen)
   await explains(screen, [])
 }

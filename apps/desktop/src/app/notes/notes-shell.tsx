@@ -14,28 +14,25 @@ import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 import { submitAgentPrompt } from '@/store/quick-entry'
 
+import { routeSessionId } from '../routes'
+import { SkillsView } from '../skills'
 import { VaultEditorPane } from '../vault/editor-pane'
 import { $activeNote, $vaultNotes, createNote, newUntitledPath } from '../vault/store'
 
 import { AgentSessions } from './agent-sessions'
+import { AutomationsView } from './automations-view'
 import { CalendarView } from './calendar-view'
+import { CatSettings } from './cat-settings'
 import { GraphView } from './graph-view'
 import { HomeView } from './home-view'
 import { MailView } from './mail-view'
-import { MeetingsView } from './meetings-view'
-import { MoneyView } from './money-view'
+import { MeetingsView, RecordingStatusBar } from './meetings-view'
 import { OnboardingWizard } from './onboarding-wizard'
-import {
-  $agentPanelOpen,
-  $notesSidebarOpen,
-  setAgentPanelOpen,
-  toggleAgentPanel
-} from './panes-store'
+import { $agentPanelOpen, $notesSidebarOpen, setAgentPanelOpen, toggleAgentPanel } from './panes-store'
 import { $onboarded, ensureDaatPlugins } from './persona-store'
-import { $productLocale, productStrings } from './strings'
 import { NotesSidebar } from './sidebar'
+import { $productLocale, productStrings } from './strings'
 import { TableView } from './table-view'
-import { routeSessionId } from '../routes'
 import { openDailyNote } from './templates'
 import { TodoView } from './todo-view'
 import { DocTopbar } from './topbar'
@@ -160,33 +157,30 @@ export function NotesShell() {
       {/* Sidebar: pages + search. Translucent — the Glass material shows. */}
       {sidebarOpen ? (
         <aside className="flex w-60 shrink-0 flex-col border-r border-(--stroke-nous) bg-(--ui-bg-sidebar)">
-        <NotesSidebar />
+          <NotesSidebar />
         </aside>
       ) : null}
 
       {/* Document canvas — the product. */}
       <main className="relative flex min-w-0 flex-1 flex-col bg-(--ui-bg-editor)">
         <DocTopbar agentOpen={agentOpen} onToggleAgent={() => toggleAgentPanel()} />
+        <RecordingStatusBar onAskAgent={askAgent} />
         <div className="min-h-0 flex-1">
-          {canvasView === 'graph' ? (
-            <GraphView />
-          ) : canvasView === 'home' ? (
-            <HomeView />
-          ) : canvasView === 'table' ? (
-            <TableView />
-          ) : canvasView === 'todo' ? (
-            <TodoView />
-          ) : canvasView === 'mail' ? (
-            <MailView onAskAgent={askAgent} />
-          ) : canvasView === 'money' ? (
-            <MoneyView onAskAgent={askAgent} />
-          ) : canvasView === 'calendar' ? (
-            <CalendarView />
-          ) : canvasView === 'meetings' ? (
-            <MeetingsView onAskAgent={askAgent} />
-          ) : (
-            <VaultEditorPane />
-          )}
+          {
+            {
+              graph: <GraphView />,
+              home: <HomeView />,
+              table: <TableView />,
+              todo: <TodoView />,
+              mail: <MailView onAskAgent={askAgent} />,
+              automations: <AutomationsView />,
+              cat: <CatSettings />,
+              capabilities: <SkillsView />,
+              calendar: <CalendarView />,
+              meetings: <MeetingsView onAskAgent={askAgent} />,
+              note: <VaultEditorPane />
+            }[canvasView]
+          }
         </div>
       </main>
 
@@ -203,7 +197,13 @@ export function NotesShell() {
             <div className="flex h-9 shrink-0 items-center gap-2 border-b border-(--stroke-nous) px-3">
               <Codicon className="text-(--dt-primary)" name="sparkle" />
               <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                Agent{active ? ` · ${active.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '')}` : ''}
+                Agent
+                {active
+                  ? ` · ${active.path
+                      .split('/')
+                      .pop()
+                      ?.replace(/\.(md|markdown)$/i, '')}`
+                  : ''}
               </span>
               <AgentSessions />
               {/* Pop the conversation out into its own window.
@@ -211,15 +211,10 @@ export function NotesShell() {
                   empty one: the panel usually holds a thread about the note in
                   front of you, and losing it on the way out is the whole
                   reason people distrust a pop-out button. */}
-              <Button
-                onClick={() => void popOutAgent()}
-                size="icon-xs"
-                title={s.popOutAgent}
-                variant="ghost"
-              >
+              <Button aria-label={s.popOutAgent} onClick={() => void popOutAgent()} size="icon-xs" variant="ghost">
                 <Codicon name="link-external" />
               </Button>
-              <Button onClick={() => setAgentOpen(false)} size="icon-xs" title="Close (⌘J)" variant="ghost">
+              <Button aria-label={s.closeAgent} onClick={() => setAgentOpen(false)} size="icon-xs" variant="ghost">
                 <Codicon name="close" />
               </Button>
             </div>

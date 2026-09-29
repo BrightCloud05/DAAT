@@ -7,14 +7,16 @@
  */
 
 import { useStore } from '@nanostores/react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { Codicon } from '@/components/ui/codicon'
 import { cn } from '@/lib/utils'
 
 import { $docEpoch, $editorView } from '../vault/editor-bridge'
 import { $activeNote } from '../vault/store'
+
 import { coerceScalar, propertyEdit, readFrontmatter } from './frontmatter'
+import { $productLocale, productStrings } from './strings'
 
 /** Frontmatter blocks past this are pathological; don't scan the whole note. */
 const FRONTMATTER_SCAN_CHARS = 8192
@@ -22,12 +24,17 @@ const FRONTMATTER_SCAN_CHARS = 8192
 function iconFor(key: string, value: unknown): string {
   const k = key.toLowerCase()
 
-  if (Array.isArray(value)) return 'tag'
-  if (typeof value === 'boolean') return 'check'
-  if (typeof value === 'number') return 'symbol-number'
-  if (k.includes('date') || k.includes('due') || /^\d{4}-\d{2}-\d{2}/.test(String(value))) return 'calendar'
-  if (k.includes('url') || k.includes('link')) return 'link'
-  if (k.includes('status')) return 'circle-large-outline'
+  if (Array.isArray(value)) {return 'tag'}
+
+  if (typeof value === 'boolean') {return 'check'}
+
+  if (typeof value === 'number') {return 'symbol-number'}
+
+  if (k.includes('date') || k.includes('due') || /^\d{4}-\d{2}-\d{2}/.test(String(value))) {return 'calendar'}
+
+  if (k.includes('url') || k.includes('link')) {return 'link'}
+
+  if (k.includes('status')) {return 'circle-large-outline'}
 
   return 'symbol-text'
 }
@@ -49,17 +56,21 @@ function applyProperty(key: string, value: unknown): void {
 
 function ValueEditor({ propKey, value }: { propKey: string; value: unknown }) {
   const [draft, setDraft] = useState<string | null>(null)
+  const cancelled = useRef(false)
+  const s = productStrings(useStore($productLocale))
 
   if (typeof value === 'boolean') {
     return (
       <button
+        aria-label={propKey}
+        aria-pressed={value}
         className="flex items-center"
         onClick={() => applyProperty(propKey, !value)}
-        title={value ? 'Yes' : 'No'}
+        title={value ? s.yes : s.no}
       >
         <Codicon
-          name={value ? 'pass-filled' : 'circle-large-outline'}
           className={cn('text-[15px]', value ? 'text-(--dt-primary)' : 'opacity-40')}
+          name={value ? 'pass-filled' : 'circle-large-outline'}
         />
       </button>
     )
@@ -77,11 +88,16 @@ function ValueEditor({ propKey, value }: { propKey: string; value: unknown }) {
 
   return (
     <input
+      aria-label={propKey}
       className="w-full min-w-0 rounded-md bg-transparent px-1.5 py-0.5 text-[13px] outline-none transition-colors placeholder:opacity-40 hover:bg-(--ui-control-hover-background) focus:bg-(--ui-control-hover-background)"
-      placeholder="Empty"
-      value={draft ?? display}
-      onChange={event => setDraft(event.target.value)}
       onBlur={() => {
+        if (cancelled.current) {
+          cancelled.current = false
+          setDraft(null)
+
+          return
+        }
+
         if (draft === null || draft === display) {
           setDraft(null)
 
@@ -98,22 +114,32 @@ function ValueEditor({ propKey, value }: { propKey: string; value: unknown }) {
         applyProperty(propKey, next)
         setDraft(null)
       }}
+      onChange={event => setDraft(event.target.value)}
       onKeyDown={event => {
-        if (event.key === 'Enter') {
+        if (event.nativeEvent.isComposing) {return}
+
+        if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
           event.currentTarget.blur()
         }
 
         if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+          cancelled.current = true
           setDraft(null)
           event.currentTarget.blur()
         }
       }}
+      placeholder={s.emptyValue}
+      value={draft ?? display}
     />
   )
 }
 
 export function PropertiesPanel() {
   const active = useStore($activeNote)
+  const s = productStrings(useStore($productLocale))
+  const cancelAdding = useRef(false)
   const view = useStore($editorView)
 
   useStore($docEpoch) // re-derive from the live doc on every edit
@@ -121,7 +147,7 @@ export function PropertiesPanel() {
   // Live document wins over the store's last-saved snapshot. Only the leading
   // YAML block is ever read, so slice the head rather than materializing a
   // whole (possibly multi-megabyte) note on every keystroke.
-  const content = view ? view.state.doc.sliceString(0, FRONTMATTER_SCAN_CHARS) : active?.content ?? ''
+  const content = view ? view.state.doc.sliceString(0, FRONTMATTER_SCAN_CHARS) : (active?.content ?? '')
   const block = active ? readFrontmatter(content) : null
   const [adding, setAdding] = useState(false)
   const [newKey, setNewKey] = useState('')
@@ -141,10 +167,8 @@ export function PropertiesPanel() {
     return (
       <div className="mx-auto w-full max-w-[46rem] px-6">
         <div className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] opacity-60">
-          <Codicon name="warning" className="text-[12px]" />
-          {block.kind === 'invalid'
-            ? "This note's properties aren't valid YAML — edit the block at the top of the note to fix it."
-            : "This note's frontmatter isn't a property list."}
+          <Codicon className="text-[12px]" name="warning" />
+          {block.kind === 'invalid' ? s.invalidYaml : s.notAPropertyList}
         </div>
       </div>
     )
@@ -157,7 +181,7 @@ export function PropertiesPanel() {
           className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] opacity-45 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-80"
           onClick={() => setAdding(true)}
         >
-          <Codicon name="add" className="text-[12px]" /> Add a property
+          <Codicon className="text-[12px]" name="add" /> {s.addProperty}
         </button>
       </div>
     )
@@ -167,20 +191,21 @@ export function PropertiesPanel() {
     <div className="mx-auto w-full max-w-[46rem] px-6 pb-1">
       {expanded &&
         keys.map(key => (
-          <div key={key} className="group flex min-h-[26px] items-center gap-2">
+          <div className="group flex min-h-[26px] items-center gap-2" key={`${active.path}:${key}`}>
             <span className="flex w-36 shrink-0 items-center gap-1.5 text-[13px] opacity-55">
-              <Codicon name={iconFor(key, props[key])} className="text-[13px]" />
+              <Codicon className="text-[13px]" name={iconFor(key, props[key])} />
               <span className="truncate">{key}</span>
             </span>
             <div className="min-w-0 flex-1">
               <ValueEditor propKey={key} value={props[key]} />
             </div>
             <button
-              className="opacity-0 transition-opacity group-hover:opacity-40 hover:!opacity-90"
-              title="Remove property"
+              aria-label={`${s.removeProperty}: ${key}`}
+              className="opacity-0 transition-opacity group-hover:opacity-40 focus-visible:opacity-100 hover:!opacity-90"
               onClick={() => applyProperty(key, undefined)}
+              title={s.removeProperty}
             >
-              <Codicon name="close" className="text-[11px]" />
+              <Codicon className="text-[11px]" name="close" />
             </button>
           </div>
         ))}
@@ -188,12 +213,18 @@ export function PropertiesPanel() {
       {adding ? (
         <div className="flex min-h-[26px] items-center gap-2">
           <input
+            aria-label={s.propertyName}
             autoFocus
             className="w-36 shrink-0 rounded-md bg-(--ui-control-hover-background) px-1.5 py-0.5 text-[13px] outline-none placeholder:opacity-40"
-            placeholder="Property name"
-            value={newKey}
-            onChange={event => setNewKey(event.target.value)}
             onBlur={() => {
+              if (cancelAdding.current) {
+                cancelAdding.current = false
+                setAdding(false)
+                setNewKey('')
+
+                return
+              }
+
               const key = newKey.trim()
 
               if (key && !(key in props)) {
@@ -203,16 +234,24 @@ export function PropertiesPanel() {
               setAdding(false)
               setNewKey('')
             }}
+            onChange={event => setNewKey(event.target.value)}
             onKeyDown={event => {
-              if (event.key === 'Enter') {
+              if (event.nativeEvent.isComposing) {return}
+
+              if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
                 event.currentTarget.blur()
               }
 
               if (event.key === 'Escape') {
+                event.preventDefault()
+                event.stopPropagation()
+                cancelAdding.current = true
                 setNewKey('')
                 setAdding(false)
               }
             }}
+            placeholder={s.propertyName}
+            value={newKey}
           />
         </div>
       ) : (
@@ -221,14 +260,11 @@ export function PropertiesPanel() {
             className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] opacity-40 transition-all hover:bg-(--ui-control-hover-background) hover:opacity-80"
             onClick={() => setAdding(true)}
           >
-            <Codicon name="add" className="text-[12px]" /> Add a property
+            <Codicon className="text-[12px]" name="add" /> {s.addProperty}
           </button>
           {keys.length > 3 ? (
-            <button
-              className="text-[12px] opacity-35 hover:opacity-70"
-              onClick={() => setExpanded(open => !open)}
-            >
-              {expanded ? 'Hide' : `Show ${keys.length}`}
+            <button className="text-[12px] opacity-35 hover:opacity-70" onClick={() => setExpanded(open => !open)}>
+              {expanded ? s.hide : `${s.show} ${keys.length}`}
             </button>
           ) : null}
         </div>

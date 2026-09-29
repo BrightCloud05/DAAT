@@ -20,7 +20,7 @@
 
 import { execFile } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
-import type fs from 'node:fs'
+import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
@@ -46,7 +46,7 @@ export function contentHash(content: string | Buffer): string {
 
 /**
  * Resolve a vault-relative path against the vault root, refusing anything
- * that escapes the root (`..`, absolute paths, symlink-free lexical check).
+ * that escapes the root through traversal or an existing symlink.
  * Callers treat a throw as a hard programming/input error.
  */
 export function resolveInVault(root: string, relPath: string): string {
@@ -58,7 +58,100 @@ export function resolveInVault(root: string, relPath: string): string {
     throw new Error(`Path escapes vault root: ${relPath}`)
   }
 
+  const realRoot = fs.realpathSync(rootResolved)
+  // A missing file still has an existing ancestor. Check that ancestor too:
+  // a linked directory can otherwise turn a new note into an outside write.
+  let ancestor = absolute
+
+  while (!fs.existsSync(ancestor)) {
+    // A dangling symlink is not a safe missing path.
+    try {
+      if (fs.lstatSync(ancestor).isSymbolicLink()) {
+        throw new Error(`Path escapes vault root: ${relPath}`)
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error
+      }
+    }
+
+    ancestor = path.dirname(ancestor)
+  }
+
+  const realAncestor = fs.realpathSync(ancestor)
+
+  if (realAncestor !== realRoot && !realAncestor.startsWith(realRoot + path.sep)) {
+    throw new Error(`Path escapes vault root: ${relPath}`)
+  }
+
   return absolute
+}
+
+/** Move without replacing an existing destination, including concurrent creates. */
+export async function moveWithoutOverwrite(from: string, to: string): Promise<void> {
+  if (from === to) {
+    return
+  }
+
+  if (to.startsWith(from + path.sep)) {
+    throw new Error('A folder cannot be moved inside itself.')
+  }
+
+  const source = await fsp.lstat(from)
+
+  const target = await fsp.lstat(to).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== 'ENOENT') {
+      throw error
+    }
+
+    return null
+  })
+
+  if (target) {
+    if (from.toLowerCase() === to.toLowerCase() && source.ino === target.ino && source.dev === target.dev) {
+      await fsp.rename(from, to)
+
+      return
+    }
+
+    throw new Error(`A file or folder already exists at ${path.basename(to)}.`)
+  }
+
+  await fsp.mkdir(path.dirname(to), { recursive: true })
+
+  if (!source.isDirectory()) {
+    await fsp.link(from, to) // atomic no-replace, unlike rename().
+
+    try {
+      await fsp.unlink(from)
+    } catch (error) {
+      await fsp.unlink(to).catch(() => undefined)
+      throw error
+    }
+
+    return
+  }
+
+  // mkdir is an exclusive reservation. Moving each child with the same rule
+  // prevents a concurrent destination from replacing any existing file.
+  await fsp.mkdir(to)
+  const moved: string[] = []
+
+  try {
+    for (const name of await fsp.readdir(from)) {
+      await moveWithoutOverwrite(path.join(from, name), path.join(to, name))
+      moved.push(name)
+    }
+
+    await fsp.rmdir(from) // never recursively delete new source-side files.
+  } catch (error) {
+    for (const name of moved.reverse()) {
+      await moveWithoutOverwrite(path.join(to, name), path.join(from, name)).catch(() => undefined)
+    }
+
+    await fsp.rmdir(to).catch(() => undefined)
+    throw error
+  }
 }
 
 export function toVaultRelative(root: string, absolute: string): string {
@@ -125,7 +218,7 @@ export async function readNote(absolutePath: string): Promise<ReadNoteResult> {
     // must not touch — which is how "create this starter page if it doesn't
     // exist" silently created nothing.
     if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
-      return { content: '', mtimeMs: 0, dataless: false }
+      return { content: '', mtimeMs: 0, dataless: await hasICloudPlaceholder(absolutePath) }
     }
 
     await requestICloudDownload(absolutePath)
@@ -211,7 +304,7 @@ async function atomicWrite(absolutePath: string, content: string): Promise<numbe
  * is in iCloud, so a fresh file written at that name is a write against bytes
  * we have never seen.
  */
-async function hasICloudPlaceholder(absolutePath: string): Promise<boolean> {
+export async function hasICloudPlaceholder(absolutePath: string): Promise<boolean> {
   const placeholder = path.join(path.dirname(absolutePath), `.${path.basename(absolutePath)}.icloud`)
 
   try {
@@ -252,7 +345,34 @@ export interface WriteNoteResult {
  * caller supplied an expectation: `unreadable` comes back instead, and the
  * caller keeps its text.
  */
+const pendingWrites = new Map<string, Promise<WriteNoteResult>>()
+
 export async function writeNote(
+  absolutePath: string,
+  content: string,
+  expectedMtimeMs: number | null,
+  expectedContent?: string
+): Promise<WriteNoteResult> {
+  // Two windows may submit against the same base. Serialize comparison and
+  // replacement so the second sees the first writer and creates a copy.
+  const key = await fsp.realpath(absolutePath).catch(() => path.resolve(absolutePath))
+
+  const writing = (pendingWrites.get(key) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => writeNoteUnlocked(absolutePath, content, expectedMtimeMs, expectedContent))
+
+  pendingWrites.set(key, writing)
+
+  try {
+    return await writing
+  } finally {
+    if (pendingWrites.get(key) === writing) {
+      pendingWrites.delete(key)
+    }
+  }
+}
+
+async function writeNoteUnlocked(
   absolutePath: string,
   content: string,
   expectedMtimeMs: number | null,

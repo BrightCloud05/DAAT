@@ -22,23 +22,27 @@ struct DaatProgress {
 
 /// 진행사항 (progress) of whatever DAAT is running right now.
 ///
-/// Sources, tried in priority order every poll:
-///   1. ~/.daat/menubar.json — optional dedicated feed (manual override)
-///   2. DAAT runtime state in HERMES_HOME (~/.hermes) — the real thing
-///   3. ~/.codex/session_index.jsonl — standalone Codex CLI, last resort
+/// Reads the selected DAAT profile's optional feed, then its runtime state.
 final class DaatProgressProvider: ObservableObject {
 
     @Published private(set) var progress = DaatProgress()
 
     private var timer: Timer?
-    private let home = FileManager.default.homeDirectoryForCurrentUser
+    private var runtimeHome = DaatAppStateReader.hermesHome
+    private var mode = "local"
+    private var enabled = true
+    private var feedURL: URL { runtimeHome.appendingPathComponent("menubar.json") }
 
-    private var feedURL: URL { home.appendingPathComponent(".daat/menubar.json") }
-    private var codexSessionIndex: URL {
-        home.appendingPathComponent(".codex/session_index.jsonl")
+    func configure(home: URL, mode: String, enabled: Bool) {
+        let changed = self.runtimeHome != home || self.mode != mode || self.enabled != enabled
+        self.runtimeHome = home
+        self.mode = mode
+        self.enabled = enabled
+        if changed { refreshNow() }
     }
 
     func start() {
+        guard timer == nil else { return }
         refreshNow()
         timer = Timer(timeInterval: 3.0, repeats: true) { [weak self] _ in
             self?.refreshNow()
@@ -47,13 +51,22 @@ final class DaatProgressProvider: ObservableObject {
     }
 
     func refreshNow() {
+        guard enabled else { progress = DaatProgress(); return }
+        guard mode == "local" else {
+            var result = DaatProgress()
+            result.source = "Remote DAAT"
+            result.detail = "Open DAAT to view remote task progress."
+            progress = result
+            return
+        }
+        let selectedHome = runtimeHome
         // File/DB reads are cheap but keep them off the main thread anyway.
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             let result = self.readFeedFile()
-                ?? DaatAppStateReader.read(supportDir: self.home)
-                ?? self.readCodexSessions()
+                ?? DaatAppStateReader.read(home: selectedHome)
             DispatchQueue.main.async {
+                guard self.runtimeHome == selectedHome, self.enabled, self.mode == "local" else { return }
                 self.progress = result ?? DaatProgress()
             }
         }
@@ -84,44 +97,4 @@ final class DaatProgressProvider: ObservableObject {
         return p
     }
 
-    // MARK: 3. Codex CLI fallback
-
-    /// Newest entry in the standalone Codex CLI session index. Only used when
-    /// DAAT state is unavailable; labeled accordingly.
-    private func readCodexSessions() -> DaatProgress? {
-        guard let text = try? String(contentsOf: codexSessionIndex, encoding: .utf8)
-        else { return nil }
-        for line in text.split(separator: "\n").reversed() {
-            guard let data = line.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            else { continue }
-
-            let cwd = (json["cwd"] ?? json["workdir"] ?? json["path"]) as? String
-            let title = (json["title"] ?? json["summary"] ?? json["preview"]) as? String
-
-            var p = DaatProgress()
-            p.connected = true
-            p.source = "Codex CLI"
-            p.projectName = cwd.map { URL(fileURLWithPath: $0).lastPathComponent }
-            p.taskTitle = title.map { String($0.prefix(120)) }
-
-            if let ts = (json["updated_at"] ?? json["timestamp"] ?? json["created_at"]) as? String {
-                p.updatedAt = ISO8601DateFormatter().date(from: ts) ?? Self.flexibleDate(ts)
-            } else if let epoch = ((json["updated_at"] ?? json["timestamp"]) as? NSNumber)?.doubleValue {
-                p.updatedAt = Date(timeIntervalSince1970: epoch)
-            }
-            if let updated = p.updatedAt {
-                p.phase = Date().timeIntervalSince(updated) < 15 * 60 ? "running" : "idle"
-            }
-            return p
-        }
-        return nil
-    }
-
-    private static func flexibleDate(_ s: String) -> Date? {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        return f.date(from: s)
-    }
 }

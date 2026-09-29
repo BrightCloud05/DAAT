@@ -1,91 +1,154 @@
-/**
- * menubar-cat.ts — launches the bundled DAAT Cat menu bar helper.
- *
- * DAAT Cat is a native Swift menu bar app (apps/daatcat) shipped inside
- * Daat.app's Resources by scripts/stage-daatcat.mjs: a RunCat-style cat
- * whose pace follows system load, with a panel showing system stats, agent
- * credit usage and DAAT 진행사항. It runs as its own process so it keeps
- * monitoring even when Daat itself is closed — which is also why quitting
- * Daat deliberately leaves the cat alone.
- *
- * Default-on, opted out via userData/menubar-cat.json {"enabled": false}.
- * macOS only: the helper is an NSStatusItem app.
- */
-
-import { execFile } from 'node:child_process'
+/** Electron owns the helper's settings, process and active runtime context. */
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
 import { app } from 'electron'
 
-function settingsFile(): string {
-  return path.join(app.getPath('userData'), 'menubar-cat.json')
+import { type CatContext, type CatSettings, sanitizeCatSettings } from './menubar-cat-settings'
+
+let context: CatContext | undefined
+let lastError: string | null = null
+let startupTimer: ReturnType<typeof setTimeout> | undefined
+let launchPending: Promise<void> | undefined
+const settingsFile = () => path.join(app.getPath('userData'), 'menubar-cat.json')
+const processFile = () => `${settingsFile()}.process`
+
+export function readMenubarCatSettings(): CatSettings {
+  try { return sanitizeCatSettings(JSON.parse(fs.readFileSync(settingsFile(), 'utf8'))) }
+  catch { return sanitizeCatSettings(null) }
 }
 
-export function menubarCatEnabled(): boolean {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) as { enabled?: boolean }
+function persist(settings: CatSettings, runRequested?: boolean): void {
+  const file = settingsFile()
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  let previousRun = true
 
-    return parsed.enabled !== false
-  } catch {
-    // No settings file yet — the cat is a default feature.
-    return true
-  }
+  try { previousRun = JSON.parse(fs.readFileSync(file, 'utf8')).runRequested !== false } catch { /* new settings */ }
+  fs.writeFileSync(`${file}.tmp`, JSON.stringify({ ...settings, ...context, runRequested: runRequested ?? previousRun }), { mode: 0o600 })
+  fs.renameSync(`${file}.tmp`, file)
 }
 
-export function setMenubarCatEnabled(enabled: boolean): void {
-  try {
-    fs.writeFileSync(settingsFile(), JSON.stringify({ enabled }, null, 2), 'utf8')
-  } catch {
-    // Non-fatal: the choice still applies to this session.
-  }
-
-  if (enabled) {
-    launchHelper()
-  } else {
-    execFile('pkill', ['-x', 'DaatCat'], () => undefined)
-  }
+export function updateMenubarCatContext(next: CatContext): void {
+  context = next
+  persist(readMenubarCatSettings())
 }
 
-/** Bundled helper first, then the dev build, then a manual install. */
 function helperPath(): string | null {
   const candidates = [
-    process.resourcesPath ? path.join(process.resourcesPath, 'DAAT Cat.app') : null,
+    process.resourcesPath ? path.join(process.resourcesPath, 'DAAT Cat.app') : '',
     path.resolve(app.getAppPath(), '..', 'daatcat', 'dist', 'DAAT Cat.app'),
     path.join(app.getPath('home'), 'Applications', 'DAAT Cat.app')
-  ].filter((candidate): candidate is string => Boolean(candidate))
+  ]
 
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate
-    }
-  }
-
-  return null
+  return candidates.find(candidate => fs.existsSync(path.join(candidate, 'Contents', 'MacOS', 'DaatCat'))) || null
 }
 
-function launchHelper(): void {
-  // pgrep exits non-zero when nothing matches — that is the "not running,
-  // go launch it" signal, so one cat never becomes two.
-  execFile('pgrep', ['-x', 'DaatCat'], error => {
-    if (!error) {
-      return
-    }
+/** The helper owns its heartbeat; no process search or argv guessing. */
+function isRunning(): boolean {
+  try {
+    const saved = JSON.parse(fs.readFileSync(processFile(), 'utf8'))
 
-    const target = helperPath()
-
-    if (target) {
-      execFile('open', [target], () => undefined)
-    }
-  })
+    return Number.isFinite(saved.updatedAt) && Date.now() - saved.updatedAt >= 0 && Date.now() - saved.updatedAt < 7000
+  } catch { return false }
 }
 
-/** Called once from app.whenReady(); quiet no-op off macOS or when opted out. */
-export function ensureMenubarCat(): void {
-  if (process.platform !== 'darwin' || !menubarCatEnabled()) {
-    return
+export async function getMenubarCatStatus() {
+  return {
+    supported: process.platform === 'darwin', available: process.platform === 'darwin' && Boolean(helperPath()),
+    running: process.platform === 'darwin' && isRunning(), error: lastError,
+    runtimeHome: context?.runtimeHome || '', profile: context?.profile || 'default',
+    mode: context?.mode || 'local', usageSource: '~/.codex/auth.json'
+  }
+}
+
+export async function stopMenubarCat(): Promise<void> {
+  if (startupTimer) {clearTimeout(startupTimer)}
+  startupTimer = undefined
+
+  if (launchPending) {await launchPending.catch(() => undefined)}
+  persist(readMenubarCatSettings(), false)
+
+  for (let attempt = 0; attempt < 40 && isRunning(); attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 200))
   }
 
-  // A few seconds after boot: the cat is ambience, not the critical path.
-  setTimeout(launchHelper, 4000)
+  if (isRunning()) {throw new Error('DAAT Cat has not stopped yet. Try again after it responds.')}
+  lastError = null
+}
+
+export async function startMenubarCat(): Promise<void> {
+  if (launchPending) {return launchPending}
+  launchPending = (async () => {
+    if (process.platform !== 'darwin') {throw new Error('DAAT Cat is available on macOS.')}
+
+    if (!readMenubarCatSettings().enabled) {throw new Error('Enable DAAT Cat before starting it.')}
+
+    if (isRunning()) {return}
+    const helper = helperPath()
+
+    if (!helper) {throw new Error('This build does not include DAAT Cat. Reinstall the complete Daat app.')}
+    persist(readMenubarCatSettings(), true)
+    const executable = path.join(helper, 'Contents', 'MacOS', 'DaatCat')
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(executable, ['--config', settingsFile()], {
+        detached: true, stdio: 'ignore', env: { ...process.env, HERMES_HOME: context?.runtimeHome || path.join(app.getPath('home'), '.daat') }
+      })
+
+      child.once('error', reject)
+      child.once('exit', code => reject(new Error(`DAAT Cat exited before it was ready (${code ?? 'signal'}).`)))
+      child.once('spawn', () => {
+        void (async () => {
+          for (let attempt = 0; attempt < 50; attempt++) {
+            try {
+              const saved = JSON.parse(fs.readFileSync(processFile(), 'utf8'))
+
+              if (saved.pid === child.pid && isRunning()) {
+                child.unref()
+                resolve()
+
+                return
+              }
+            } catch { /* wait for the helper's first heartbeat */ }
+
+            await new Promise(ready => setTimeout(ready, 100))
+
+            if (child.exitCode !== null || child.signalCode !== null) {return}
+          }
+
+          child.kill()
+          reject(new Error('DAAT Cat did not become ready. Try starting it again.'))
+        })().catch(reject)
+      })
+    })
+    lastError = null
+  })().catch(error => { lastError = error.message; throw error }).finally(() => { launchPending = undefined })
+
+  return launchPending
+}
+
+export async function setMenubarCatSettings(patch: unknown): Promise<CatSettings> {
+  const before = readMenubarCatSettings()
+  const settings = sanitizeCatSettings(patch, before)
+  persist(settings)
+
+  if (!settings.enabled) {await stopMenubarCat()}
+  else if (!before.enabled) {await startMenubarCat()}
+
+  return settings
+}
+
+export function ensureMenubarCat(next: CatContext): void {
+  updateMenubarCatContext(next)
+  const settings = readMenubarCatSettings()
+
+  if (process.platform !== 'darwin' || !settings.enabled || !settings.autoStart) {return}
+  startupTimer = setTimeout(() => { void startMenubarCat().catch(error => { lastError = error.message }) }, 4000)
+}
+
+export async function quitMenubarCatWithApp(): Promise<void> {
+  if (startupTimer) {clearTimeout(startupTimer)}
+  startupTimer = undefined
+
+  if (readMenubarCatSettings().quitWithApp) {await stopMenubarCat()}
 }

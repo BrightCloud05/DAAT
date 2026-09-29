@@ -2,12 +2,14 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+
 import { test } from 'vitest'
 
 import {
   contentHash,
   icloudPlaceholderTarget,
   isMarkdownFile,
+  moveWithoutOverwrite,
   readNote,
   resolveInVault,
   toVaultRelative,
@@ -212,4 +214,109 @@ test('a failed write leaves no temp file behind', async () => {
 test('contentHash is stable per content', () => {
   assert.equal(contentHash('abc'), contentHash('abc'))
   assert.notEqual(contentHash('abc'), contentHash('abd'))
+})
+
+test('existing and new paths through external symlinks are refused', async () => {
+  const root = await tmpVault()
+  const outside = await tmpVault()
+
+  try {
+    await fs.writeFile(path.join(outside, 'private.md'), 'private')
+    await fs.symlink(path.join(outside, 'private.md'), path.join(root, 'link.md'))
+    await fs.symlink(outside, path.join(root, 'linked-folder'))
+    assert.throws(() => resolveInVault(root, 'link.md'), /escapes/)
+    assert.throws(() => resolveInVault(root, 'linked-folder/new.md'), /escapes/)
+    await fs.mkdir(path.join(root, 'inside'))
+    await fs.symlink(path.join(root, 'inside'), path.join(root, 'safe-link'))
+    assert.equal(resolveInVault(root, 'safe-link/new.md'), path.join(root, 'safe-link/new.md'))
+  } finally {
+    await fs.rm(root, { force: true, recursive: true })
+    await fs.rm(outside, { force: true, recursive: true })
+  }
+})
+
+test('rename refuses an existing destination and preserves both notes', async () => {
+  const root = await tmpVault()
+
+  try {
+    const from = path.join(root, 'A.md'),
+      to = path.join(root, 'B.md')
+
+    await fs.writeFile(from, 'A')
+    await fs.writeFile(to, 'B')
+    await assert.rejects(moveWithoutOverwrite(from, to), /already exists/)
+    assert.equal(await fs.readFile(from, 'utf8'), 'A')
+    assert.equal(await fs.readFile(to, 'utf8'), 'B')
+  } finally {
+    await fs.rm(root, { force: true, recursive: true })
+  }
+})
+
+test('concurrent renames to one destination cannot overwrite the winner', async () => {
+  const root = await tmpVault()
+
+  try {
+    const a = path.join(root, 'A.md'),
+      b = path.join(root, 'B.md'),
+      target = path.join(root, 'Target.md')
+
+    await fs.writeFile(a, 'A')
+    await fs.writeFile(b, 'B')
+    const results = await Promise.allSettled([moveWithoutOverwrite(a, target), moveWithoutOverwrite(b, target)])
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1)
+    const winner = await fs.readFile(target, 'utf8')
+    assert.equal(await fs.readFile(winner === 'A' ? b : a, 'utf8'), winner === 'A' ? 'B' : 'A')
+  } finally {
+    await fs.rm(root, { force: true, recursive: true })
+  }
+})
+
+test('folder and case-only rename keep all contents', async () => {
+  const root = await tmpVault()
+
+  try {
+    await fs.mkdir(path.join(root, 'Old/sub'), { recursive: true })
+    await fs.writeFile(path.join(root, 'Old/sub/Note.md'), 'preserved')
+    await moveWithoutOverwrite(path.join(root, 'Old'), path.join(root, 'New'))
+    await moveWithoutOverwrite(path.join(root, 'New/sub/Note.md'), path.join(root, 'New/sub/note.md'))
+    assert.equal(await fs.readFile(path.join(root, 'New/sub/note.md'), 'utf8'), 'preserved')
+    await assert.rejects(fs.stat(path.join(root, 'Old')))
+  } finally {
+    await fs.rm(root, { force: true, recursive: true })
+  }
+})
+
+test('simultaneous saves from the same base preserve every submitted version', async () => {
+  const root = await tmpVault()
+
+  try {
+    const target = path.join(root, 'Shared.md')
+    await fs.writeFile(target, 'original')
+    const before = await readNote(target)
+    const versions = ['window one', 'window two', 'window three']
+
+    const results = await Promise.all(
+      versions.map(content => writeNote(target, content, before.mtimeMs, before.content))
+    )
+
+    assert.equal(results.filter(result => result.ok).length, 1)
+    const saved = await Promise.all((await fs.readdir(root)).map(name => fs.readFile(path.join(root, name), 'utf8')))
+    assert.deepEqual(saved.sort(), [...versions].sort())
+  } finally {
+    await fs.rm(root, { force: true, recursive: true })
+  }
+})
+
+test('moving a folder into itself is refused without modifying its contents', async () => {
+  const root = await tmpVault()
+
+  try {
+    const folder = path.join(root, 'Folder')
+    await fs.mkdir(folder)
+    await fs.writeFile(path.join(folder, 'Note.md'), 'keep')
+    await assert.rejects(moveWithoutOverwrite(folder, path.join(folder, 'Sub')), /inside itself/)
+    assert.deepEqual(await fs.readdir(folder), ['Note.md'])
+  } finally {
+    await fs.rm(root, { force: true, recursive: true })
+  }
 })

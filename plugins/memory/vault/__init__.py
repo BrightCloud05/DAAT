@@ -36,9 +36,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from datetime import datetime
+from pathlib import Path
+from threading import RLock
 from typing import Any, Dict, List, Optional
 
 from agent.memory_provider import MemoryProvider
@@ -69,6 +70,7 @@ MAX_ENTRIES = 5
 MAX_ENTRY_CHARS = 2_000
 
 INBOX_DIR = "Inbox"
+_inbox_lock = RLock()
 
 _FILING_PROMPT = """You are filing notes into someone's personal vault at the end of a conversation.
 
@@ -95,9 +97,9 @@ Write each body in the language the user was writing in.
 
 
 def _vault_root() -> Optional[str]:
-    root = (os.environ.get("VAULT_PATH") or "").strip()
-
-    return root if root and os.path.isdir(root) else None
+    from plugins.vault.tools import _vault_root as resolve
+    root = resolve()
+    return str(root) if root else None
 
 
 def _text_of(message: Dict[str, Any]) -> str:
@@ -124,7 +126,7 @@ def _digest(messages: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
     total = 0
 
-    for message in messages[-MAX_DIGEST_MESSAGES:]:
+    for message in reversed(messages[-MAX_DIGEST_MESSAGES:]):
         role = str(message.get("role") or "")
 
         if role not in ("user", "assistant"):
@@ -139,14 +141,14 @@ def _digest(messages: List[Dict[str, Any]]) -> str:
             text = text[:MAX_MESSAGE_CHARS] + " […]"
 
         entry = f"{role}: {text}"
-        total += len(entry)
+        total += len(entry) + (2 if lines else 0)
 
         if total > MAX_DIGEST_CHARS:
             break
 
         lines.append(entry)
 
-    return "\n\n".join(lines)
+    return "\n\n".join(reversed(lines))
 
 
 def _worth_reviewing(messages: List[Dict[str, Any]]) -> bool:
@@ -206,24 +208,35 @@ def _parse_entries(reply: str) -> List[Dict[str, str]]:
     return entries
 
 
-def _append_to_inbox(entries: List[Dict[str, str]], *, now: datetime) -> Optional[str]:
+def _append_to_inbox(entries: List[Dict[str, str]], *, now: datetime, root: Optional[str] = None) -> Optional[str]:
     """Append to today's Inbox note through the vault's own write path.
 
     vault_write is used rather than open(): it holds the path-escape guard, the
     atomic temp+rename, and the backup of whatever was there before. A feature
     that files notes must not be the one that loses them.
     """
-    from plugins.vault.tools import vault_read, vault_write
+    from plugins.vault.tools import _resolve, vault_write
 
     rel = f"{INBOX_DIR}/{now.strftime('%Y-%m-%d')}.md"
-    existing = vault_read(rel)
-
-    if existing.startswith("Not found:") or existing.startswith("Could not read"):
-        existing = f"---\ntype: inbox\ndate: {now.strftime('%Y-%m-%d')}\n---\n\n# {now.strftime('%Y-%m-%d')}\n"
-
+    chosen = root or _vault_root()
+    if not chosen:
+        return None
+    vault_root = Path(chosen)
+    target = _resolve(vault_root, rel)
+    if target is None:
+        return None
     stamp = now.strftime("%H:%M")
     blocks = [f"\n## {stamp} — {entry['title']}\n\n{entry['body']}\n" for entry in entries]
-    result = vault_write(rel, existing.rstrip() + "\n" + "".join(blocks))
+    # Internal mutation reads the complete file, never the model-facing preview.
+    # Serialise session-end and memory-write callbacks in this backend.
+    with _inbox_lock:
+        try:
+            before = target.read_text(encoding="utf-8") if target.exists() else ""
+        except OSError:
+            logger.warning("vault filing could not read %s", rel, exc_info=True)
+            return None
+        existing = before or f"---\ntype: inbox\ndate: {now.strftime('%Y-%m-%d')}\n---\n\n# {now.strftime('%Y-%m-%d')}\n"
+        result = vault_write(rel, existing.rstrip() + "\n" + "".join(blocks), root=vault_root, expected_content=before)
 
     if not result.startswith("Wrote "):
         logger.warning("vault filing could not write %s: %s", rel, result)
@@ -247,6 +260,7 @@ class VaultMemoryProvider(MemoryProvider):
 
     def initialize(self, session_id: str, **kwargs) -> None:
         self._session_id = session_id
+        self._vault = _vault_root()
 
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
         # Deliberately none. plugins/vault already gives the model vault_read,
@@ -264,7 +278,8 @@ class VaultMemoryProvider(MemoryProvider):
             logger.debug("vault filing failed", exc_info=True)
 
     def _file_session(self, messages: List[Dict[str, Any]]) -> None:
-        if not _vault_root() or not _worth_reviewing(messages):
+        root = getattr(self, "_vault", None) or _vault_root()
+        if not root or not _worth_reviewing(messages):
             return
 
         digest = _digest(messages)
@@ -293,7 +308,7 @@ class VaultMemoryProvider(MemoryProvider):
         if not entries:
             return
 
-        written = _append_to_inbox(entries, now=datetime.now())
+        written = _append_to_inbox(entries, now=datetime.now(), root=root)
 
         if written:
             logger.info("vault filing: wrote %d entr(ies) to %s", len(entries), written)
@@ -320,6 +335,7 @@ class VaultMemoryProvider(MemoryProvider):
             _append_to_inbox(
                 [{"title": f"Remembered ({target})", "body": content.strip()[:MAX_ENTRY_CHARS]}],
                 now=datetime.now(),
+                root=getattr(self, "_vault", None),
             )
         except Exception:  # noqa: BLE001
             logger.debug("vault memory mirror failed", exc_info=True)

@@ -44,10 +44,10 @@ const repoRoot = resolve(desktopRoot, '../..')
  *
  * The root *modules* are read from pyproject — see declaredModules().
  */
-const ROOT_FILES = ['pyproject.toml', 'uv.lock', 'LICENSE', 'constraints-termux.txt']
+const ROOT_FILES = ['pyproject.toml', 'uv.lock', 'LICENSE', 'constraints-termux.txt', 'setup.py', 'README.md', 'cli-config.yaml.example', '.env.example']
 
 /** Directories that are not Python packages but are needed all the same. */
-const EXTRA_DIRS = ['scripts', 'skills', 'prompts', 'personas']
+const EXTRA_DIRS = ['scripts', 'skills', 'prompts', 'personas', 'locales', 'optional-mcps']
 
 /**
  * Optional skill categories that ship with Daat, merged into skills/.
@@ -125,11 +125,17 @@ export function declaredPackages(pyprojectToml) {
  * on a machine with no repo to fall back to. Same failure mode declaredPackages
  * already guards against, one door down.
  */
-export function declaredModules(pyprojectToml) {
+export function declaredModules(pyprojectToml, sourceRoot = repoRoot) {
   const found = /^py-modules\s*=\s*\[([^\]]+)\]/m.exec(pyprojectToml)
 
   if (!found) {
-    throw new Error('[stage-agent-source] could not read [tool.setuptools] py-modules from pyproject.toml')
+    // Current Hermes derives these in setup.py; mirror its root *.py rule.
+    if (existsSync(join(sourceRoot, 'setup.py')) && pyprojectToml.includes('[tool.setuptools]')) {
+      return readdirSync(sourceRoot, { withFileTypes: true })
+        .filter(entry => entry.isFile() && entry.name.endsWith('.py') && entry.name !== 'setup.py')
+        .map(entry => entry.name).sort()
+    }
+    throw new Error('[stage-agent-source] could not read [tool.setuptools] py-modules or setup.py discovery')
   }
 
   return [...new Set([...found[1].matchAll(/"([^"]+)"/g)].map(match => `${match[1]}.py`))]

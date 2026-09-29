@@ -9,6 +9,7 @@ struct PopoverView: View {
     @ObservedObject var stats: SystemStatsEngine
     @ObservedObject var codex: CodexUsageProvider
     @ObservedObject var daat: DaatProgressProvider
+    @ObservedObject var preferences = CatPreferences()
     /// False in offscreen preview renders, where a scroll viewport would
     /// collapse the content to nothing.
     var scrollable = true
@@ -35,19 +36,15 @@ struct PopoverView: View {
 
     private var statsColumn: some View {
         VStack(alignment: .leading, spacing: 10) {
-            cpuSection
-            Divider()
-            memorySection
-            Divider()
-            storageSection
-            Divider()
-            batterySection
-            Divider()
-            networkSection
-            Divider()
-            creditsSection
-            Divider()
-            daatSection
+            if preferences.showCpu { cpuSection; Divider() }
+            if preferences.showMemory { memorySection; Divider() }
+            if preferences.showStorage { storageSection; Divider() }
+            if preferences.showBattery { batterySection; Divider() }
+            if preferences.showNetwork { networkSection; Divider() }
+            if preferences.showUsage { creditsSection; Divider() }
+            if preferences.showProgress { daatSection }
+            Text("DAAT · " + preferences.profile).font(.caption).foregroundStyle(.secondary)
+
         }
         .frame(width: 268)
     }
@@ -269,7 +266,7 @@ struct PopoverView: View {
     private var railSection: some View {
         VStack(spacing: 8) {
             RailButton(icon: "pawprint", label: "DAAT") {
-                let url = URL(fileURLWithPath: "/Applications/Daat.app")
+                let url = URL(fileURLWithPath: preferences.applicationPath.isEmpty ? "/Applications/Daat.app" : preferences.applicationPath)
                 NSWorkspace.shared.openApplication(at: url,
                                                    configuration: .init(),
                                                    completionHandler: nil)

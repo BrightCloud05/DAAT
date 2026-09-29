@@ -107,6 +107,7 @@ beforeEach(() => {
     ...globalThis.window,
     hermesDesktop: {
       vault: {
+        info: async () => ({ root: '/test/vault' }),
         appendBinary: async (relPath: string, data: Uint8Array) => {
           if (appendFails) {
             throw new Error(appendFails)
@@ -265,5 +266,58 @@ test('a recorder that cannot be constructed leaves no microphone running', async
 
   assert.equal(await startRecording('Doomed'), false)
   assert.equal($recorder.get().status, 'error')
-  assert.ok(stopped.every(track => track.stopped), 'the microphone was left live with nothing on screen')
+  assert.ok(
+    stopped.every(track => track.stopped),
+    'the microphone was left live with nothing on screen'
+  )
+})
+
+test('recordings with the same title and clock never append to or discard each other', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-09-15T12:00:00Z'))
+
+  try {
+    await startRecording('Same title')
+    active!.emit('first')
+    await settle()
+    const first = await stopRecording()
+    assert.ok(first)
+    const original = [...disk[first.audioPath]]
+    await startRecording('Same title')
+    active!.emit('second')
+    await settle()
+    const second = await stopRecording()
+    assert.ok(second)
+    assert.notEqual(first.audioPath, second.audioPath)
+    await startRecording('Same title')
+    active!.emit('discard this')
+    await settle()
+    await cancelRecording()
+    assert.deepEqual(disk[first.audioPath], original)
+    assert.ok(disk[second.audioPath].length)
+    assert.equal(Object.keys(disk).length, 2)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+test('canceling a pending permission request stops the late stream and never starts capture', async () => {
+  let permit!: (stream: FakeStream) => void
+  vi.stubGlobal('navigator', {
+    mediaDevices: {
+      getUserMedia: () =>
+        new Promise(resolve => {
+          permit = resolve
+        })
+    }
+  })
+  const start = startRecording('Canceled')
+  await settle()
+  await cancelRecording()
+  const late = new FakeStream()
+  permit(late)
+  assert.equal(await start, false)
+  assert.ok(late.tracks.every(track => track.stopped))
+  assert.equal($recorder.get().status, 'idle')
+  assert.equal(active, null)
 })

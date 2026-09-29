@@ -48,6 +48,30 @@ export const ICLOUD_DOWNLOAD_PENDING = 'Waiting for iCloud to finish downloading
  * editor, marked unsaved, and the ordinary save path takes it from there.
  */
 const rescued = new Map<string, string>()
+const recoveryEntries = new Map<string, VaultRecoveryEntry>()
+const journalWrites = new Map<string, Promise<void>>()
+
+function persistRecovery(entry: VaultRecoveryEntry): Promise<void> {
+  const current = journalWrites.get(entry.id)
+
+  if (current) {
+    return current
+  }
+
+  const writing = (async () => {
+    let snapshot: VaultRecoveryEntry | undefined = entry
+
+    while (snapshot) {
+      await vault().saveRecovery(snapshot)
+      const latest = recoveryEntries.get(snapshot.path)
+      snapshot = latest?.id === snapshot.id && latest !== snapshot ? latest : undefined
+    }
+  })().finally(() => journalWrites.delete(entry.id))
+
+  journalWrites.set(entry.id, writing)
+
+  return writing
+}
 
 /** Paths holding text that never reached disk. The UI has to say so. */
 export const $vaultRescued = atom<string[]>([])
@@ -56,14 +80,81 @@ function publishRescued(): void {
   $vaultRescued.set([...rescued.keys()])
 }
 
-function rescue(relPath: string, content: string): void {
+function rescue(relPath: string, content: string, base = $activeNote.get()): void {
   rescued.set(relPath, content)
+  const root = base?.vaultRoot ?? $vaultInfo.get()?.root
+
+  if (root && base) {
+    const previous = recoveryEntries.get(relPath)
+
+    const entry: VaultRecoveryEntry = {
+      id: previous?.id ?? crypto.randomUUID(),
+      vaultRoot: root,
+      path: relPath,
+      content,
+      baseContent: previous?.baseContent ?? base.content,
+      mtimeMs: previous?.mtimeMs ?? base.mtimeMs,
+      updatedAt: Date.now()
+    }
+
+    recoveryEntries.set(relPath, entry)
+    void persistRecovery(entry).catch(error => {
+      $vaultSaveError.set(`Could not preserve the recovery copy: ${String(error)}`)
+    })
+  }
+
   publishRescued()
 }
 
 function releaseRescue(relPath: string): void {
+  const entry = recoveryEntries.get(relPath)
+  recoveryEntries.delete(relPath)
+
+  if (entry) {
+    void (journalWrites.get(entry.id) ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => vault().removeRecovery(entry.id))
+      .catch(error => $vaultSaveError.set(`Could not remove an old recovery copy: ${String(error)}`))
+  }
+
   if (rescued.delete(relPath)) {
     publishRescued()
+  }
+}
+
+export async function restoreRecovery(root: string): Promise<void> {
+  const entries = await vault().listRecovery(root)
+
+  if ($vaultInfo.get()?.root !== root) {
+    return
+  }
+
+  for (const entry of entries) {
+    const previous = recoveryEntries.get(entry.path)
+
+    if (previous && previous.id !== entry.id) {
+      const recoveredPath = previous.path.replace(/(\.[^.]+)?$/, ` (recovered ${previous.id.slice(-8)})$1`)
+      const displaced = { ...previous, path: recoveredPath }
+      recoveryEntries.set(recoveredPath, displaced)
+      rescued.set(recoveredPath, previous.content)
+      void persistRecovery(displaced).catch(() => undefined)
+    }
+
+    recoveryEntries.set(entry.path, entry)
+    rescued.set(entry.path, entry.content)
+  }
+
+  publishRescued()
+}
+
+/** Close/reload only after the edits reached the note or the recovery journal. */
+export async function prepareVaultForClose(): Promise<void> {
+  await drainPendingWrites()
+  parkPending()
+  await Promise.all([...recoveryEntries.values()].map(entry => persistRecovery(entry)))
+
+  if (pendingContent !== null && !recoveryEntries.has($activeNote.get()?.path ?? '')) {
+    throw new Error('The note could not be saved or preserved. Keep this window open and retry.')
   }
 }
 
@@ -128,6 +219,7 @@ export function resetSaveState(): void {
   // A full reset, including across a vault switch: the parked paths belong to
   // the vault being left and mean nothing in the next one.
   rescued.clear()
+  recoveryEntries.clear()
   publishRescued()
   flushInFlight = null
   saveFailures = 0
@@ -180,23 +272,39 @@ export async function refreshVaultNotes(): Promise<void> {
 }
 
 export async function createVault(baseDir?: string): Promise<void> {
-  await drainPendingWrites()
+  await prepareVaultForClose()
+  const info = await vault().create(baseDir)
+  // Edits can arrive while the main process changes roots. Their saved root
+  // remains the old vault, so preserve them before clearing renderer state.
+  parkPending()
+  await Promise.all([...recoveryEntries.values()].map(entry => persistRecovery(entry)))
   resetSaveState()
   $activeNote.set(null)
-  $vaultInfo.set(await vault().create(baseDir))
+  $vaultInfo.set(info)
+
+  if (info.root) {
+    await restoreRecovery(info.root)
+  }
+
   await refreshVaultNotes()
 }
 
 export async function chooseVault(): Promise<void> {
-  const info = await vault().choose()
+  const selected = await vault().selectFolder()
 
-  if (info) {
-    // Save into the OLD vault before the root changes, then drop anything
-    // still buffered — a pending edit must not follow the user across vaults.
-    await drainPendingWrites()
+  if (selected) {
+    await prepareVaultForClose()
+    const info = await vault().open(selected)
+    parkPending()
+    await Promise.all([...recoveryEntries.values()].map(entry => persistRecovery(entry)))
     resetSaveState()
     $activeNote.set(null)
     $vaultInfo.set(info)
+
+    if (info.root) {
+      await restoreRecovery(info.root)
+    }
+
     await refreshVaultNotes()
   }
 }
@@ -235,6 +343,7 @@ function parkPending(): void {
 }
 
 export async function openNote(relPath: string): Promise<void> {
+  const root = $vaultInfo.get()?.root ?? undefined
   await drainPendingWrites()
 
   const token = ++openToken
@@ -245,10 +354,29 @@ export async function openNote(relPath: string): Promise<void> {
   clearSaveTimer()
   pendingContent = null
 
-  adoptNote(await vault().read(relPath), token)
+  const held = recoveryEntries.get(relPath)
+
+  const result = await vault()
+    .read(relPath, root)
+    .catch(error => {
+      if (!held) {
+        throw error
+      }
+
+      return {
+        path: relPath,
+        vaultRoot: held.vaultRoot,
+        content: held.baseContent,
+        mtimeMs: held.mtimeMs,
+        dataless: false
+      }
+    })
+
+  adoptNote(held ? { ...result, content: held.baseContent, mtimeMs: held.mtimeMs } : result, token)
 }
 
 export async function createNote(relPath: string): Promise<(VaultReadResult & { created: boolean }) | null> {
+  const root = $vaultInfo.get()?.root ?? undefined
   await drainPendingWrites()
 
   const token = ++openToken
@@ -257,13 +385,14 @@ export async function createNote(relPath: string): Promise<(VaultReadResult & { 
   clearSaveTimer()
   pendingContent = null
 
-  const result = await vault().createNote(relPath)
+  const result = await vault().createNote(relPath, root)
 
   if (token !== openToken) {
     return null
   }
 
-  adoptNote(result, token)
+  const held = recoveryEntries.get(result.path)
+  adoptNote(held ? { ...result, content: held.baseContent, mtimeMs: held.mtimeMs } : result, token)
   await refreshVaultNotes()
 
   return result
@@ -278,6 +407,9 @@ export async function createNote(relPath: string): Promise<(VaultReadResult & { 
  */
 export async function deleteNote(relPath: string): Promise<void> {
   const active = $activeNote.get()
+  const root = $vaultInfo.get()?.root ?? undefined
+  await drainPendingWrites()
+  await vault().trash(relPath, root)
 
   if (active?.path === relPath) {
     clearSaveTimer()
@@ -288,17 +420,20 @@ export async function deleteNote(relPath: string): Promise<void> {
   }
 
   // Rescued text for a note the user chose to delete is meaningless now.
-  rescued.delete(relPath)
-  publishRescued()
-
-  await vault().trash(relPath)
+  releaseRescue(relPath)
   await refreshVaultNotes()
 }
 
 /** Rename (move) a note; the open editor follows it to the new path. */
 export async function renameNote(fromRel: string, toRel: string): Promise<void> {
+  const root = $vaultInfo.get()?.root ?? undefined
   await drainPendingWrites()
-  await vault().rename(fromRel, toRel)
+
+  if (pendingContent !== null) {
+    throw new Error('Save this note before renaming it.')
+  }
+
+  await vault().rename(fromRel, toRel, root)
   await refreshVaultNotes()
 
   if ($activeNote.get()?.path === fromRel) {
@@ -312,8 +447,18 @@ export function noteEdited(content: string): void {
 
   if (!active || content === active.content) {
     if (pendingContent !== null && content === $activeNote.get()?.content) {
-      pendingContent = null
-      $activeDirty.set(false)
+      // An in-flight write can still change disk away from this text. Queue
+      // the revert after it, instead of treating the old disk snapshot as saved.
+      pendingContent = flushInFlight ? content : null
+      $activeDirty.set(Boolean(flushInFlight))
+
+      if (active) {
+        if (flushInFlight) {
+          rescue(active.path, content, active)
+        } else {
+          releaseRescue(active.path)
+        }
+      }
     }
 
     return
@@ -321,6 +466,7 @@ export function noteEdited(content: string): void {
 
   pendingContent = content
   $activeDirty.set(true)
+  rescue(active.path, content, active)
 
   if (saveTimer) {
     clearTimeout(saveTimer)
@@ -355,12 +501,18 @@ export function flushActiveNote(): Promise<void> {
     let result: VaultWriteResult
 
     try {
-      result = await vault().write(active.path, content, active.mtimeMs, active.content)
+      result = await vault().write(
+        active.path,
+        content,
+        active.mtimeMs,
+        active.content,
+        active.vaultRoot ?? $vaultInfo.get()?.root ?? undefined
+      )
     } catch (error) {
       // The text is still in pendingContent — never drop it. Retry with
       // backoff and tell the user, rather than failing silently forever.
       saveFailures++
-      rescue(active.path, content)
+      rescue(active.path, pendingContent ?? content, active)
       $vaultSaveError.set(error instanceof Error ? error.message : String(error))
       saveTimer = setTimeout(() => void flushActiveNote(), Math.min(30_000, 1000 * 2 ** saveFailures))
 
@@ -373,7 +525,7 @@ export function flushActiveNote(): Promise<void> {
       // any other transient failure: keep pendingContent, back off, retry.
       // It resolves itself once the download lands.
       saveFailures++
-      rescue(active.path, content)
+      rescue(active.path, pendingContent ?? content, active)
       $vaultSaveError.set(ICLOUD_DOWNLOAD_PENDING)
       saveTimer = setTimeout(() => void flushActiveNote(), Math.min(30_000, 1000 * 2 ** saveFailures))
 
@@ -381,9 +533,13 @@ export function flushActiveNote(): Promise<void> {
     }
 
     saveFailures = 0
+
     // It reached disk — as the note itself, or as a conflict copy beside it.
     // Either way there is nothing left to hold.
-    releaseRescue(active.path)
+    if (pendingContent === content) {
+      releaseRescue(active.path)
+    }
+
     $vaultSaveError.set(null)
 
     // The user may have switched notes while the write was in flight; the
@@ -407,9 +563,18 @@ export function flushActiveNote(): Promise<void> {
       // Conflict: our content went to a conflict copy; reload what's on disk so
       // the editor shows disk truth, and surface the conflict for the UI.
       try {
-        const fresh = await vault().read(active.path)
+        const fresh = await vault().read(active.path, active.vaultRoot)
 
-        adoptNote(fresh, token)
+        if (pendingContent !== null && pendingContent !== content) {
+          // The conflict copy contains only the submitted snapshot. Keep
+          // later keystrokes in the editor and durable journal for the retry.
+          rescue(active.path, pendingContent, active)
+          $vaultSaveError.set(
+            'The note changed elsewhere. Your latest edits are preserved and will be saved as a conflict copy.'
+          )
+        } else {
+          adoptNote(fresh, token)
+        }
       } catch {
         // The note vanished under us. Keep the buffer rather than throwing out
         // of the shared promise, which every `void flushActiveNote()` caller
@@ -484,7 +649,18 @@ export function initVaultStore(): void {
 
   wired = true
 
-  void refreshVaultInfo().then(refreshVaultNotes)
+  void refreshVaultInfo()
+    .then(async () => {
+      const root = $vaultInfo.get()?.root
+
+      if (root) {
+        await restoreRecovery(root)
+      }
+
+      await refreshVaultNotes()
+    })
+    .catch(error => $vaultSaveError.set(String(error)))
+  window.hermesDesktop.onBeforeClose?.(prepareVaultForClose)
 
   vault().onIndexEvent(event => {
     if (event.type === 'index-progress') {
@@ -502,16 +678,11 @@ export function initVaultStore(): void {
       // note — refresh the editor unless the user has unsaved edits.
       const active = $activeNote.get()
 
-      if (
-        event.type === 'note-changed' &&
-        active &&
-        event.path === active.path &&
-        !$activeDirty.get()
-      ) {
+      if (event.type === 'note-changed' && active && event.path === active.path && !$activeDirty.get()) {
         const token = openToken
 
         void vault()
-          .read(active.path)
+          .read(active.path, active.vaultRoot)
           .then(fresh => {
             const current = $activeNote.get()
 

@@ -564,8 +564,7 @@ def mail_send(to: str, subject: str, body: str, cc: str = "", bcc: str = "", acc
     except ValueError as error:
         return str(error)
 
-    preview = body.strip()
-    preview = preview[:400] + ("…" if len(preview) > 400 else "")
+    preview = body
     reason = (
         f"Send email as {account or 'the default account'}\n"
         f"  To: {to}\n"
@@ -575,13 +574,13 @@ def mail_send(to: str, subject: str, body: str, cc: str = "", bcc: str = "", acc
         f"  Body: {preview}"
     )
 
-    # No rule_key on purpose: the gate then derives the allowlist key from
-    # tool + a hash of THIS reason, so an "always" answer can never
-    # pre-approve a different recipient/subject/body.
+    # Sending speaks for the user: even an identical message needs a fresh
+    # approval, and the review must include the complete body being sent.
     decision = request_tool_approval(
         "mail_send",
         reason,
         approval_callback=approval_callback,
+        require_confirmation=True,
     )
 
     if not decision.get("approved"):

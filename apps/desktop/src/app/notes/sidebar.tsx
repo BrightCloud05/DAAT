@@ -23,27 +23,29 @@ import {
   createNote,
   createVault,
   deleteNote,
+  newUntitledPath,
   openNote as openNoteInStore,
   renameNote,
-  runVaultSearch,
-  newUntitledPath
+  runVaultSearch
 } from '../vault/store'
 
 import { $productLocale, productStrings } from './strings'
 import { $vaultTodos, initTodosStore } from './todos-store'
-import { useVirtualRows } from './virtual-rows'
 import {
   $canvasView,
   closeTableView,
+  openAutomationsView,
   openCalendarView,
+  openCapabilities,
+  openCatSettings,
+  openGraphView,
   openHomeView,
   openMailView,
   openMeetingsView,
-  openMoneyView,
   openTableView,
-  openGraphView,
   openTodoView
 } from './view-store'
+import { useVirtualRows } from './virtual-rows'
 
 // Opening a page always returns the canvas to the note view.
 async function openNote(relPath: string): Promise<void> {
@@ -92,7 +94,11 @@ function buildTree(notes: VaultNote[], collapsed: Set<string>): TreeEntry[] {
     })),
     ...notes.map(note => ({
       path: note.path,
-      name: note.path.split('/').pop()?.replace(/\.(md|markdown)$/i, '') ?? note.path,
+      name:
+        note.path
+          .split('/')
+          .pop()
+          ?.replace(/\.(md|markdown)$/i, '') ?? note.path,
       kind: 'note' as const,
       depth: note.path.split('/').length - 1
     }))
@@ -175,6 +181,7 @@ export function NotesSidebar() {
       // Already gone (other Mac, external editor) — the refresh sorts it out.
     }
   }
+
   const navigate = useNavigate()
 
   initTodosStore()
@@ -192,7 +199,9 @@ export function NotesSidebar() {
   if (!info?.root) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 px-5 text-center">
-        <div className="text-[13px] opacity-75">Your notes live in a vault — a plain folder of markdown files you own.</div>
+        <div className="text-[13px] opacity-75">
+          Your notes live in a vault — a plain folder of markdown files you own.
+        </div>
         <button
           className="rounded-md bg-(--dt-primary) px-3 py-1.5 text-[13px] font-medium text-(--dt-primary-foreground) transition-opacity hover:opacity-90"
           onClick={() => void createVault()}
@@ -224,7 +233,9 @@ export function NotesSidebar() {
       <div className={cn(ROW, 'group mb-3')}>
         <span className="flex min-w-0 flex-1 flex-col leading-tight">
           <span className="truncate text-[13px] font-semibold">Daat</span>
-          <span className="truncate text-[11px] opacity-50">{info.name ?? 'Vault'} · {info.noteCount}</span>
+          <span className="truncate text-[11px] opacity-50">
+            {info.name ?? 'Vault'} · {info.noteCount}
+          </span>
         </span>
         <button
           className="opacity-0 transition-opacity group-hover:opacity-60 hover:!opacity-100"
@@ -258,17 +269,11 @@ export function NotesSidebar() {
       ) : null}
 
       {/* Module nav (design 2a): Home, Notes(+tree), then the module rows. */}
-      <button
-        className={cn(ROW, view === 'home' && ROW_ON)}
-        onClick={openHomeView}
-      >
+      <button className={cn(ROW, view === 'home' && ROW_ON)} onClick={openHomeView}>
         <Codicon className="shrink-0 text-[13px] opacity-70" name="home" />
         <span>Home</span>
       </button>
-      <button
-        className={cn(ROW, view !== 'home' && ROW_ON)}
-        onClick={openTableView}
-      >
+      <button className={cn(ROW, view !== 'home' && ROW_ON)} onClick={openTableView}>
         <Codicon className="shrink-0 text-[13px] opacity-70" name="note" />
         <span>Notes</span>
         <span className="ml-auto text-[11px] opacity-40">{notes.length}</span>
@@ -285,7 +290,11 @@ export function NotesSidebar() {
           hits.length ? (
             hits.map(hit => (
               <button
-                className={cn(ROW, 'flex-col items-start gap-0', active?.path === hit.path && 'bg-(--ui-control-active-background)')}
+                className={cn(
+                  ROW,
+                  'flex-col items-start gap-0',
+                  active?.path === hit.path && 'bg-(--ui-control-active-background)'
+                )}
                 key={hit.path}
                 onClick={() => void openNote(hit.path)}
               >
@@ -305,80 +314,80 @@ export function NotesSidebar() {
               <div aria-hidden key="__pad" style={{ height: treeWindow.start * TREE_ROW_PX }} />
             ) : null,
             ...visibleEntries.map(entry =>
-            entry.kind === 'dir' ? (
-              <button
-                className={cn(ROW, 'opacity-80')}
-                key={entry.path}
-                onClick={() => toggleDir(entry.path)}
-                style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14}px` }}
-              >
-                <Codicon
-                  className="shrink-0 text-[11px] opacity-55"
-                  name={collapsed.has(entry.path) ? 'chevron-right' : 'chevron-down'}
-                />
-                <Codicon className="shrink-0 text-[13px] opacity-55" name="folder" />
-                <span className="truncate">{entry.name}</span>
-              </button>
-            ) : renaming === entry.path ? (
-              <div
-                className={cn(ROW)}
-                key={entry.path}
-                style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
-              >
-                <Codicon className="shrink-0 text-[13px] opacity-55" name="note" />
-                <input
-                  autoFocus
-                  className="w-full min-w-0 border-b border-(--dt-primary) bg-transparent text-[13px] outline-none"
-                  value={renameDraft}
-                  onChange={event => setRenameDraft(event.target.value)}
-                  onBlur={() => void commitRename(entry.path)}
-                  onKeyDown={event => {
-                    if (event.key === 'Enter') {
-                      event.currentTarget.blur()
-                    } else if (event.key === 'Escape') {
-                      setRenaming(null)
-                    }
-                  }}
-                />
-              </div>
-            ) : (
-              // Hover-revealed rename/delete, following the sidebar's Notion
-              // grammar. A wrapper div because buttons cannot nest.
-              <div className="group/note relative" key={entry.path} style={{ height: TREE_ROW_PX }}>
+              entry.kind === 'dir' ? (
                 <button
-                  className={cn(
-                    ROW,
-                    'h-full',
-                    active?.path === entry.path && 'bg-(--ui-control-active-background) font-medium'
-                  )}
-                  onClick={() => void openNote(entry.path)}
+                  className={cn(ROW, 'opacity-80')}
+                  key={entry.path}
+                  onClick={() => toggleDir(entry.path)}
+                  style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14}px` }}
+                >
+                  <Codicon
+                    className="shrink-0 text-[11px] opacity-55"
+                    name={collapsed.has(entry.path) ? 'chevron-right' : 'chevron-down'}
+                  />
+                  <Codicon className="shrink-0 text-[13px] opacity-55" name="folder" />
+                  <span className="truncate">{entry.name}</span>
+                </button>
+              ) : renaming === entry.path ? (
+                <div
+                  className={cn(ROW)}
+                  key={entry.path}
                   style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
                 >
                   <Codicon className="shrink-0 text-[13px] opacity-55" name="note" />
-                  <span className="truncate">{entry.name}</span>
-                </button>
-                <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-px rounded-sm bg-(--ui-control-hover-background) group-hover/note:flex">
-                  <button
-                    className="grid size-[20px] place-items-center rounded-sm opacity-60 hover:opacity-100"
-                    onClick={() => {
-                      setRenaming(entry.path)
-                      setRenameDraft(entry.name)
+                  <input
+                    autoFocus
+                    className="w-full min-w-0 border-b border-(--dt-primary) bg-transparent text-[13px] outline-none"
+                    onBlur={() => void commitRename(entry.path)}
+                    onChange={event => setRenameDraft(event.target.value)}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                        event.currentTarget.blur()
+                      } else if (event.key === 'Escape') {
+                        setRenaming(null)
+                      }
                     }}
-                    title={s.renameNote}
-                  >
-                    <Codicon className="text-[12px]" name="edit" />
-                  </button>
-                  <button
-                    className="grid size-[20px] place-items-center rounded-sm opacity-60 hover:opacity-100"
-                    onClick={() => void removeNote(entry.path, entry.name)}
-                    title={s.deleteNoteAction}
-                  >
-                    <Codicon className="text-[12px]" name="trash" />
-                  </button>
+                    value={renameDraft}
+                  />
                 </div>
-              </div>
+              ) : (
+                // Hover-revealed rename/delete, following the sidebar's Notion
+                // grammar. A wrapper div because buttons cannot nest.
+                <div className="group/note relative" key={entry.path} style={{ height: TREE_ROW_PX }}>
+                  <button
+                    className={cn(
+                      ROW,
+                      'h-full',
+                      active?.path === entry.path && 'bg-(--ui-control-active-background) font-medium'
+                    )}
+                    onClick={() => void openNote(entry.path)}
+                    style={{ height: TREE_ROW_PX, paddingLeft: `${8 + entry.depth * 14 + 16}px` }}
+                  >
+                    <Codicon className="shrink-0 text-[13px] opacity-55" name="note" />
+                    <span className="truncate">{entry.name}</span>
+                  </button>
+                  <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-px rounded-sm bg-(--ui-control-hover-background) group-hover/note:flex">
+                    <button
+                      className="grid size-[20px] place-items-center rounded-sm opacity-60 hover:opacity-100"
+                      onClick={() => {
+                        setRenaming(entry.path)
+                        setRenameDraft(entry.name)
+                      }}
+                      title={s.renameNote}
+                    >
+                      <Codicon className="text-[12px]" name="edit" />
+                    </button>
+                    <button
+                      className="grid size-[20px] place-items-center rounded-sm opacity-60 hover:opacity-100"
+                      onClick={() => void removeNote(entry.path, entry.name)}
+                      title={s.deleteNoteAction}
+                    >
+                      <Codicon className="text-[12px]" name="trash" />
+                    </button>
+                  </div>
+                </div>
+              )
             )
-          )
           ]
         )}
         {!search.trim() && treeWindow.end < entries.length ? (
@@ -393,39 +402,24 @@ export function NotesSidebar() {
           <Codicon className="shrink-0 text-[13px] opacity-70" name="type-hierarchy-sub" />
           <span>{s.graph}</span>
         </button>
-        <button
-          className={cn(ROW, view === 'todo' && ROW_ON)}
-          onClick={openTodoView}
-        >
+        <button className={cn(ROW, view === 'todo' && ROW_ON)} onClick={openTodoView}>
           <Codicon className="shrink-0 text-[13px] opacity-70" name="checklist" />
           <span>{s.todo}</span>
           <span className="ml-auto text-[11px] opacity-40">{openTodoCount || ''}</span>
         </button>
-        <button
-          className={cn(ROW, view === 'mail' && ROW_ON)}
-          onClick={openMailView}
-        >
+        <button className={cn(ROW, view === 'mail' && ROW_ON)} onClick={openMailView}>
           <Codicon className="shrink-0 text-[13px] opacity-70" name="mail" />
           <span>{s.mail}</span>
         </button>
-        <button
-          className={cn(ROW, view === 'money' && ROW_ON)}
-          onClick={openMoneyView}
-        >
-          <Codicon className="shrink-0 text-[13px] opacity-70" name="credit-card" />
-          <span>{s.money}</span>
+        <button className={cn(ROW, view === 'automations' && ROW_ON)} onClick={openAutomationsView}>
+          <Codicon className="shrink-0 text-[13px] opacity-70" name="watch" />
+          <span>{s.automations}</span>
         </button>
-        <button
-          className={cn(ROW, view === 'calendar' && ROW_ON)}
-          onClick={openCalendarView}
-        >
+        <button className={cn(ROW, view === 'calendar' && ROW_ON)} onClick={openCalendarView}>
           <Codicon className="shrink-0 text-[13px] opacity-70" name="calendar" />
           <span>{s.calendar}</span>
         </button>
-        <button
-          className={cn(ROW, view === 'meetings' && ROW_ON)}
-          onClick={openMeetingsView}
-        >
+        <button className={cn(ROW, view === 'meetings' && ROW_ON)} onClick={openMeetingsView}>
           <Codicon className="shrink-0 text-[13px] opacity-70" name="record" />
           <span>{s.meetings}</span>
         </button>
@@ -435,12 +429,20 @@ export function NotesSidebar() {
       <div className="mt-2 border-t border-(--stroke-nous) py-2">
         <button className={ROW} onClick={() => void createPage(newUntitledPath(notes))}>
           <Codicon className="text-[13px] opacity-55" name="add" />
-          <span>New page</span>
+          <span>{s.newPage}</span>
           <span className="ml-auto text-[11px] opacity-40">⌘N</span>
+        </button>
+        <button className={cn(ROW, view === 'cat' && ROW_ON)} onClick={openCatSettings}>
+          <Codicon className="text-[13px] opacity-55" name="smiley" />
+          <span>{s.catSettings}</span>
+        </button>
+        <button className={ROW} onClick={openCapabilities}>
+          <Codicon className="text-[13px] opacity-55" name="extensions" />
+          <span>{s.hermesFeatures}</span>
         </button>
         <button className={ROW} onClick={() => navigate('/settings')}>
           <Codicon className="text-[13px] opacity-55" name="settings-gear" />
-          <span>Settings</span>
+          <span>{s.settings}</span>
         </button>
       </div>
     </div>

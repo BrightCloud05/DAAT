@@ -32,22 +32,31 @@ final class CodexUsageProvider: ObservableObject {
         case loading
         case ready(Snapshot)
         case noLogin          // no auth.json
-        case authExpired      // 401 even after refresh attempt
+        case authExpired      // the owning app must renew its login
         case error(String)
     }
 
     @Published private(set) var state: State = .idle
 
     private var accessToken: String?
-    private var refreshToken: String?
     private var accountID: String?
     private var timer: Timer?
     private var lastFetch: Date?
+    private var enabled = false
+    private var inFlight: Task<Void, Never>?
 
     private let authURL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".codex/auth.json")
 
+    func setEnabled(_ value: Bool) {
+        guard enabled != value else { return }
+        enabled = value
+        if value { start() }
+        else { timer?.invalidate(); timer = nil; inFlight?.cancel(); inFlight = nil; state = .idle }
+    }
+
     func start() {
+        guard enabled, timer == nil else { return }
         refreshSoon()
         timer = Timer(timeInterval: 300, repeats: true) { [weak self] _ in
             self?.refreshSoon(force: true)
@@ -57,12 +66,13 @@ final class CodexUsageProvider: ObservableObject {
 
     /// Refresh if data is stale (>60 s old). Called when the popover opens.
     func refreshSoon(force: Bool = false) {
+        guard enabled, inFlight == nil else { return }
         if !force, let last = lastFetch, Date().timeIntervalSince(last) < 60 { return }
-        Task { await fetch() }
+        inFlight = Task { await fetch(); self.inFlight = nil }
     }
 
     @MainActor
-    private func setState(_ s: State) { state = s }
+    private func setState(_ s: State) { if enabled && !Task.isCancelled { state = s } }
 
     private func fetch() async {
         guard loadAuthFile() else {
@@ -75,10 +85,7 @@ final class CodexUsageProvider: ObservableObject {
         decodeIdentity(into: &snapshot)
 
         do {
-            var (data, status) = try await get("https://chatgpt.com/backend-api/wham/usage")
-            if status == 401, await refreshAccessToken() {
-                (data, status) = try await get("https://chatgpt.com/backend-api/wham/usage")
-            }
+            let (data, status) = try await get("https://chatgpt.com/backend-api/wham/usage")
             guard status != 401 else {
                 await setState(.authExpired)
                 return
@@ -111,7 +118,6 @@ final class CodexUsageProvider: ObservableObject {
               let tokens = json["tokens"] as? [String: Any],
               let access = tokens["access_token"] as? String else { return false }
         accessToken = access
-        refreshToken = tokens["refresh_token"] as? String
         accountID = tokens["account_id"] as? String
         return true
     }
@@ -156,27 +162,8 @@ final class CodexUsageProvider: ObservableObject {
         return (data, (resp as? HTTPURLResponse)?.statusCode ?? 0)
     }
 
-    /// Best-effort refresh using the Codex CLI public OAuth client.
-    /// The rotated token is kept in memory only.
-    private func refreshAccessToken() async -> Bool {
-        guard let refreshToken else { return false }
-        guard let url = URL(string: "https://auth.openai.com/oauth/token") else { return false }
-        var req = URLRequest(url: url, timeoutInterval: 15)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: String] = [
-            "client_id": "app_EMoamEEZ73f0CkXaXp7hrann",
-            "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-        ]
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              (resp as? HTTPURLResponse)?.statusCode == 200,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let newAccess = json["access_token"] as? String else { return false }
-        accessToken = newAccess
-        return true
-    }
+    // This monitor never owns or rotates another application's refresh token.
+    // A 401 asks the user to sign in through Codex, which owns that session.
 
     // MARK: - Parsing (schema-tolerant)
 

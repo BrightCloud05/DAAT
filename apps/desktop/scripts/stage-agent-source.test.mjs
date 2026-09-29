@@ -37,7 +37,7 @@ test('declaredPackages drops the wildcard duplicates', () => {
 
 test('a module missing from the repo is a build failure, not a silent omission', () => {
   assert.throws(
-    () => declaredModules('[tool.setuptools]\nzip-safe = false\n'),
+    () => declaredModules('[tool.setuptools]\nzip-safe = false\n', '/nonexistent/daat-package'),
     /could not read .* py-modules/,
     'pyproject without py-modules must fail loudly — shipping a bundle with no root modules is worse'
   )

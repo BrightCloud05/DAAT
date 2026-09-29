@@ -1219,17 +1219,21 @@ export function getCronJobs(profile?: string): Promise<CronJob[]> {
   })
 }
 
-export function getCronJob(jobId: string): Promise<CronJob> {
+function cronProfilePath(path: string, profile?: string): string {
+  return profile ? `${path}${path.includes('?') ? '&' : '?'}profile=${encodeURIComponent(profile)}` : path
+}
+
+export function getCronJob(jobId: string, profile?: string): Promise<CronJob> {
   return window.hermesDesktop.api<CronJob>({
-    ...profileScoped(),
-    path: `/api/cron/jobs/${encodeURIComponent(jobId)}`
+    ...profileScoped(profile),
+    path: cronProfilePath(`/api/cron/jobs/${encodeURIComponent(jobId)}`, profile)
   })
 }
 
-export async function getCronJobRuns(jobId: string, limit = 20): Promise<SessionInfo[]> {
+export async function getCronJobRuns(jobId: string, limit = 20, profile?: string): Promise<SessionInfo[]> {
   const { runs } = await window.hermesDesktop.api<{ runs: SessionInfo[] }>({
-    ...profileScoped(),
-    path: `/api/cron/jobs/${encodeURIComponent(jobId)}/runs?limit=${limit}`
+    ...profileScoped(profile),
+    path: cronProfilePath(`/api/cron/jobs/${encodeURIComponent(jobId)}/runs?limit=${limit}`, profile)
   })
 
   return runs ?? []
@@ -1238,61 +1242,62 @@ export async function getCronJobRuns(jobId: string, limit = 20): Promise<Session
 // The single source of truth for cron delivery targets (local + configured
 // gateways). Both the manual cron editor and the blueprint dialog use this so
 // they never offer a platform that isn't connected. Mirrors the dashboard.
-export async function getCronDeliveryTargets(): Promise<CronDeliveryTarget[]> {
+export async function getCronDeliveryTargets(profile?: string): Promise<CronDeliveryTarget[]> {
   const { targets } = await window.hermesDesktop.api<{ targets: CronDeliveryTarget[] }>({
-    ...profileScoped(),
+    ...profileScoped(profile),
     path: '/api/cron/delivery-targets'
   })
 
   return targets ?? []
 }
 
-export function createCronJob(body: CronJobCreatePayload): Promise<CronJob> {
+export function createCronJob(body: CronJobCreatePayload, profile?: string): Promise<CronJob> {
   return window.hermesDesktop.api<CronJob>({
-    ...profileScoped(),
-    path: '/api/cron/jobs',
+    ...profileScoped(profile),
+    path: cronProfilePath('/api/cron/jobs', profile),
     method: 'POST',
     body
   })
 }
 
-export function updateCronJob(jobId: string, updates: CronJobUpdates): Promise<CronJob> {
+export function updateCronJob(jobId: string, updates: CronJobUpdates, profile?: string): Promise<CronJob> {
   return window.hermesDesktop.api<CronJob>({
-    ...profileScoped(),
-    path: `/api/cron/jobs/${encodeURIComponent(jobId)}`,
+    ...profileScoped(profile),
+    path: cronProfilePath(`/api/cron/jobs/${encodeURIComponent(jobId)}`, profile),
     method: 'PUT',
     body: { updates }
   })
 }
 
-export function pauseCronJob(jobId: string): Promise<CronJob> {
+export function pauseCronJob(jobId: string, profile?: string): Promise<CronJob> {
   return window.hermesDesktop.api<CronJob>({
-    ...profileScoped(),
-    path: `/api/cron/jobs/${encodeURIComponent(jobId)}/pause`,
+    ...profileScoped(profile),
+    path: cronProfilePath(`/api/cron/jobs/${encodeURIComponent(jobId)}/pause`, profile),
     method: 'POST'
   })
 }
 
-export function resumeCronJob(jobId: string): Promise<CronJob> {
+export function resumeCronJob(jobId: string, profile?: string): Promise<CronJob> {
   return window.hermesDesktop.api<CronJob>({
-    ...profileScoped(),
-    path: `/api/cron/jobs/${encodeURIComponent(jobId)}/resume`,
+    ...profileScoped(profile),
+    path: cronProfilePath(`/api/cron/jobs/${encodeURIComponent(jobId)}/resume`, profile),
     method: 'POST'
   })
 }
 
-export function triggerCronJob(jobId: string): Promise<CronJob> {
+export function triggerCronJob(jobId: string, profile?: string): Promise<CronJob> {
   return window.hermesDesktop.api<CronJob>({
-    ...profileScoped(),
-    path: `/api/cron/jobs/${encodeURIComponent(jobId)}/trigger`,
-    method: 'POST'
+    ...profileScoped(profile),
+    path: cronProfilePath(`/api/cron/jobs/${encodeURIComponent(jobId)}/trigger`, profile),
+    method: 'POST',
+    timeoutMs: 600_000
   })
 }
 
-export function deleteCronJob(jobId: string): Promise<{ ok: boolean }> {
+export function deleteCronJob(jobId: string, profile?: string): Promise<{ ok: boolean }> {
   return window.hermesDesktop.api<{ ok: boolean }>({
-    ...profileScoped(),
-    path: `/api/cron/jobs/${encodeURIComponent(jobId)}`,
+    ...profileScoped(profile),
+    path: cronProfilePath(`/api/cron/jobs/${encodeURIComponent(jobId)}`, profile),
     method: 'DELETE'
   })
 }
@@ -1308,9 +1313,9 @@ export function deleteCronJob(jobId: string): Promise<{ ok: boolean }> {
 // configured gateways), so it carries only the profileScoped() header for
 // routing. instantiate creates a real per-profile job, so it names the target
 // profile explicitly via ?profile=. This mirrors the dashboard's api.ts.
-export function getAutomationBlueprints(): Promise<{ blueprints: AutomationBlueprint[] }> {
+export function getAutomationBlueprints(profile?: string): Promise<{ blueprints: AutomationBlueprint[] }> {
   return window.hermesDesktop.api<{ blueprints: AutomationBlueprint[] }>({
-    ...profileScoped(),
+    ...profileScoped(profile),
     path: '/api/cron/blueprints',
     timeoutMs: STARTUP_REQUEST_TIMEOUT_MS
   })
@@ -1321,7 +1326,7 @@ export function instantiateAutomationBlueprint(
   profile: string
 ): Promise<CronJob> {
   return window.hermesDesktop.api<CronJob>({
-    ...profileScoped(),
+    ...profileScoped(profile),
     path: `/api/cron/blueprints/instantiate?profile=${encodeURIComponent(profile)}`,
     method: 'POST',
     body
@@ -1386,6 +1391,7 @@ export function getUsageAnalytics(days = 30): Promise<AnalyticsResponse> {
 }
 
 export function getGlobalModelOptions(opts?: {
+  profile?: string
   refresh?: boolean
   includeUnconfigured?: boolean
   explicitOnly?: boolean
@@ -1405,7 +1411,7 @@ export function getGlobalModelOptions(opts?: {
   }
 
   return window.hermesDesktop.api<ModelOptionsResponse>({
-    ...profileScoped(),
+    ...profileScoped(opts?.profile),
     path: params.size > 0 ? `/api/model/options?${params.toString()}` : '/api/model/options',
     timeoutMs: STARTUP_REQUEST_TIMEOUT_MS
   })

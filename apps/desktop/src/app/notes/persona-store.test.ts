@@ -21,6 +21,7 @@ import { beforeEach, test, vi } from 'vitest'
 
 let stored: Record<string, unknown>
 let saves: Array<Record<string, unknown>>
+let soulOk = true
 
 vi.mock('@/hermes', () => ({
   getHermesConfigRecord: async () => structuredClone(stored),
@@ -30,18 +31,19 @@ vi.mock('@/hermes', () => ({
 
     return { ok: true }
   },
-  updateProfileSoul: async () => undefined
+  updateProfileSoul: async () => ({ ok: soulOk })
 }))
 
 vi.mock('../vault/store', () => ({ refreshVaultNotes: async () => undefined }))
 
-const { ensureDaatPlugins } = await import('./persona-store')
+const { ensureDaatPlugins, applyPersona, PERSONAS } = await import('./persona-store')
 
 const enabled = () => ((stored.plugins as { enabled?: string[] })?.enabled ?? []) as string[]
 
 beforeEach(() => {
   stored = {}
   saves = []
+  soulOk = true
 })
 
 test('a config with no plugins block gets Daat’s plugins turned on', async () => {
@@ -139,4 +141,32 @@ test('the rest of the config is left alone', async () => {
     2200,
     'a sibling key under memory was dropped'
   )
+})
+
+test('partial setup reports rejected settings and note writes while preserving existing blank notes', async () => {
+  soulOk = false
+  const persona = PERSONAS[0]
+  const paths = Object.keys(persona.starters)
+  const written: string[] = []
+  window.hermesDesktop = {
+    vault: {
+      info: async () => ({ root: '/selected-vault' }),
+      createNote: async (path: string, root: string) => {
+        assert.equal(root, '/selected-vault')
+
+        return { created: path !== paths[0], content: '', mtimeMs: 1 }
+      },
+      write: async (path: string, _content: string, _time: number, _base: string, root: string) => {
+        assert.equal(root, '/selected-vault')
+        written.push(path)
+
+        return { ok: false, reason: 'unreadable' }
+      }
+    }
+  } as unknown as typeof window.hermesDesktop
+  const result = await applyPersona(persona.id)
+  assert.equal(result.notesCreated, 0)
+  assert.ok(result.soulError)
+  assert.equal(result.errors.length, 1 + written.length)
+  assert.ok(!written.includes(paths[0]), 'an existing empty note belongs to the user')
 })

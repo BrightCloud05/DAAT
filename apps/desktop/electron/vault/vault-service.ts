@@ -11,16 +11,19 @@
  * corrupt SQLite and pollute the user's notes folder).
  */
 
-import { app } from 'electron'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 
+import { app } from 'electron'
+
 import {
   contentHash,
+  hasICloudPlaceholder,
   icloudPlaceholderTarget,
   isMarkdownFile,
+  moveWithoutOverwrite,
   readNote,
   resolveInVault,
   toVaultRelative,
@@ -28,20 +31,22 @@ import {
 } from './vault-fs'
 import { VaultIndex } from './vault-index'
 import { parseNote } from './vault-parser'
-import type { VaultWatcher, VaultWatcherEvent } from './vault-watcher'
-import { watchVault } from './vault-watcher'
+import { VaultRecovery } from './vault-recovery'
 import type {
   VaultConflictEvent,
   VaultEntry,
+  VaultGraph,
   VaultIndexEvent,
   VaultInfo,
   VaultLink,
   VaultNote,
   VaultReadResult,
+  VaultRecoveryEntry,
   VaultSearchHit,
-  VaultWriteResult,
-  VaultGraph
+  VaultWriteResult
 } from './vault-types'
+import type { VaultWatcher, VaultWatcherEvent } from './vault-watcher'
+import { watchVault } from './vault-watcher'
 
 const VAULT_CONFIG_FILENAME = 'vault.json'
 /** Yield to the event loop every N notes during a full index. */
@@ -165,6 +170,7 @@ export class VaultService {
   private openEpoch = 0
   private indexingEpoch = -1
   private events: VaultServiceEvents
+  private recovery = new VaultRecovery(path.join(app.getPath('userData'), 'vault-recovery'))
 
   constructor(events: VaultServiceEvents) {
     this.events = events
@@ -195,7 +201,7 @@ export class VaultService {
   }
 
   async open(root: string): Promise<VaultInfo> {
-    const resolved = path.resolve(root)
+    const resolved = await fsp.realpath(root)
     const stat = await fsp.stat(resolved)
 
     if (!stat.isDirectory()) {
@@ -289,9 +295,13 @@ export class VaultService {
 
   // -- indexing -------------------------------------------------------------
 
-  private requireOpen(): { root: string; index: VaultIndex } {
+  private requireOpen(expectedRoot?: string): { root: string; index: VaultIndex } {
     if (!this.root || !this.index) {
       throw new Error('No vault is open')
+    }
+
+    if (expectedRoot && path.resolve(expectedRoot) !== this.root) {
+      throw new Error('The vault changed. This operation still belongs to the previous vault.')
     }
 
     return { root: this.root, index: this.index }
@@ -321,6 +331,7 @@ export class VaultService {
 
         if (entry.isDirectory()) {
           queue.push(absolute)
+
           continue
         }
 
@@ -393,7 +404,9 @@ export class VaultService {
         }
       }
 
-      this.events.onIndexEvent({ type: 'index-complete', noteCount: index.noteCount() })
+      if (this.openEpoch === epoch) {
+        this.events.onIndexEvent({ type: 'index-complete', noteCount: index.noteCount() })
+      }
     } finally {
       if (this.openEpoch === epoch) {
         this.indexing = false
@@ -403,6 +416,7 @@ export class VaultService {
 
   private async indexOne(relPath: string, opts: { skipUnchanged?: boolean } = {}): Promise<void> {
     const { root, index } = this.requireOpen()
+    const epoch = this.openEpoch
     const absolute = resolveInVault(root, relPath)
 
     let stat: fs.Stats
@@ -427,6 +441,10 @@ export class VaultService {
         const stub = await fsp.stat(placeholder)
         const title = path.posix.basename(relPath).replace(/\.(md|markdown)$/i, '')
 
+        if (this.openEpoch !== epoch) {
+          return
+        }
+
         index.upsertNote(
           relPath,
           { title, links: [], tags: [], headings: [], frontmatter: {}, plainText: '' },
@@ -434,9 +452,15 @@ export class VaultService {
         )
       } catch {
         // Neither the note nor a placeholder for it. Now it is gone.
-        index.removeNote(relPath)
+        if (this.openEpoch === epoch) {
+          index.removeNote(relPath)
+        }
       }
 
+      return
+    }
+
+    if (this.openEpoch !== epoch) {
       return
     }
 
@@ -456,6 +480,10 @@ export class VaultService {
     const { content, dataless } = await readNote(absolute)
     const hash = contentHash(content)
 
+    if (this.openEpoch !== epoch) {
+      return
+    }
+
     if (opts.skipUnchanged) {
       const existing = index.getNote(relPath)
 
@@ -465,11 +493,12 @@ export class VaultService {
     }
 
     const fallbackTitle = path.posix.basename(relPath).replace(/\.(md|markdown)$/i, '')
+
     const parsed = dataless
       ? { title: fallbackTitle, links: [], tags: [], headings: [], frontmatter: {}, plainText: '' }
       : parseNote(content, fallbackTitle)
 
-    index.upsertNote(relPath, parsed, { mtimeMs: stat.mtimeMs, size: stat.size, hash, dataless })
+    index.upsertNote(relPath, parsed, { mtimeMs: stat.mtimeMs, size: stat.size, hash, dataless, content })
   }
 
   private async handleWatcherEvents(events: VaultWatcherEvent[]): Promise<void> {
@@ -505,6 +534,7 @@ export class VaultService {
       // listing, not an error worth surfacing.
       return []
     }
+
     const results: VaultEntry[] = []
     const seen = new Set<string>()
 
@@ -529,27 +559,33 @@ export class VaultService {
     }
 
     return results.sort((a, b) => {
-      if (a.kind === 'dir' && b.kind !== 'dir') return -1
-      if (a.kind !== 'dir' && b.kind === 'dir') return 1
+      if (a.kind === 'dir' && b.kind !== 'dir') {
+        return -1
+      }
+
+      if (a.kind !== 'dir' && b.kind === 'dir') {
+        return 1
+      }
 
       return a.name.localeCompare(b.name)
     })
   }
 
-  async read(relPath: string): Promise<VaultReadResult> {
-    const { root } = this.requireOpen()
+  async read(relPath: string, expectedRoot?: string): Promise<VaultReadResult> {
+    const { root } = this.requireOpen(expectedRoot)
     const result = await readNote(resolveInVault(root, relPath))
 
-    return { path: relPath, ...result }
+    return { path: relPath, vaultRoot: root, ...result }
   }
 
   async write(
     relPath: string,
     content: string,
     expectedMtimeMs: number | null,
-    expectedContent?: string
+    expectedContent?: string,
+    expectedRoot?: string
   ): Promise<VaultWriteResult> {
-    const { root } = this.requireOpen()
+    const { root } = this.requireOpen(expectedRoot)
     const absolute = resolveInVault(root, relPath)
     const result = await writeNote(absolute, content, expectedMtimeMs, expectedContent)
 
@@ -562,19 +598,23 @@ export class VaultService {
     if (!result.ok && result.conflictPath) {
       const conflictRel = toVaultRelative(root, result.conflictPath)
 
-      this.events.onConflict({ path: relPath, conflictPath: conflictRel })
-      void this.indexOne(conflictRel)
+      if (this.root === root) {
+        this.events.onConflict({ path: relPath, conflictPath: conflictRel })
+        void this.indexOne(conflictRel).catch(() => undefined)
+      }
 
       return { ok: false, reason: 'conflict', conflictPath: conflictRel }
     }
 
-    void this.indexOne(relPath)
+    if (this.root === root) {
+      void this.indexOne(relPath).catch(() => undefined)
+    }
 
     return { ok: true, mtimeMs: result.mtimeMs }
   }
 
-  async createNote(relPath: string): Promise<VaultReadResult & { created: boolean }> {
-    const { root } = this.requireOpen()
+  async createNote(relPath: string, expectedRoot?: string): Promise<VaultReadResult & { created: boolean }> {
+    const { root } = this.requireOpen(expectedRoot)
     const withExt = isMarkdownFile(relPath) ? relPath : `${relPath}.md`
     const absolute = resolveInVault(root, withExt)
 
@@ -583,14 +623,36 @@ export class VaultService {
     try {
       await fsp.access(absolute)
     } catch {
-      const title = path.posix.basename(withExt).replace(/\.(md|markdown)$/i, '')
+      if (await hasICloudPlaceholder(absolute)) {
+        return { ...(await this.read(withExt, root)), created: false }
+      }
 
-      await writeNote(absolute, `# ${title}\n\n`, null)
-      await this.indexOne(withExt)
-      created = true
+      const title = path.posix.basename(withExt).replace(/\.(md|markdown)$/i, '')
+      await fsp.mkdir(path.dirname(absolute), { recursive: true })
+
+      try {
+        const handle = await fsp.open(absolute, 'wx')
+
+        try {
+          await handle.writeFile(`# ${title}\n\n`, 'utf8')
+          await handle.sync()
+        } finally {
+          await handle.close()
+        }
+
+        created = true
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+          throw error
+        }
+      }
+
+      if (this.root === root) {
+        await this.indexOne(withExt)
+      }
     }
 
-    return { ...(await this.read(withExt)), created }
+    return { ...(await this.read(withExt, root)), created }
   }
 
   /**
@@ -600,8 +662,12 @@ export class VaultService {
    * a string, compares content and can divert to a conflict copy, none of
    * which is meaningful for an opaque audio blob.
    */
-  async writeBinary(relPath: string, data: Uint8Array): Promise<{ path: string; bytes: number }> {
-    const { root } = this.requireOpen()
+  async writeBinary(
+    relPath: string,
+    data: Uint8Array,
+    expectedRoot?: string
+  ): Promise<{ path: string; bytes: number }> {
+    const { root } = this.requireOpen(expectedRoot)
     const absolute = resolveInVault(root, relPath)
 
     await fsp.mkdir(path.dirname(absolute), { recursive: true })
@@ -622,8 +688,12 @@ export class VaultService {
    * gigabyte-scale recording every five seconds would be its own bug, and a
    * truncated final chunk still leaves a playable file.
    */
-  async appendBinary(relPath: string, data: Uint8Array): Promise<{ path: string; bytes: number }> {
-    const { root } = this.requireOpen()
+  async appendBinary(
+    relPath: string,
+    data: Uint8Array,
+    expectedRoot?: string
+  ): Promise<{ path: string; bytes: number }> {
+    const { root } = this.requireOpen(expectedRoot)
     const absolute = resolveInVault(root, relPath)
 
     await fsp.mkdir(path.dirname(absolute), { recursive: true })
@@ -632,19 +702,24 @@ export class VaultService {
     return { path: relPath, bytes: (await fsp.stat(absolute)).size }
   }
 
-  async createDir(relPath: string): Promise<void> {
-    const { root } = this.requireOpen()
+  async createDir(relPath: string, expectedRoot?: string): Promise<void> {
+    const { root } = this.requireOpen(expectedRoot)
 
     await fsp.mkdir(resolveInVault(root, relPath), { recursive: true })
   }
 
-  async rename(fromRel: string, toRel: string): Promise<void> {
-    const { root, index } = this.requireOpen()
+  async rename(fromRel: string, toRel: string, expectedRoot?: string): Promise<void> {
+    const { root, index } = this.requireOpen(expectedRoot)
     const from = resolveInVault(root, fromRel)
     const to = resolveInVault(root, toRel)
 
     await fsp.mkdir(path.dirname(to), { recursive: true })
-    await fsp.rename(from, to)
+    await moveWithoutOverwrite(from, to)
+
+    if (this.root !== root) {
+      return
+    }
+
     index.renameNote(fromRel, toRel)
 
     if (isMarkdownFile(toRel)) {
@@ -658,12 +733,17 @@ export class VaultService {
     this.events.onIndexEvent({ type: 'vault-changed' })
   }
 
-  async trash(relPath: string): Promise<void> {
-    const { root, index } = this.requireOpen()
+  async trash(relPath: string, expectedRoot?: string): Promise<void> {
+    const { root, index } = this.requireOpen(expectedRoot)
     const absolute = resolveInVault(root, relPath)
     const { shell } = await import('electron')
 
     await shell.trashItem(absolute)
+
+    if (this.root !== root) {
+      return
+    }
+
     index.removeNote(relPath)
     this.events.onIndexEvent({ type: 'note-removed', path: relPath })
   }
@@ -701,34 +781,8 @@ export class VaultService {
    * first, capped for dashboard use. Line scan over real files — the FTS
    * index strips markers, and honest data beats a fast lie.
    */
-  async todos(limit = 100): Promise<Array<{ path: string; line: number; text: string; done: boolean }>> {
-    const { root, index } = this.requireOpen()
-    const results: Array<{ path: string; line: number; text: string; done: boolean }> = []
-    const notes = index.listNotes().sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 300)
-
-    for (const note of notes) {
-      if (results.length >= limit) {
-        break
-      }
-
-      const { content, dataless } = await readNote(resolveInVault(root, note.path))
-
-      if (dataless) {
-        continue
-      }
-
-      const lines = content.split('\n')
-
-      for (let i = 0; i < lines.length && results.length < limit; i++) {
-        const match = /^\s*[-*]\s+\[([ xX])\]\s+(.+)$/.exec(lines[i])
-
-        if (match) {
-          results.push({ path: note.path, line: i + 1, text: match[2].trim(), done: match[1] !== ' ' })
-        }
-      }
-    }
-
-    return results
+  async todos(limit?: number): Promise<Array<{ path: string; line: number; text: string; done: boolean }>> {
+    return this.requireOpen().index.todos(limit)
   }
 
   /**
@@ -739,8 +793,8 @@ export class VaultService {
    * above the task silently flips a *different* checkbox. When the line has
    * moved we re-find the task by its text instead of trusting the number.
    */
-  async toggleTodo(relPath: string, lineNo: number, expectedText?: string): Promise<boolean> {
-    const { root } = this.requireOpen()
+  async toggleTodo(relPath: string, lineNo: number, expectedText?: string, expectedRoot?: string): Promise<boolean> {
+    const { root } = this.requireOpen(expectedRoot)
     const absolute = resolveInVault(root, relPath)
     const { content, mtimeMs, dataless } = await readNote(absolute)
 
@@ -761,6 +815,7 @@ export class VaultService {
         for (const candidate of [lineNo - 1 - offset, lineNo - 1 + offset]) {
           if (candidate >= 0 && candidate < lines.length && textOf(lines[candidate]) === expectedText) {
             found = candidate
+
             break
           }
         }
@@ -779,8 +834,9 @@ export class VaultService {
       return false
     }
 
-    const toggled = line.replace(/^(\s*[-*]\s+\[)([ xX])(\])/, (_all, pre, mark, post) =>
-      `${pre}${mark === ' ' ? 'x' : ' '}${post}`
+    const toggled = line.replace(
+      /^(\s*[-*]\s+\[)([ xX])(\])/,
+      (_all, pre, mark, post) => `${pre}${mark === ' ' ? 'x' : ' '}${post}`
     )
 
     if (toggled === line) {
@@ -789,18 +845,26 @@ export class VaultService {
 
     lines[lineNo - 1] = toggled
 
-    const result = await writeNote(absolute, lines.join('\n'), mtimeMs)
+    const result = await writeNote(absolute, lines.join('\n'), mtimeMs, content)
 
-    if (result.ok) {
+    if (result.ok && this.root === root) {
       void this.indexOne(relPath)
     }
 
     return result.ok
   }
 
+  saveRecovery(entry: VaultRecoveryEntry): Promise<void> {
+    return this.recovery.save(entry)
+  }
+  listRecovery(root: string): Promise<VaultRecoveryEntry[]> {
+    return this.recovery.list(root)
+  }
+  removeRecovery(id: string): Promise<void> {
+    return this.recovery.remove(id)
+  }
+
   indexDbPath(): string | null {
-    return this.root
-      ? path.join(app.getPath('userData'), 'vault-index', `${vaultId(this.root)}.db`)
-      : null
+    return this.root ? path.join(app.getPath('userData'), 'vault-index', `${vaultId(this.root)}.db`) : null
   }
 }

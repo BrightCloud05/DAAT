@@ -8,6 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private let popover = NSPopover()
 
+    let preferences = CatPreferences()
+    private var preferencesTimer: Timer?
     let stats = SystemStatsEngine()
     let codex = CodexUsageProvider()
     let daat = DaatProgressProvider()
@@ -18,14 +20,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var speedTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard preferences.claimProcess(), preferences.enabled, preferences.runRequested else {
+            NSApp.terminate(nil)
+            return
+        }
         frames = CatFrames.load()
         setupStatusItem()
         setupPopover()
 
         stats.start()
-        codex.start()
+        preferences.writeProcessIdentity()
+        applyPreferences()
         daat.start()
+        preferencesTimer = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            self?.preferences.reload()
+            self?.preferences.writeProcessIdentity()
+            self?.applyPreferences()
+        }
 
+        RunLoop.main.add(preferencesTimer!, forMode: .common)
         startRunning()
         observeSleepWake()
     }
@@ -33,6 +46,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         stopRunning()
         stats.stop()
+        preferencesTimer?.invalidate()
+        preferences.removeProcessIdentity()
+    }
+
+    private func applyPreferences() {
+        if !preferences.enabled || !preferences.runRequested { NSApp.terminate(nil); return }
+        codex.setEnabled(preferences.showUsage)
+        daat.configure(home: preferences.runtimeHome, mode: preferences.mode, enabled: preferences.showProgress)
     }
 
     // MARK: - Status item / cat animation
@@ -56,7 +77,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = false
         popover.delegate = self
-        let root = PopoverView(stats: stats, codex: codex, daat: daat) { [weak self] in
+        let root = PopoverView(stats: stats, codex: codex, daat: daat, preferences: preferences) { [weak self] in
             self?.popover.performClose(nil)
         }
         popover.contentViewController = NSHostingController(rootView: root)
@@ -78,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // popover overflowed off the top of the display.
         let available = (NSScreen.main?.visibleFrame.height ?? 800) - 24
         let height = min(704, max(360, available))
-        let root = PopoverView(stats: stats, codex: codex, daat: daat) { [weak self] in
+        let root = PopoverView(stats: stats, codex: codex, daat: daat, preferences: preferences) { [weak self] in
             self?.popover.performClose(nil)
         }
         .frame(width: 372, height: height)

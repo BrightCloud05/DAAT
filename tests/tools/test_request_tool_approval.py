@@ -39,6 +39,14 @@ def _isolate_approval_state(monkeypatch):
 
 
 class TestRequestToolApproval:
+    def test_per_call_confirmation_without_a_connected_prompt_is_blocked(self, monkeypatch):
+        monkeypatch.setattr(approval, "_presence", lambda callback: (None, False, True, False))
+        monkeypatch.setattr(approval, "_gateway_notify_cb", lambda key: None)
+        monkeypatch.setattr(approval, "submit_pending", lambda *args: pytest.fail("must not queue an unanswerable prompt"))
+        result = request_tool_approval("example_send", "send complete content", require_confirmation=True)
+        assert result["approved"] is False
+        assert "no approval prompt is connected" in result["message"]
+
     def test_session_cached_approval_short_circuits(self, monkeypatch):
         monkeypatch.setattr(approval, "is_approved", lambda sk, pk: True)
         # Should NOT prompt at all.

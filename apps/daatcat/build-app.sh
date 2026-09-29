@@ -5,13 +5,20 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-swift build -c release
+DAAT_CAT_ARCH="${1:-$(uname -m)}"
+case "$DAAT_CAT_ARCH" in
+  arm64|x86_64) ;;
+  x64) DAAT_CAT_ARCH=x86_64 ;;
+  *) echo "Unsupported DAAT Cat architecture: $DAAT_CAT_ARCH" >&2; exit 1 ;;
+esac
+swift build -c release --arch "$DAAT_CAT_ARCH"
+DAAT_CAT_BIN="$(swift build -c release --arch "$DAAT_CAT_ARCH" --show-bin-path)"
 
 APP="dist/DAAT Cat.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp .build/release/DaatCat "$APP/Contents/MacOS/DaatCat"
+cp "$DAAT_CAT_BIN/DaatCat" "$APP/Contents/MacOS/DaatCat"
 cp -R Resources/cat "$APP/Contents/Resources/cat"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'

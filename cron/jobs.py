@@ -1612,7 +1612,7 @@ def _compute_provider_model_snapshots(
     model_snapshot: Optional[str] = None
     if normalized_provider is None:
         with contextlib.suppress(Exception):
-            from hermes_cli.runtime_provider import resolve_runtime_provider
+            from hermes_cli.runtime_provider import canonical_custom_identity, resolve_runtime_provider
 
             runtime_kwargs = {"requested": None}
             # Delegate all rate-limit / 5xx retry to hermes's outer conversation loop, which honors
@@ -1623,6 +1623,13 @@ def _compute_provider_model_snapshots(
                 runtime_kwargs["explicit_base_url"] = normalized_base_url
             snap = resolve_runtime_provider(**runtime_kwargs)
             provider_snapshot = str(snap.get("provider") or "").strip().lower() or None
+            if provider_snapshot == "custom":
+                # The transport name alone loses the saved endpoint and its credentials.
+                # Reuse the same durable identity as session persistence, including pools.
+                provider_snapshot = canonical_custom_identity(
+                    base_url=snap.get("base_url"),
+                    config_provider=snap.get("requested_provider"),
+                ) or provider_snapshot
     if normalized_model is None:
         with contextlib.suppress(Exception):
             model_snapshot = _resolve_default_model_snapshot() or None

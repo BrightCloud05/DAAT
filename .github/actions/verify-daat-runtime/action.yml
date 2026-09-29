@@ -1,0 +1,27 @@
+name: Verify DAAT runtime
+description: Exercise DAAT notes, memory, automation and transactional runtime updates without live accounts
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: '24'
+    - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+      with:
+        version: '0.9.28'
+    - shell: bash
+      run: |
+        npm ci --ignore-scripts
+        npm run typecheck --workspace apps/desktop
+        cd apps/desktop
+        npx vitest run --project electron electron/agent-source.test.ts electron/agent-release.test.ts scripts/stage-agent-source.test.mjs
+    - shell: bash
+      run: |
+        uv sync --locked --python 3.11 --extra all --extra dev
+        scripts/run_tests.sh tests/plugins/test_vault_filing.py tests/plugins/test_vault_recall.py tests/plugins/test_daat_tool_injection.py tests/hermes_cli/test_daat_automation_e2e.py tests/scripts/test_daat_runtime_package.py
+    - shell: bash
+      run: |
+        node apps/desktop/scripts/stage-agent-source.mjs
+        runtime_python="$PWD/.venv/bin/python"
+        cd apps/desktop/dist/agent-src
+        PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD" "$runtime_python" scripts/verify_daat_runtime.py
